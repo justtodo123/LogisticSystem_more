@@ -1,6 +1,6 @@
 # 阶段 1：认证与权限 - API 契约文档
 
-**文档版本**：V1.1  
+**文档版本**：V1.3  
 **创建日期**：2026-06-12  
 **开发阶段**：阶段 1（认证与权限）  
 **API 基础路径**：`http://localhost:8000/api`  
@@ -229,14 +229,28 @@ Authorization: Bearer {access_token}
 
 **响应失败（HTTP 401，Token 无效/过期）**：
 
-> **注意**：401 错误由 FastAPI 的 `HTTPException` 抛出，返回 FastAPI 默认格式，非统一响应格式。
-
 ```json
-// 未携带 Token
-{ "detail": "Not authenticated" }
+// Token 无效
+{
+  "code": 40100,
+  "message": "未登录或 Token 无效",
+  "data": null,
+  "meta": {
+    "degraded": false,
+    "degraded_reason": null
+  }
+}
 
-// Token 无效或过期
-{ "detail": "Invalid token" }
+// Token 已过期
+{
+  "code": 40101,
+  "message": "Token 已过期，请重新登录",
+  "data": null,
+  "meta": {
+    "degraded": false,
+    "degraded_reason": null
+  }
+}
 ```
 
 **cURL 示例**：
@@ -300,14 +314,28 @@ Authorization: Bearer {access_token}
 
 **响应失败（HTTP 401，Token 无效/过期）**：
 
-> **注意**：401 错误由 `get_current_user` 依赖中的 `HTTPException` 抛出，返回 FastAPI 默认格式。
-
 ```json
-// 未携带 Token
-{ "detail": "Not authenticated" }
+// Token 无效
+{
+  "code": 40100,
+  "message": "未登录或 Token 无效",
+  "data": null,
+  "meta": {
+    "degraded": false,
+    "degraded_reason": null
+  }
+}
 
-// Token 无效或过期
-{ "detail": "Invalid token" }
+// Token 已过期
+{
+  "code": 40101,
+  "message": "Token 已过期，请重新登录",
+  "data": null,
+  "meta": {
+    "degraded": false,
+    "degraded_reason": null
+  }
+}
 ```
 
 **cURL 示例**：
@@ -343,10 +371,15 @@ curl -X POST "http://localhost:8000/api/auth/logout" \
 | code | HTTP 状态码 | 说明 | 触发场景 |
 | --- | --- | --- | --- |
 | 0 | 200 | 成功 | 接口调用成功 |
+| 40100 | 200 | 用户名或密码错误 / 账号未激活 | 登录接口业务错误 |
+| 40100 | 401 | 未登录或 Token 无效 | Token 缺失、格式错误、签名验证失败 |
+| 40101 | 401 | Token 已过期 | Token 的 exp 字段已过期 |
 | 40000 | 400 | 参数校验失败 | 请求体字段验证失败（如 username 为空） |
-| — | 401 | 未登录或 Token 无效 | Token 缺失、格式错误、签名验证失败（返回 FastAPI 默认 `{"detail":"..."}`） |
-| — | 401 | Token 已过期 | Token 的 exp 字段已过期（返回 FastAPI 默认 `{"detail":"Invalid token"}`） |
-| — | 403 | 无权限 | manager 角色调用 POST/PUT/DELETE 接口（返回 FastAPI 默认 `{"detail":"..."}`） |
+| 40300 | 403 | 无权限 | manager 角色调用 POST/PUT/DELETE 接口 |
+| 40400 | 404 | 资源不存在 | 请求的资源路径不存在 |
+| 50000 | 500 | 服务器内部错误 | 数据库写入失败等未预期异常 |
+
+> **说明**：所有接口（包括 401/403/404/500）均返回统一响应格式 `{code, message, data, meta}`。前端可通过 `response.data.code` 统一判断，无需分别处理 `detail` 字段。
 
 ### 5.2 错误响应格式
 
@@ -371,22 +404,42 @@ curl -X POST "http://localhost:8000/api/auth/logout" \
 
 **认证失败（HTTP 401）**：
 
-> **注意**：401 错误由 `HTTPException` 抛出，返回 FastAPI 默认格式（非统一响应格式）。前端需通过 HTTP 状态码判断。
-
 ```json
-// 未携带 Token
-{ "detail": "Not authenticated" }
+// Token 无效
+{
+  "code": 40100,
+  "message": "未登录或 Token 无效",
+  "data": null,
+  "meta": {
+    "degraded": false,
+    "degraded_reason": null
+  }
+}
 
-// Token 无效或过期
-{ "detail": "Invalid token" }
+// Token 已过期
+{
+  "code": 40101,
+  "message": "Token 已过期，请重新登录",
+  "data": null,
+  "meta": {
+    "degraded": false,
+    "degraded_reason": null
+  }
+}
 ```
 
 **授权失败（HTTP 403）**：
 
-> **注意**：403 错误由 `HTTPException` 抛出，返回 FastAPI 默认格式（非统一响应格式）。前端需通过 HTTP 状态码判断。
-
 ```json
-{ "detail": "无权限执行此操作（仅调度员可操作）" }
+{
+  "code": 40300,
+  "message": "无权限执行此操作（仅调度员可操作）",
+  "data": null,
+  "meta": {
+    "degraded": false,
+    "degraded_reason": null
+  }
+}
 ```
 
 ---
@@ -469,7 +522,7 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaXNwYXRjaGVyIiwicm9sZSI6ImRpc3B
 
 **说明**：
 - ✅：允许访问
-- ❌ 403：返回 HTTP 403，code=40300
+- ❌ 403：返回 HTTP 403，统一响应格式 `{"code":40300,"message":"无权限执行此操作（仅调度员可操作）"}`
 - 阶段 1 只需实现认证接口，权限控制逻辑需在阶段 2 及后续阶段应用
 
 ---
@@ -511,30 +564,25 @@ request.interceptors.request.use((config) => {
   return config
 })
 
-// 响应拦截器：处理业务错误
+// 响应拦截器：统一处理业务错误和 HTTP 错误
 request.interceptors.response.use(
   (response) => {
     const { code, message } = response.data
     if (code !== 0) {
-      // 业务错误（如 40100 密码错误、40300 等）
+      // 所有错误（包括 40100/40101/40300 等）均返回统一格式
+      // 401 系列需触发登出
+      if (code === 40100 || code === 40101) {
+        const authStore = useAuthStore()
+        authStore.logout()
+        router.push('/login')
+      }
       return Promise.reject(new Error(message))
     }
     return response.data  // 直接返回 data 层
   },
   (error) => {
-    // HTTP 错误处理
-    if (error.response) {
-      const { status, data } = error.response
-      if (status === 401) {
-        // Token 无效/过期，返回 FastAPI 默认格式 {"detail":"..."}
-        const authStore = useAuthStore()
-        authStore.logout()
-        router.push('/login')
-      } else if (status === 403) {
-        // 无权限，返回 FastAPI 默认格式 {"detail":"..."}
-        ElMessage.error(data.detail || '无权限执行此操作')
-      }
-    }
+    // 网络错误（超时、无响应等）
+    ElMessage.error('网络请求失败，请检查网络连接')
     return Promise.reject(error)
   }
 )
@@ -641,9 +689,9 @@ export default router
 
 - [ ] `get_current_user` 依赖已实现
 - [ ] `require_dispatcher` 依赖已实现
-- [ ] Token 无效时抛出 HTTP 401（HTTPException，返回 FastAPI 默认格式 `{"detail":"..."}`）
-- [ ] Token 过期时抛出 HTTP 401（HTTPException，返回 FastAPI 默认格式）
-- [ ] manager 角色调用写接口时抛出 HTTP 403（HTTPException，返回 `{"detail":"无权限执行此操作（仅调度员可操作）"}`）
+- [ ] Token 无效时返回 HTTP 401 + 统一格式 `{code:40100, message:"未登录或 Token 无效"}`
+- [ ] Token 过期时返回 HTTP 401 + 统一格式 `{code:40101, message:"Token 已过期，请重新登录"}`
+- [ ] manager 角色调用写接口时返回 HTTP 403 + 统一格式 `{code:40300, message:"无权限执行此操作（仅调度员可操作）"}`
 
 ### 9.4 Swagger 文档
 
@@ -672,16 +720,16 @@ export default router
 | 测试用例 | 请求头 | 预期响应 |
 | --- | --- | --- |
 | 正确 Token | `Authorization: Bearer {valid_token}` | 200, code=0, 返回用户信息 |
-| 无效 Token | `Authorization: Bearer invalid` | 401, `{"detail":"Invalid token"}` |
-| 过期 Token | `Authorization: Bearer {expired_token}` | 401, `{"detail":"Invalid token"}` |
-| 缺少 Token | 无 Authorization 头 | 401, `{"detail":"Not authenticated"}` |
+| 无效 Token | `Authorization: Bearer invalid` | 401, `{"code":40100,"message":"未登录或 Token 无效"}` |
+| 过期 Token | `Authorization: Bearer {expired_token}` | 401, `{"code":40101,"message":"Token 已过期，请重新登录"}` |
+| 缺少 Token | 无 Authorization 头 | 401, `{"code":40100,"message":"未登录或 Token 无效"}` |
 
 ### 10.3 权限测试
 
 | 测试用例 | 用户角色 | 接口 | 预期响应 |
 | --- | --- | --- | --- |
 | dispatcher 调用写接口 | dispatcher | POST /api/orders | 200, code=0 |
-| manager 调用写接口 | manager | POST /api/orders | 403, `{"detail":"无权限执行此操作（仅调度员可操作）"}` |
+| manager 调用写接口 | manager | POST /api/orders | 403, `{"code":40300,"message":"无权限执行此操作（仅调度员可操作）"}` |
 | manager 调用读接口 | manager | GET /api/orders | 200, code=0 |
 
 ---
@@ -760,6 +808,8 @@ export default router
 | --- | --- | --- | --- |
 | V1.0 | 2026-06-12 | 初版：阶段 1 认证与权限 API 契约文档 | AI 开发助手 |
 | V1.1 | 2026-06-12 | 修正 401/403 响应格式以匹配实际代码（FastAPI HTTPException 默认格式）；修正错误码表（40100/40101/40300 非统一响应 code，实际通过 HTTP 状态码区分） | AI 开发助手 |
+| V1.2 | 2026-06-12 | 修复前后冲突：§5.1 错误码表补充 `40100 \| 200` 行（登录业务错误）；§7.2 权限矩阵 403 描述从 `code=40300` 改为与 §5.2 一致的 FastAPI 默认格式；新增错误码表说明注释 | AI 开发助手 |
+| V1.3 | 2026-06-12 | 统一 401/403 响应格式为 `{code, message, data, meta}`（替代 `HTTPException` 默认 `{"detail":"..."}` 格式）；§5.1 错误码表全部使用 `code` 列；§5.2/§8.2/§9.3/§10 同步更新 | AI 开发助手 |
 
 ---
 

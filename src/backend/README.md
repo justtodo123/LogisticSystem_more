@@ -73,46 +73,53 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ```
 src/backend/
-├── main.py                     # FastAPI 应用入口，注册路由与中间件
+├── main.py                     # FastAPI 应用入口，注册路由、CORS、全局异常处理器
 ├── requirements.txt            # Python 依赖清单
 ├── alembic.ini                 # Alembic 迁移配置
 ├── .env / .env.example         # 环境变量
 │
 ├── api/                        # 路由层
-│   ├── auth.py                 # 认证端点 (login / me / logout)
-│   └── dependencies.py         # 依赖注入 (JWT 验证 / RBAC 权限)
+│   ├── __init__.py
+│   ├── auth.py                 # 认证端点 (POST /login, GET /me, POST /logout)
+│   └── dependencies.py         # 依赖注入 (get_current_user JWT 验证, require_dispatcher RBAC)
 │
 ├── services/                   # 业务逻辑层
-│   └── auth_service.py         # 认证服务 (Token 生成 / 密码验证)
+│   ├── __init__.py
+│   └── auth_service.py         # 认证服务 (Token 生成, 密码验证, 用户查询)
 │
 ├── models/                     # SQLAlchemy ORM 模型
+│   ├── __init__.py
 │   ├── base.py                 # Base 声明基类
-│   ├── user.py                 # User 模型
-│   └── log_event.py            # LogEvent 模型
+│   ├── user.py                 # User 模型 (id, username, password_hash, role, display_name, is_active)
+│   └── log_event.py            # LogEvent 模型 (登录/登出操作日志)
 │
 ├── schemas/                    # Pydantic 请求/响应模型
-│   ├── user.py                 # 用户 Schema
-│   └── log_event.py            # 日志 Schema
-│
-├── algorithms/                 # 算法引擎 (F005/F006/F007/F021)
-│   └── __init__.py             # 阶段 2+ 实现
+│   ├── __init__.py
+│   ├── user.py                 # UserLoginRequest, UserLoginResponse, UserResponse
+│   └── log_event.py            # LogEvent Schema
 │
 ├── config/                     # 配置
-│   ├── database.py             # 数据库连接 + Settings
-│   └── algorithm_config.json   # 算法权重配置
-│
-├── scripts/                    # 工具脚本
-│   ├── init_users.py           # 种子账号初始化
-│   └── init_log_events.py      # 日志表清空
+│   ├── __init__.py
+│   ├── database.py             # SQLAlchemy engine + Session + pydantic-settings (JWT/Database)
+│   └── algorithm_config.json   # 算法权重配置 (F005/F006/F007)
 │
 ├── utils/                      # 工具层
-│   └── response.py             # 统一响应格式
+│   └── response.py             # success_response / error_response 统一响应构建函数
+│
+├── scripts/                    # 工具脚本
+│   ├── __init__.py
+│   ├── init_users.py           # 种子账号初始化 (dispatcher / manager)
+│   └── init_log_events.py      # 日志表清空
+│
+├── algorithms/                 # 算法引擎 (F005/F006/F007/F021, 阶段 3+ 实现)
+│   └── __init__.py
 │
 ├── data/                       # 数据文件
 │   └── logistics.db            # SQLite 数据库
 │
 └── alembic/                    # 数据库迁移
     ├── env.py
+    ├── script.py.mako
     └── versions/               # 迁移版本文件
 ```
 
@@ -159,10 +166,13 @@ src/backend/
 | `0` | 200 | 成功 |
 | `40000` | 400 | 参数校验失败 |
 | `40100` | 200 | 用户名或密码错误（登录接口） |
-| `40100` | 401 | 未认证（其他接口，返回 FastAPI 默认格式） |
-| `40300` | 403 | 无权限 |
+| `40100` | 401 | 未登录或 Token 无效 |
+| `40101` | 401 | Token 已过期，请重新登录 |
+| `40300` | 403 | 无权限执行此操作 |
+| `40400` | 404 | 资源不存在 |
+| `50000` | 500 | 服务器内部错误 |
 
-> **注意**：401/403 错误（非登录接口）由 `HTTPException` 抛出，返回 FastAPI 默认格式 `{"detail":"..."}`，前端通过 HTTP 状态码判断。
+> **注意**：所有 HTTP 异常（401/403/404/422/500）均由 `main.py` 中 `StarletteHTTPException` 全局异常处理器统一转为 `{code, message, data, meta}` 格式，前端可统一通过 `code` 字段判断，无需关注 HTTP 状态码差异。
 
 ## 环境变量
 
@@ -208,10 +218,32 @@ alembic downgrade -1
 4. **确定性算法**：调度结果同输入可复现，不使用随机种子
 5. **DeepSeek 不伪造**：API 调用失败时降级处理，不伪造 AI 结果
 6. **调度时限**：单次调度 ≤ 10 秒返回
+7. **全局异常处理**：所有 HTTPException 由 `StarletteHTTPException` 全局处理器统一转为 `{code, message, data, meta}` 格式，前端无需判断 HTTP 状态码差异
+
+## 自测
+
+阶段 1 自测脚本（`test_api.py`，不提交 Git）覆盖以下场景：
+
+| # | 测试项 | HTTP | code | 结果 |
+|---|--------|------|------|------|
+| 1 | `GET /api/health` | 200 | 0 | ✅ |
+| 2 | `POST /api/auth/login` (dispatcher 正常) | 200 | 0 | ✅ |
+| 3 | `POST /api/auth/login` (密码错误) | 200 | 40100 | ✅ |
+| 4 | `POST /api/auth/login` (用户不存在) | 200 | 40100 | ✅ |
+| 5 | `POST /api/auth/login` (manager 正常) | 200 | 0 | ✅ |
+| 6 | `GET /api/auth/me` (有效 Token) | 200 | 0 | ✅ |
+| 7 | `GET /api/auth/me` (无效 Token) | 401 | 40100 | ✅ |
+| 8 | `GET /api/auth/me` (无 Token) | 401 | 40100 | ✅ |
+| 9 | `POST /api/auth/logout` (有效 Token) | 200 | 0 | ✅ |
+| 10 | `POST /api/auth/logout` (无效 Token) | 401 | 40100 | ✅ |
+| 11 | `POST /api/auth/logout` (无 Token) | 401 | 40100 | ✅ |
+
+> manager 403 权限测试及 Token 过期（40101）测试留待阶段 2+ 有受保护路由后验证。
 
 ## 相关文档
 
 - [项目宪章](../../.codebuddy/CODEBUDDY.md)
 - [系统架构设计说明书](../../docs/architecture/系统架构设计说明书.md)
 - [MVP 开发计划 - 后端](../../docs/MVP开发计划-后端.md)
-- [阶段 1 API 契约文档](../../docs/api-contract/api-contract-phase1.md)
+- [阶段 1 开发文档](../../My_doc/阶段1-认证与权限-开发文档.md)
+- [阶段 1 API 契约文档](../../My_doc/阶段1-认证与权限-API契约文档.md)
