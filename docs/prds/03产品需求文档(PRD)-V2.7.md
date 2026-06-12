@@ -311,7 +311,7 @@
 | to_node_id | String | 非空 | 接收地节点ID（关联节点表） |
 | to_longitude | Float | 可空 | 接收地经度（冗余字段，便于查询） |
 | to_latitude | Float | 可空 | 接收地纬度（冗余字段，便于查询） |
-| goods_ids | JSON| 非空 | 包含的货物列表，格式：[{"goods_id":"G001","order_id":"O001"}, {"goods_id":"G002","order_id":"O001"}] |
+| goods_items | JSON| 非空 | 包含的货物列表，格式：[{"goods_code":"G001","order_code":"O001"}, {"goods_code":"G002","order_code":"O001"}] |
 | created_at | DateTime | 自动生成 | 创建时间 |
 | updated_at | DateTime | 自动更新 | 更新时间 |
 
@@ -349,6 +349,8 @@
 | last_arrived_longitude | Float | 可空 | 最近已达节点经度（冗余字段，便于快速定位） |
 | last_arrived_latitude | Float | 可空 | 最近已达节点纬度（冗余字段，便于快速定位） |
 | status | Enum | 非空、默认"空闲" | 状态：空闲/配送中/维修/停用 |
+| vehicle_type | String | 非空、默认"normal" | 车辆类型：normal/cold_chain（P1扩展） |
+| capability_tags | JSON | 可空 | 能力标签，如["cold_chain"]（P1扩展） |
 | node_id | String | 非空 | 所属节点ID |
 | created_at | DateTime | 自动生成 | 创建时间 |
 | updated_at | DateTime | 自动更新 | 更新时间 |
