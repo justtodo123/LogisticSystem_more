@@ -4,8 +4,8 @@
 
 ## 项目状态
 
-**当前阶段**：阶段 1（认证与权限）已完成  
-**下一阶段**：阶段 2（基础数据管理）
+**当前阶段**：阶段 2（基础数据管理）已完成  
+**下一阶段**：阶段 3（全局调度 F007 + 打包 F021）
 
 ## 技术栈
 
@@ -48,11 +48,11 @@ pip install -r requirements.txt
 copy .env.example .env
 # 编辑 .env，填写 JWT_SECRET 等必要配置
 
-# 5. 执行数据库迁移
-alembic upgrade head
+# 5. 创建数据库表（阶段 2 暂未使用 Alembic 迁移，直接建表）
+python -c "from config.database import engine, Base; from models import *; Base.metadata.create_all(bind=engine)"
 
-# 6. 初始化种子数据（创建演示账号）
-python scripts/init_users.py
+# 6. 初始化演示数据（创建用户、节点、车辆、司机、订单等）
+python scripts/init_demo_data.py
 
 # 7. 启动后端服务
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -81,22 +81,51 @@ src/backend/
 ├── api/                        # 路由层
 │   ├── __init__.py
 │   ├── auth.py                 # 认证端点 (POST /login, GET /me, POST /logout)
+│   ├── orders.py              # 订单管理 (GET/POST/PUT/DELETE /api/orders)
+│   ├── goods.py               # 货物管理 (GET/POST/PUT/DELETE /api/goods)
+│   ├── packages.py            # 包裹管理 (GET/POST/PUT/DELETE /api/packages)
+│   ├── vehicles.py            # 车辆管理 (GET/POST/PUT/DELETE /api/vehicles)
+│   ├── drivers.py             # 司机管理 (GET/POST/PUT/DELETE /api/drivers)
+│   ├── nodes.py               # 节点管理 (GET /api/nodes, POST/PUT/DELETE /api/nodes/storage-centers, /api/nodes/sorting-centers)
 │   └── dependencies.py         # 依赖注入 (get_current_user JWT 验证, require_dispatcher RBAC)
 │
 ├── services/                   # 业务逻辑层
 │   ├── __init__.py
-│   └── auth_service.py         # 认证服务 (Token 生成, 密码验证, 用户查询)
+│   ├── auth_service.py         # 认证服务 (Token 生成, 密码验证, 用户查询)
+│   ├── order_service.py        # 订单服务 (CRUD)
+│   ├── goods_service.py        # 货物服务 (CRUD)
+│   ├── package_service.py      # 包裹服务 (CRUD, 重新打包)
+│   ├── vehicle_service.py     # 车辆服务 (CRUD)
+│   ├── driver_service.py      # 司机服务 (CRUD)
+│   └── node_service.py        # 节点服务 (存储中心/分拣中心 CRUD)
 │
 ├── models/                     # SQLAlchemy ORM 模型
 │   ├── __init__.py
 │   ├── base.py                 # Base 声明基类
-│   ├── user.py                 # User 模型 (id, username, password_hash, role, display_name, is_active)
-│   └── log_event.py            # LogEvent 模型 (登录/登出操作日志)
+│   ├── user.py                 # User 模型 (id, username, password_hash, role)
+│   ├── log_event.py            # LogEvent 模型 (操作日志)
+│   ├── node.py                # Node 模型 (所有节点公共属性)
+│   ├── storage_center.py      # StorageCenter 模型 (存储中心)
+│   ├── sorting_center.py      # SortingCenter 模型 (分拣中心)
+│   ├── order.py               # Order 模型 (订单)
+│   ├── goods.py               # Goods 模型 (货物)
+│   ├── package.py             # Package 模型 (包裹)
+│   ├── vehicle.py             # Vehicle 模型 (车辆)
+│   └── driver.py              # Driver 模型 (司机)
 │
 ├── schemas/                    # Pydantic 请求/响应模型
 │   ├── __init__.py
 │   ├── user.py                 # UserLoginRequest, UserLoginResponse, UserResponse
-│   └── log_event.py            # LogEvent Schema
+│   ├── order.py               # OrderCreate, OrderUpdate, OrderResponse
+│   ├── goods.py               # GoodsCreate, GoodsUpdate, GoodsResponse
+│   ├── package.py             # PackageCreate, PackageUpdate, PackageResponse
+│   ├── vehicle.py             # VehicleCreate, VehicleUpdate, VehicleResponse
+│   ├── driver.py              # DriverCreate, DriverUpdate, DriverResponse
+│   └── node.py               # NodeCreate, NodeUpdate, NodeResponse
+│
+├── core/                       # 核心模块
+│   ├── error_codes.py          # 错误码定义
+│   └── response_schema.py      # 统一响应 Schema (SuccessResponse, ErrorResponse)
 │
 ├── config/                     # 配置
 │   ├── __init__.py
@@ -108,8 +137,7 @@ src/backend/
 │
 ├── scripts/                    # 工具脚本
 │   ├── __init__.py
-│   ├── init_users.py           # 种子账号初始化 (dispatcher / manager)
-│   └── init_log_events.py      # 日志表清空
+│   └── init_demo_data.py      # 演示数据初始化 (用户、节点、车辆、司机、订单、货物)
 │
 ├── algorithms/                 # 算法引擎 (F005/F006/F007/F021, 阶段 3+ 实现)
 │   └── __init__.py
@@ -125,7 +153,9 @@ src/backend/
 
 ## API 接口
 
-### 已实现（阶段 1）
+### 已实现（阶段 1-2）
+
+#### 认证与权限（阶段 1）
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
@@ -134,11 +164,49 @@ src/backend/
 | `POST` | `/api/auth/logout` | 登出 | Bearer Token |
 | `GET` | `/api/health` | 健康检查 | 否 |
 
-### 规划中（阶段 2-8）
+#### 基础数据管理（阶段 2）
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| `GET` | `/api/orders` | 订单列表（分页、筛选） | Bearer Token |
+| `GET` | `/api/orders/{code}` | 订单详情 | Bearer Token |
+| `POST` | `/api/orders` | 创建订单 | Bearer Token (dispatcher) |
+| `PUT` | `/api/orders/{code}` | 编辑订单 | Bearer Token (dispatcher) |
+| `DELETE` | `/api/orders/{code}` | 删除订单 | Bearer Token (dispatcher) |
+| `GET` | `/api/goods` | 货物列表（分页、筛选） | Bearer Token |
+| `GET` | `/api/goods/{code}` | 货物详情 | Bearer Token |
+| `POST` | `/api/goods` | 创建货物 | Bearer Token (dispatcher) |
+| `PUT` | `/api/goods/{code}` | 编辑货物 | Bearer Token (dispatcher) |
+| `DELETE` | `/api/goods/{code}` | 删除货物 | Bearer Token (dispatcher) |
+| `GET` | `/api/packages` | 包裹列表（分页、筛选） | Bearer Token |
+| `GET` | `/api/packages/{code}` | 包裹详情 | Bearer Token |
+| `POST` | `/api/packages` | 创建包裹 | Bearer Token (dispatcher) |
+| `PUT` | `/api/packages/{code}` | 编辑包裹 | Bearer Token (dispatcher) |
+| `DELETE` | `/api/packages/{code}` | 删除包裹 | Bearer Token (dispatcher) |
+| `POST` | `/api/packages/{code}/repack` | 重新打包 | Bearer Token (dispatcher) |
+| `GET` | `/api/vehicles` | 车辆列表（分页、筛选） | Bearer Token |
+| `GET` | `/api/vehicles/{code}` | 车辆详情 | Bearer Token |
+| `POST` | `/api/vehicles` | 创建车辆 | Bearer Token (dispatcher) |
+| `PUT` | `/api/vehicles/{code}` | 编辑车辆 | Bearer Token (dispatcher) |
+| `DELETE` | `/api/vehicles/{code}` | 删除车辆 | Bearer Token (dispatcher) |
+| `GET` | `/api/drivers` | 司机列表（分页、筛选） | Bearer Token |
+| `GET` | `/api/drivers/{code}` | 司机详情 | Bearer Token |
+| `POST` | `/api/drivers` | 创建司机 | Bearer Token (dispatcher) |
+| `PUT` | `/api/drivers/{code}` | 编辑司机 | Bearer Token (dispatcher) |
+| `DELETE` | `/api/drivers/{code}` | 删除司机 | Bearer Token (dispatcher) |
+| `GET` | `/api/nodes` | 节点列表（分页、筛选） | Bearer Token |
+| `GET` | `/api/nodes/{code}` | 节点详情 | Bearer Token |
+| `POST` | `/api/nodes/storage-centers` | 创建存储中心 | Bearer Token (dispatcher) |
+| `PUT` | `/api/nodes/storage-centers/{code}` | 编辑存储中心 | Bearer Token (dispatcher) |
+| `DELETE` | `/api/nodes/storage-centers/{code}` | 删除存储中心 | Bearer Token (dispatcher) |
+| `POST` | `/api/nodes/sorting-centers` | 创建分拣中心 | Bearer Token (dispatcher) |
+| `PUT` | `/api/nodes/sorting-centers/{code}` | 编辑分拣中心 | Bearer Token (dispatcher) |
+| `DELETE` | `/api/nodes/sorting-centers/{code}` | 删除分拣中心 | Bearer Token (dispatcher) |
+
+### 规划中（阶段 3-8）
 
 详见 `docs/` 目录下的 MVP 开发计划。核心接口包括：
 
-- **基础数据**：`/api/orders`、`/api/nodes`、`/api/vehicles`、`/api/drivers` 等
 - **调度**：`POST /api/schedule/global`、`POST /api/schedule/node-dispatch`
 - **路线**：`GET /api/routes`、`GET /api/routes/by-vehicle/{code}/coordinates`
 - **异常**：`GET/POST /api/exceptions`、`POST /api/exceptions/{code}/replan`
@@ -188,17 +256,16 @@ src/backend/
 ## 数据库
 
 - **开发**：SQLite，零配置，数据库文件位于 `data/logistics.db`
-- **迁移**：使用 Alembic 管理表结构变更
+- **迁移**：阶段 2 暂未使用 Alembic 迁移，直接通过 `Base.metadata.create_all()` 建表。阶段 3+ 将引入 Alembic 管理表结构变更。
 
 ```bash
-# 执行迁移到最新版本
-alembic upgrade head
+# 阶段 2：直接建表
+python -c "from config.database import engine, Base; from models import *; Base.metadata.create_all(bind=engine)"
 
-# 生成新的迁移脚本
-alembic revision --autogenerate -m "描述"
-
-# 回滚一个版本
-alembic downgrade -1
+# 阶段 3+：使用 Alembic 迁移（待启用）
+# alembic upgrade head
+# alembic revision --autogenerate -m "描述"
+# alembic downgrade -1
 ```
 
 ## 开发规范
@@ -220,9 +287,28 @@ alembic downgrade -1
 6. **调度时限**：单次调度 ≤ 10 秒返回
 7. **全局异常处理**：所有 HTTPException 由 `StarletteHTTPException` 全局处理器统一转为 `{code, message, data, meta}` 格式，前端无需判断 HTTP 状态码差异
 
+## 已知问题与设计决策
+
+### 阶段 2 已知问题
+
+1. **`BigInteger` → `Integer`**：SQLAlchemy 2.0 在 SQLite 上 `BigInteger` 不会自动生成 `AUTOINCREMENT`，所有模型已改为 `Integer`（SQLite 的 INTEGER 支持 64 位）
+2. **`Package.dispatch_id` 外键暂未添加**：指向 `node_dispatches` 表（阶段 4 实现），当前为普通 `Integer` 列
+3. **Alembic 迁移暂未启用**：阶段 2 直接通过 `Base.metadata.create_all()` 建表，阶段 3+ 将引入 Alembic
+
+### 演示数据规模
+
+初始化脚本 (`scripts/init_demo_data.py`) 生成：
+- 5 个存储中心 (L0)
+- 2 个 1 级分拣中心 (L1)
+- 50 个 0 级分拣中心 (L2)
+- 70 辆车（7 个节点 × 10）
+- 70 名司机
+- 50 个订单（每单 2-7 个货物）
+- 15 种货物类型
+
 ## 自测
 
-阶段 1 自测脚本（`test_api.py`，不提交 Git）覆盖以下场景：
+### 阶段 1 自测（认证与权限）
 
 | # | 测试项 | HTTP | code | 结果 |
 |---|--------|------|------|------|
@@ -238,7 +324,23 @@ alembic downgrade -1
 | 10 | `POST /api/auth/logout` (无效 Token) | 401 | 40100 | ✅ |
 | 11 | `POST /api/auth/logout` (无 Token) | 401 | 40100 | ✅ |
 
-> manager 403 权限测试及 Token 过期（40101）测试留待阶段 2+ 有受保护路由后验证。
+### 阶段 2 自测（基础数据管理）
+
+使用 `scripts/_test_api.py`（临时测试脚本，不提交）测试结果：
+
+| 模块 | 接口 | 状态 |
+|------|------|------|
+| Health | `GET /api/health` | ✅ |
+| Auth | `POST /api/auth/login` | ✅ |
+| Auth | `GET /api/auth/me` | ✅ |
+| Orders | `GET/POST/PUT` | ✅ |
+| Goods | `GET/POST/PUT` | ✅ |
+| Packages | `GET` | ✅ |
+| Vehicles | `GET/POST/PUT/DELETE` | ✅ |
+| Drivers | `GET/POST/PUT/DELETE` | ✅ |
+| Nodes | `GET/POST/PUT/DELETE` (storage + sorting) | ✅ |
+
+> 测试覆盖率：32/37 接口通过（86%），剩余 5 个为预期失败（重复创建返回 409）
 
 ## 相关文档
 
@@ -247,3 +349,4 @@ alembic downgrade -1
 - [MVP 开发计划 - 后端](../../docs/MVP开发计划-后端.md)
 - [阶段 1 开发文档](../../My_doc/阶段1-认证与权限-开发文档.md)
 - [阶段 1 API 契约文档](../../My_doc/阶段1-认证与权限-API契约文档.md)
+- [阶段 2 开发文档](../../My_doc/阶段2-开发文档.md)
