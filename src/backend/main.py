@@ -5,6 +5,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel
 import os
 from api.auth import router as auth_router
+from api.orders import router as orders_router
+from api.goods import router as goods_router
+from api.packages import router as packages_router
+from api.vehicles import router as vehicles_router
+from api.drivers import router as drivers_router
+from api.nodes import router as nodes_router
 from utils.response import error_response
 
 
@@ -42,6 +48,14 @@ app.add_middleware(
 
 # 注册认证路由
 app.include_router(auth_router)
+
+# 注册基础数据管理路由
+app.include_router(orders_router)
+app.include_router(goods_router)
+app.include_router(packages_router)
+app.include_router(vehicles_router)
+app.include_router(drivers_router)
+app.include_router(nodes_router)
 
 
 # ─── 全局异常处理器 ───────────────────────────────────────────────
