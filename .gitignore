@@ -7,8 +7,9 @@ Desktop.ini
 ehthumbs.db
 
 # ==============================
-# IDE / 编辑器（保留 .cursor 项目配置）
+# IDE / 编辑器
 # ==============================
+.cursor/
 .idea/
 *.iml
 .vscode/*
