@@ -114,6 +114,11 @@
    - **理由**：符合PRD中"部分成功（跳过错误行）"的描述，提高导入效率，用户体验更好。
    - **影响范围**：`POST /api/orders/import`接口的默认行为、前端调用方式。
 
+4. **订单批量导入Excel/CSV格式决策**（对应F001）：
+   - **决策**：批量导入接口（`POST /api/orders/import`）的Excel/CSV文件格式定义为7列：订单编号、配送节点编号、时效要求、货物名称、货物类型、重量(kg)、体积(m³)。
+   - **理由**：明确文件格式便于前端开发和用户使用，避免格式歧义。
+   - **影响范围**：`POST /api/orders/import`接口的文件上传格式、前端上传组件、用户操作手册。
+
 ### 1.3 产品目标
 
 - 完成订单、货物、包裹、车辆、司机、存储中心、分拣中心基础信息管理，支持调度员查看和维护核心业务数据
@@ -289,6 +294,13 @@
     | 2 | 节点打包货物 | 包裹中所有货物状态都为待打包 | 待打包 → **已打包** | 包裹打包完成，可以分配给车辆 |
     | 3 | F005分配包裹到车辆 | F005运行完成，包裹被分配给车辆 | 已打包 → **运输中** | 包裹开始运输 |
     | 4 | 包裹到达目标节点 | 包裹到达`to_node_id`指定的节点 | 运输中 → **已送达** | 包裹送达目标节点 |
+- **手动重新打包（repack）业务规则**：
+    - 仅允许对状态为 `待打包` 的包裹执行 repack
+    - 原包裹状态更新为 `异常`
+    - 新包裹状态为 `待打包`
+    - 重新打包的货物必须满足：
+      1. 货物状态为 `待打包`（未分配）
+      2. 货物处于同一个节点
 
 **验收标准**：
 
@@ -311,7 +323,7 @@
 | to_node_id | String | 非空 | 接收地节点ID（关联节点表） |
 | to_longitude | Float | 可空 | 接收地经度（冗余字段，便于查询） |
 | to_latitude | Float | 可空 | 接收地纬度（冗余字段，便于查询） |
-| goods_items | JSON| 非空 | 包含的货物列表，格式：[{"goods_code":"G001","order_code":"O001"}, {"goods_code":"G002","order_code":"O001"}] |
+| goods_ids | JSON| 非空 | 包含的货物列表，格式：[{"goods_id":"G001","order_id":"O001"}, {"goods_id":"G002","order_id":"O001"}] |
 | created_at | DateTime | 自动生成 | 创建时间 |
 | updated_at | DateTime | 自动更新 | 更新时间 |
 
@@ -349,8 +361,6 @@
 | last_arrived_longitude | Float | 可空 | 最近已达节点经度（冗余字段，便于快速定位） |
 | last_arrived_latitude | Float | 可空 | 最近已达节点纬度（冗余字段，便于快速定位） |
 | status | Enum | 非空、默认"空闲" | 状态：空闲/配送中/维修/停用 |
-| vehicle_type | String | 非空、默认"normal" | 车辆类型：normal/cold_chain（P1扩展） |
-| capability_tags | JSON | 可空 | 能力标签，如["cold_chain"]（P1扩展） |
 | node_id | String | 非空 | 所属节点ID |
 | created_at | DateTime | 自动生成 | 创建时间 |
 | updated_at | DateTime | 自动更新 | 更新时间 |
