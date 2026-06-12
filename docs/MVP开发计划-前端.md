@@ -8,6 +8,7 @@
 | **架构文档** | [系统架构设计说明书](./architecture/系统架构设计说明书.md) |
 | **需求文档** | [PRD V2.7](./prds/03产品需求文档(PRD)-V2.7.md) |
 | **Git 协作** | [Git协作规范.md](./Git协作规范.md) |
+| **开发规范** | [开发规范.md](./开发规范.md) · [环境配置说明.md](./环境配置说明.md) |
 
 ---
 
@@ -33,8 +34,8 @@
 ## 2. 推荐目录结构
 
 ```text
-frontend/
-├── src/
+src/frontend/
+├── src/                    # Vue 源码（Vite 默认目录）
 │   ├── api/                # 按模块封装请求
 │   │   ├── request.ts      # Axios 实例、拦截器
 │   │   ├── auth.ts
@@ -80,7 +81,7 @@ frontend/
 **自测**：
 
 ```bash
-cd frontend
+cd src/frontend
 npm run dev
 # 访问 http://localhost:5173
 ```
@@ -310,7 +311,19 @@ npm run dev
 
 ---
 
-## 5. 与后端协作要点
+## 5. 依赖与环境记录
+
+新增 npm 包或环境变量时，须同步更新并提交：
+
+- `src/frontend/package.json`
+- `src/frontend/package-lock.json`
+- `src/frontend/.env.example`（若涉及新 `VITE_` 变量）
+
+流程详见 [开发规范.md §4](./开发规范.md#4-前端依赖管理规范)。
+
+---
+
+## 6. 与后端协作要点
 
 1. **等 Swagger，不猜字段**：每个阶段向后端要 OpenAPI 链接。
 2. **响应解包**：统一从 `response.data.data` 取业务数据；注意 `code !== 0` 的业务错误。
@@ -320,7 +333,7 @@ npm run dev
 
 ---
 
-## 6. 页面路由规划（建议）
+## 7. 页面路由规划（建议）
 
 | 路径 | 页面 | 阶段 |
 | --- | --- | --- |
@@ -337,7 +350,7 @@ npm run dev
 
 ---
 
-## 7. 答辩前自检清单
+## 8. 答辩前自检清单
 
 - [ ] `npm run dev` 可启动，代理正确
 - [ ] dispatcher 完整演示路径无报错

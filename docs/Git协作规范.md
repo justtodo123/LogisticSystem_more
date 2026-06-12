@@ -6,7 +6,7 @@
 | **创建日期** | 2026-06-09 |
 | **适用团队** | 2 人（1 前端 + 1 后端） |
 | **远程仓库** | https://github.com/vegetablebasket/LogisticSystem.git |
-| **关联文档** | [MVP开发计划](./MVP开发计划.md) · [MVP开发计划-后端](./MVP开发计划-后端.md) · [MVP开发计划-前端](./MVP开发计划-前端.md) |
+| **关联文档** | [MVP开发计划](./MVP开发计划.md) · [开发规范](./开发规范.md) · [环境配置说明](./环境配置说明.md) |
 
 ---
 
@@ -38,8 +38,10 @@ main                          ← 稳定分支：阶段联调通过后的代码
 | 分支 | 维护人 | 用途 |
 | --- | --- | --- |
 | `main` | 两人共同 | 可演示、可联调、可答辩的稳定版本 |
-| `backend/phase-N` | 后端同学 | 第 N 阶段后端开发 |
-| `frontend/phase-N` | 前端同学 | 第 N 阶段前端开发 |
+| `backend/phase-N` | 后端同学 | 第 N 阶段后端开发（**Git 分支名**，非目录路径） |
+| `frontend/phase-N` | 前端同学 | 第 N 阶段前端开发（**Git 分支名**，非目录路径） |
+
+> 代码目录为 `src/backend/`、`src/frontend/`，与分支命名 `backend/phase-N` 无关。
 
 ### 2.2 基本原则
 
@@ -65,8 +67,8 @@ main                          ← 稳定分支：阶段联调通过后的代码
 
 | 同学 | 主要目录 | 慎改目录 |
 | --- | --- | --- |
-| 后端 | `backend/` | `frontend/`、`docs/`（改前沟通） |
-| 前端 | `frontend/` | `backend/`、`docs/`（改前沟通） |
+| 后端 | `src/backend/` | `src/frontend/`、`docs/`（改前沟通） |
+| 前端 | `src/frontend/` | `src/backend/`、`docs/`（改前沟通） |
 | 两人 | `docs/`、`README.md`、`.gitignore` | 改前在群里说一声 |
 
 **接口契约**以 [系统架构设计说明书 §6](./architecture/系统架构设计说明书.md) 与 Swagger 为准；后端改接口字段须通知前端。
@@ -132,6 +134,7 @@ git push -u origin frontend/phase-2
 - [ ] 本侧功能自测通过
 - [ ] 与对方联调通过（该阶段若要求联调）
 - [ ] 未提交 `.env`、`*.db`、`node_modules/` 等（见 §7）
+- [ ] 新增依赖已更新 `requirements.txt` 或 `package.json` + `package-lock.json`（见 [开发规范](./开发规范.md)）
 
 ### 5.2 合并顺序（默认）
 
@@ -228,10 +231,10 @@ docs: 更新 MVP 阶段验收说明
 
 | 类别 | 示例 |
 | --- | --- |
-| 环境变量与密钥 | `.env`、`backend/.env` |
-| 数据库文件 | `*.db`、`*.sqlite`、`backend/data/logistics.db` |
+| 环境变量与密钥 | `.env`、`src/backend/.env` |
+| 数据库文件 | `*.db`、`*.sqlite`、`src/backend/data/logistics.db` |
 | 依赖目录 | `node_modules/`、`.venv/`、`venv/` |
-| 构建产物 | `frontend/dist/`、`__pycache__/` |
+| 构建产物 | `src/frontend/dist/`、`__pycache__/` |
 | IDE 本地配置 | `.cursor/`、`.idea/`（团队约定） |
 
 若误提交密钥：**立即轮换密钥**，并用新 commit 从仓库移除（必要时联系老师处理历史记录）。
@@ -325,7 +328,7 @@ git push -u origin <分支名>
 - [ ] 确认能 `git pull origin main`
 - [ ] 从 `main` 拉出 `backend/phase-0` 或 `frontend/phase-0`
 - [ ] 首次 push 成功
-- [ ] 复制 `backend/.env.example` → `backend/.env`（不提交）
+- [ ] 复制 `src/backend/.env.example` → `src/backend/.env`（不提交）
 
 ---
 
@@ -334,3 +337,4 @@ git push -u origin <分支名>
 | 版本 | 日期 | 修改内容 |
 | --- | --- | --- |
 | V1.0 | 2026-06-09 | 初版：分支策略、日常流程、PR 合并、冲突与禁止提交 |
+| V1.1 | 2026-06-12 | 代码目录调整为 `src/backend`、`src/frontend` |

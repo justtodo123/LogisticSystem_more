@@ -1,0 +1,17 @@
+{
+  "global_schedule_weights": {
+    "w1_distance": 0.5,
+    "w2_time": 0.3,
+    "w3_packages": 0.2
+  },
+  "node_dispatch_weights": {
+    "w1_distance": 0.5,
+    "w2_time": 0.3,
+    "w3_packages": 0.2
+  },
+  "route_planning_weights": {
+    "w1_distance": 0.4,
+    "w2_time": 0.4,
+    "w3_emission": 0.2
+  }
+}

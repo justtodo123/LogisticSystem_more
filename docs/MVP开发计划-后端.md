@@ -8,6 +8,7 @@
 | **架构文档** | [系统架构设计说明书](./architecture/系统架构设计说明书.md) |
 | **需求文档** | [PRD V2.7](./prds/03产品需求文档(PRD)-V2.7.md) |
 | **Git 协作** | [Git协作规范.md](./Git协作规范.md) |
+| **开发规范** | [开发规范.md](./开发规范.md) · [环境配置说明.md](./环境配置说明.md) |
 
 ---
 
@@ -32,7 +33,7 @@
 ## 2. 推荐目录结构
 
 ```text
-backend/
+src/backend/
 ├── main.py
 ├── api/                    # 路由
 │   ├── auth.py
@@ -70,7 +71,7 @@ backend/
 | 任务 | 说明 |
 | --- | --- |
 | 初始化 FastAPI 项目 | `main.py` 注册路由、CORS |
-| 配置 SQLite + SQLAlchemy | `backend/data/logistics.db` |
+| 配置 SQLite + SQLAlchemy | `src/backend/data/logistics.db` |
 | 初始化 Alembic | 后续迁移统一管理 |
 | 健康检查 | `GET /api/health` → `{ "status": "ok" }` |
 | `.env.example` | `JWT_SECRET`、`DEEPSEEK_API_KEY` 等占位 |
@@ -80,7 +81,7 @@ backend/
 **自测**：
 
 ```bash
-cd backend
+cd src/backend
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 # 访问 http://localhost:8000/docs
 ```
@@ -322,7 +323,18 @@ F007 最小可行 → 写 global_schedules → F021 → 写 packages → POST �
 
 ---
 
-## 5. 与前端协作要点
+## 5. 依赖与环境记录
+
+新增 Python 包或环境变量时，须同步更新并提交：
+
+- `src/backend/requirements.txt`
+- `src/backend/.env.example`（若涉及新环境变量）
+
+流程详见 [开发规范.md §3](./开发规范.md#3-后端依赖管理规范)。
+
+---
+
+## 6. 与前端协作要点
 
 1. **每个阶段开始**：你先更新 Swagger，丢链接给前端。
 2. **响应格式统一**：`{ code, message, data, meta? }`；业务失败可用 HTTP 200 + code≠0。
@@ -332,7 +344,7 @@ F007 最小可行 → 写 global_schedules → F021 → 写 packages → POST �
 
 ---
 
-## 6. 答辩前自检清单
+## 7. 答辩前自检清单
 
 - [ ] `uvicorn` 一条命令可启动
 - [ ] `init_demo_data.py` 可重复执行或幂等

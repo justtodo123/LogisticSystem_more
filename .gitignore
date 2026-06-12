@@ -64,8 +64,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .pnpm-store/
-frontend/dist/
-frontend/.vite/
+src/frontend/dist/
+src/frontend/.vite/
 *.tsbuildinfo
 
 # ==============================
