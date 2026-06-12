@@ -6,10 +6,13 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """应用配置类"""
     DATABASE_URL: str = "sqlite:///./data/logistics.db"
+    JWT_SECRET: str = "default-secret-key-change-in-env"
+    JWT_EXPIRE_SECONDS: int = 86400
     
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"  # 允许.env文件中的额外字段
 
 
 settings = Settings()

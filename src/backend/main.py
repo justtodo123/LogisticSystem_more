@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
+from api.auth import router as auth_router
 
 
 class HealthResponse(BaseModel):
@@ -35,7 +36,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 注册认证路由
+app.include_router(auth_router)
+
+
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
     """健康检查接口"""
     return HealthResponse()
+
