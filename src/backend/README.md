@@ -4,8 +4,8 @@
 
 ## 项目状态
 
-**当前阶段**：阶段 3（全局调度 F007 + 打包 F021）已完成  
-**下一阶段**：阶段 4（节点间调度 F005）
+**当前阶段**：阶段 4（节点间调度 F005）已完成  
+**下一阶段**：阶段 5（路径规划与可视化 F006）
 
 ## 技术栈
 
@@ -87,7 +87,7 @@ src/backend/
 │   ├── vehicles.py            # 车辆管理 (GET/POST/PUT/DELETE /api/vehicles)
 │   ├── drivers.py             # 司机管理 (GET/POST/PUT/DELETE /api/drivers)
 │   ├── nodes.py               # 节点管理 (GET /api/nodes, POST/PUT/DELETE storage-centers/sorting-centers)
-│   ├── schedule.py            # 调度管理 (POST /api/schedule/global, GET 列表/详情)
+│   ├── schedule.py            # 调度管理 (POST /api/schedule/global, POST /api/schedule/node-dispatch, GET 列表/详情)
 │   └── dependencies.py         # 依赖注入 (get_current_user JWT 验证, require_dispatcher RBAC)
 │
 ├── services/                   # 业务逻辑层
@@ -99,7 +99,8 @@ src/backend/
 │   ├── vehicle_service.py     # 车辆服务 (CRUD)
 │   ├── driver_service.py      # 司机服务 (CRUD)
 │   ├── node_service.py        # 节点服务 (存储中心/分拣中心 CRUD)
-│   └── schedule_service.py    # 调度编排服务 (F007→F021→写库, 单事务)
+│   ├── schedule_service.py    # 调度编排服务 (F007→F021→写库, 单事务)
+│   └── dispatch_service.py    # 节点调度服务 (F005→写库, 单事务)
 │
 ├── models/                     # SQLAlchemy ORM 模型
 │   ├── __init__.py
@@ -114,7 +115,9 @@ src/backend/
 │   ├── package.py             # Package 模型 (包裹)
 │   ├── vehicle.py             # Vehicle 模型 (车辆)
 │   ├── driver.py              # Driver 模型 (司机)
-│   └── global_schedule.py     # GlobalSchedule 模型 (F007 调度结果)
+│   ├── global_schedule.py     # GlobalSchedule 模型 (F007 调度结果)
+│   ├── dispatch_batch.py      # DispatchBatch 模型 (F005 调度批次)
+│   └── node_dispatch.py      # NodeDispatch 模型 (F005 节点调度明细)
 │
 ├── schemas/                    # Pydantic 请求/响应模型
 │   ├── __init__.py
@@ -125,6 +128,7 @@ src/backend/
 │   ├── vehicle.py             # VehicleCreate, VehicleUpdate
 │   ├── driver.py              # DriverCreate, DriverUpdate
 │   ├── node.py                # StorageCenterCreate/Update, SortingCenterCreate/Update
+│   ├── dispatch.py             # NodeDispatchRequest, DispatchBatchResponse, NodeDispatchResponse
 │   └── log_event.py           # LogEventResponse
 │
 ├── core/                       # 核心模块
@@ -146,18 +150,21 @@ src/backend/
 ├── algorithms/                 # 算法引擎 (F005/F006/F007/F021)
 │   ├── __init__.py
 │   ├── global_schedule.py      # F007 全局调度 (贪心算法, L0→L1→L2 路径规划)
-│   └── packaging.py            # F021 打包 (L0→L1 按节点对, L1→L2 按订单)
+│   ├── packaging.py            # F021 打包 (L0→L1 按节点对, L1→L2 按订单)
+│   └── node_dispatch.py       # F005 节点调度 (L0→L1, L1→L2 两次串行调用)
 │
 ├── tests/                      # 测试
 │   ├── conftest.py             # 测试夹具与配置
-│   ├── test_phase3_api.py      # 阶段3 API 集成测试
+│   ├── phase3_api_verification.py  # 阶段3 API 集成验证脚本
 │   ├── test_api/               # API 层测试
 │   │   └── test_schedule.py    # 调度接口测试
 │   ├── test_services/          # 服务层测试
-│   │   └── test_schedule_service.py  # 调度编排服务测试
+│   │   ├── test_schedule_service.py  # 调度编排服务测试
+│   │   └── test_dispatch_service.py # 节点调度服务测试
 │   └── test_algorithms/        # 算法层测试
 │       ├── test_global_schedule.py   # F007 全局调度算法测试
-│       └── test_packaging.py         # F021 打包算法测试
+│       ├── test_packaging.py         # F021 打包算法测试
+│       └── test_node_dispatch.py    # F005 节点调度算法测试
 │
 ├── data/                       # 数据文件
 │   └── logistics.db            # SQLite 数据库
@@ -223,11 +230,18 @@ src/backend/
 | `GET` | `/api/schedule/global` | 历史调度方案列表（分页） | Bearer Token |
 | `GET` | `/api/schedule/global/{code}` | 调度方案详情（含 goods_schedules + packages） | Bearer Token |
 
-### 规划中（阶段 4-8）
+#### 节点调度（阶段 4）
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| `POST` | `/api/schedule/node-dispatch` | 触发节点调度 (F005) | Bearer Token (dispatcher) |
+| `GET` | `/api/schedule/batches` | 调度批次列表（分页、筛选） | Bearer Token |
+| `GET` | `/api/schedule/batches/{code}` | 调度批次详情（含 dispatches） | Bearer Token |
+
+### 规划中（阶段 5-8）
 
 详见 `docs/` 目录下的 MVP 开发计划。核心接口包括：
 
-- **调度**：`POST /api/schedule/global`、`POST /api/schedule/node-dispatch`
 - **路线**：`GET /api/routes`、`GET /api/routes/by-vehicle/{code}/coordinates`
 - **异常**：`GET/POST /api/exceptions`、`POST /api/exceptions/{code}/replan`
 - **模拟**：`POST /api/simulation/deliver`
@@ -378,6 +392,20 @@ python -c "from config.database import engine, Base; from models import *; Base.
 | 错误处理 | 无 pending 订单 → 40001、不存在的 schedule_code → 40401 | ✅ |
 | 数据完整性 | 2 条调度记录、59 个包裹、207 个货物状态 packed、53 个订单状态 delivering | ✅ |
 
+### 阶段 4 自测（节点间调度 F005）
+
+测试时间：2026-06-14，结果：**全部通过**
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| F005 算法 | L0→L1 调度、L1→L2 调度、车辆匹配（载重/节点优先级）、返回任务添加 | ✅ |
+| F005 算法 | 车辆不足错误、包裹状态错误、L0→L1 未完成错误 | ✅ |
+| API 集成 | POST /api/schedule/node-dispatch 触发调度、GET /api/schedule/batches 列表、GET /api/schedule/batches/{code} 详情 | ✅ |
+| 事务原子性 | dispatch_batches + node_dispatches + packages/goods/vehicles/drivers 状态更新单事务 | ✅ |
+| 权限 | dispatcher 可触发调度、manager 返回 403 | ✅ |
+| 错误处理 | 无可用车辆 → 40001、L0→L1 未完成 → 40001、不存在的 schedule_code → 40401 | ✅ |
+| 数据完整性 | 调度批次、节点调度明细、包裹状态更新、车辆/司机状态更新 | ✅ |
+
 ## 相关文档
 
 - [项目宪章](../../.codebuddy/CODEBUDDY.md)
@@ -389,3 +417,5 @@ python -c "from config.database import engine, Base; from models import *; Base.
 - [联调反馈 - 阶段2 - 致后端](../../My_doc/联调反馈-阶段2-致后端.md)
 - [阶段 3 开发文档](../../My_doc/阶段3开发文档-全局调度F007+F021.md)
 - [阶段 3 API 契约文档](../../docs/api-contract/api-contract-phase3.md)（V1.0）
+- [阶段 4 开发文档](../../My_doc/阶段4开发文档.md)
+- [阶段 4 API 契约文档](../../My_doc/阶段4-API契约文档.md)（V1.0）
