@@ -8,6 +8,7 @@ from .goods import Goods
 from .package import Package
 from .vehicle import Vehicle
 from .driver import Driver
+from .global_schedule import GlobalSchedule
 
 __all__ = ["User", "LogEvent", "Node", "StorageCenter", "SortingCenter",
-           "Order", "Goods", "Package", "Vehicle", "Driver"]
+           "Order", "Goods", "Package", "Vehicle", "Driver", "GlobalSchedule"]

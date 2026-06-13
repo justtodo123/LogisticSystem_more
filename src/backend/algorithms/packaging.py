@@ -1,0 +1,170 @@
+"""
+F021 打包算法
+
+将 F007 输出的货物调度计划打包为包裹：
+- L0 → L1：按 (from_node_code, to_node_code) 节点对打包
+- L1 → L2：按 order_code 打包（同一订单货物必须打成一个包裹）
+"""
+from typing import List, Dict, Any
+from collections import defaultdict
+from datetime import datetime
+
+from sqlalchemy.orm import Session
+
+from models.package import Package
+from models.node import Node
+from models.goods import Goods
+
+# 内存计数器：避免同一事务中 package_code 重复
+_pkg_counter: int = 0
+_pkg_date: str = ""
+
+
+def _generate_package_code(db: Session) -> str:
+    """生成包裹编号，格式：PKG + YYYYMMDD + 4位序号（内存递增，避免同事务冲突）"""
+    global _pkg_counter, _pkg_date
+    today_str = datetime.now().strftime("%Y%m%d")
+    if _pkg_date != today_str:
+        _pkg_date = today_str
+        # 从数据库获取当日最大序号作为起点
+        prefix = f"PKG{today_str}"
+        max_record = (
+            db.query(Package.package_code)
+            .filter(Package.package_code.like(f"{prefix}%"))
+            .order_by(Package.package_code.desc())
+            .first()
+        )
+        if max_record and max_record[0]:
+            _pkg_counter = int(max_record[0][-4:])
+        else:
+            _pkg_counter = 0
+    _pkg_counter += 1
+    return f"PKG{today_str}{_pkg_counter:04d}"
+
+
+def packaging(
+    schedule_result: Dict[str, Any],
+    schedule_id: int,
+    db: Session,
+) -> List[Package]:
+    """
+    F021 打包算法
+
+    根据 F007 输出的 goods_schedules，生成两类包裹：
+    1. L0 → L1 包裹：按 (L0_code, L1_code) 节点对分组
+    2. L1 → L2 包裹：按 order_code 分组（同一订单货物打成一个包裹）
+
+    Args:
+        schedule_result: F007 输出的调度结果，必须包含 "goods_schedules"
+        schedule_id: 关联的 global_schedules.id（可为 None，由调用方后续赋值）
+        db: 数据库会话
+
+    Returns:
+        Package 对象列表（未写入数据库，由调用方统一写入）
+    """
+    goods_schedules = schedule_result.get("goods_schedules", [])
+    if not goods_schedules:
+        raise ValueError("goods_schedules 为空，无法打包")
+
+    packages: List[Package] = []
+
+    # 预加载 goods_code → Goods 映射（避免逐个查询）
+    all_goods_codes = [gs["goods_code"] for gs in goods_schedules]
+    goods_map: Dict[str, Goods] = {}
+    for gc in all_goods_codes:
+        goods = db.query(Goods).filter(Goods.goods_code == gc).first()
+        if goods:
+            goods_map[gc] = goods
+
+    # 预加载 node_code → Node 映射
+    all_node_codes = set()
+    for gs in goods_schedules:
+        for code in gs["path"]:
+            all_node_codes.add(code)
+    node_map: Dict[str, Node] = {}
+    for nc in all_node_codes:
+        node = db.query(Node).filter(Node.node_code == nc).first()
+        if node:
+            node_map[nc] = node
+
+    def _sum_weight_volume(gs_list: list) -> tuple:
+        """计算一组货物的总重量和总体积"""
+        total_w = 0.0
+        total_v = 0.0
+        for gs in gs_list:
+            g = goods_map.get(gs["goods_code"])
+            if g:
+                total_w += float(g.weight)
+                total_v += float(g.volume)
+        return total_w, total_v
+
+    def _make_goods_items(gs_list: list) -> list:
+        """生成 goods_items JSON"""
+        return [
+            {"goods_code": gs["goods_code"], "order_code": gs["order_code"]}
+            for gs in gs_list
+        ]
+
+    # ── 1. L0 → L1 打包：按 (L0_code, L1_code) 节点对分组 ──
+    l0_l1_groups: Dict[tuple, list] = defaultdict(list)
+    for gs in goods_schedules:
+        key = (gs["path"][0], gs["path"][1])  # (L0_code, L1_code)
+        l0_l1_groups[key].append(gs)
+
+    for (from_code, to_code), gs_list in l0_l1_groups.items():
+        from_node = node_map.get(from_code)
+        to_node = node_map.get(to_code)
+        if not from_node or not to_node:
+            continue
+
+        total_weight, total_volume = _sum_weight_volume(gs_list)
+
+        pkg = Package(
+            package_code=_generate_package_code(db),
+            weight=round(total_weight, 3),
+            volume=round(total_volume, 3),
+            status="pending_pack",
+            from_node_id=from_node.id,
+            to_node_id=to_node.id,
+            from_longitude=from_node.longitude,
+            from_latitude=from_node.latitude,
+            to_longitude=to_node.longitude,
+            to_latitude=to_node.latitude,
+            goods_items=_make_goods_items(gs_list),
+            schedule_id=schedule_id,
+        )
+        packages.append(pkg)
+
+    # ── 2. L1 → L2 打包：按 order_code 分组 ──
+    l1_l2_groups: Dict[str, list] = defaultdict(list)
+    for gs in goods_schedules:
+        l1_l2_groups[gs["order_code"]].append(gs)
+
+    for order_code, gs_list in l1_l2_groups.items():
+        # 同一订单所有货物的 L1 和 L2 相同（硬约束保证）
+        l1_code = gs_list[0]["path"][1]
+        l2_code = gs_list[0]["path"][2]
+        from_node = node_map.get(l1_code)
+        to_node = node_map.get(l2_code)
+        if not from_node or not to_node:
+            continue
+
+        total_weight, total_volume = _sum_weight_volume(gs_list)
+
+        pkg = Package(
+            package_code=_generate_package_code(db),
+            weight=round(total_weight, 3),
+            volume=round(total_volume, 3),
+            status="pending_pack",
+            from_node_id=from_node.id,
+            to_node_id=to_node.id,
+            from_longitude=from_node.longitude,
+            from_latitude=from_node.latitude,
+            to_longitude=to_node.longitude,
+            to_latitude=to_node.latitude,
+            goods_items=_make_goods_items(gs_list),
+            schedule_id=schedule_id,
+        )
+        packages.append(pkg)
+
+    return packages

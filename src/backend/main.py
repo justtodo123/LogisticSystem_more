@@ -11,6 +11,7 @@ from api.packages import router as packages_router
 from api.vehicles import router as vehicles_router
 from api.drivers import router as drivers_router
 from api.nodes import router as nodes_router
+from api.schedule import router as schedule_router
 from utils.response import error_response
 
 
@@ -56,6 +57,7 @@ app.include_router(packages_router)
 app.include_router(vehicles_router)
 app.include_router(drivers_router)
 app.include_router(nodes_router)
+app.include_router(schedule_router)
 
 
 # ─── 全局异常处理器 ───────────────────────────────────────────────

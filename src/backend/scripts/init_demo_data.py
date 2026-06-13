@@ -112,8 +112,8 @@ async def _create_sorting_centers_l1(db: Session):
     """创建1级分拣中心（2个）"""
     # 2个1级分拣中心分布在城市南北两端
     centers = [
-        ("L1001", "武汉1级分拣中心(北)", 30.55, 114.3, 0, 500, 24),
-        ("L1002", "武汉1级分拣中心(南)", 30.45, 114.3, 0, 500, 24),
+        ("L1001", "武汉1级分拣中心(北)", 30.55, 114.3, 1, 500, 24),
+        ("L1002", "武汉1级分拣中心(南)", 30.45, 114.3, 1, 500, 24),
     ]
     
     for code, name, lat, lng, level, capacity, max_storage_time in centers:
@@ -153,7 +153,7 @@ async def _create_sorting_centers_l2(db: Session):
         lng = 114.3 + radius * math.cos(angle)
         code = f"L2{i+1:03d}"
         name = f"武汉0级分拣中心({i+1})"
-        centers.append((code, name, lat, lng, 1, None, None))
+        centers.append((code, name, lat, lng, 0, None, None))
     
     for code, name, lat, lng, level, capacity, max_storage_time in centers:
         node = db.query(Node).filter(Node.node_code == code).first()
@@ -248,7 +248,9 @@ async def _create_drivers(db: Session):
 async def _create_orders_and_goods(db: Session):
     """创建订单（50条）+ 货物（每单2-7个）"""
     # 获取所有0级分拣中心作为目的地
-    l2_nodes = db.query(Node).join(SortingCenter).filter(SortingCenter.level == 1).all()
+    l2_nodes = db.query(Node).join(SortingCenter).filter(SortingCenter.level == 0).all()
+    # 获取所有存储中心作为货物起点
+    l0_nodes = db.query(Node).filter(Node.node_type == "storage_center").all()
     
     order_count = 0
     goods_count = 0
@@ -256,6 +258,8 @@ async def _create_orders_and_goods(db: Session):
     for i in range(50):
         # 随机选择目的地节点
         dest_node = random.choice(l2_nodes)
+        # 随机选择货物起点节点
+        origin_node = random.choice(l0_nodes)
         
         # 创建订单
         order_code = f"O{i+1:03d}"
@@ -282,7 +286,7 @@ async def _create_orders_and_goods(db: Session):
                     goods_type=random.choice(["电子产品", "服装", "食品", "日用品"]),
                     weight=random.uniform(0.5, 10.0),
                     volume=random.uniform(0.1, 2.0),
-                    node_id=dest_node.id,
+                    node_id=origin_node.id,  # 货物起点：存储中心
                     status="pending_pack"
                 )
                 db.add(goods)
