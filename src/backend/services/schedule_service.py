@@ -3,6 +3,13 @@
 
 编排 F007 → F021 → 写库 的完整调度流程。
 单事务保证原子性：global_schedules + packages + orders/goods 状态更新全部成功或全部回滚。
+
+状态流转（与 API 契约 api-contract-phase3.md §3.2 一致）：
+
+| 步骤    | 订单状态           | 货物状态               | 包裹状态              |
+| ------- | ------------------ | ---------------------- | --------------------- |
+| F007完成 | pending → delivering | pending_pack (不变)     | - (不涉及)            |
+| F021完成 | delivering (不变)   | pending_pack → packed  | pending_pack → packed |
 """
 from typing import List, Optional, Dict, Any
 
@@ -30,10 +37,12 @@ class ScheduleService:
         """
         编排 F007 → F021 → 写库（单事务）
 
-        流程：
-        1. 调用 F007 全局调度算法（纯计算）
-        2. 调用 F021 打包算法（纯计算）
-        3. 单事务写入：global_schedules + packages + 更新 orders/goods 状态
+        流程（与 API 契约 api-contract-phase3.md §3.2 一致）：
+        1. 调用 F007 全局调度算法（纯计算，不写状态）
+        2. 调用 F021 打包算法（纯计算，生成 pending_pack 包裹）
+        3a. F007 完成 → 写入 global_schedule + 订单 pending → delivering
+        3b. F021 完成 → 写入 packages(pending_pack→packed) + 货物 pending_pack → packed
+        4. db.commit() 单事务提交
 
         Args:
             order_codes: 订单编号列表（可选）
@@ -66,19 +75,19 @@ class ScheduleService:
             db.add(global_schedule_obj)
             db.flush()  # 获取 global_schedule_obj.id
 
-            # 写入 packages（关联 schedule_id）
-            for pkg in packages:
-                pkg.schedule_id = global_schedule_obj.id
-                pkg.status = "packed"  # 打包完成
-                db.add(pkg)
-
-            # 更新 orders 状态：pending → delivering
+            # ── 3a. F007 完成 → 更新订单状态：pending → delivering ──
             for order_code in schedule_result["order_codes"]:
                 order = db.query(Order).filter(Order.order_code == order_code).first()
                 if order:
                     order.status = "delivering"
 
-            # 更新 goods 状态：pending_pack → packed
+            # ── 3b. 写入 packages + F021 完成 → 更新货物和包裹状态 ──
+            for pkg in packages:
+                pkg.schedule_id = global_schedule_obj.id
+                pkg.status = "packed"  # F021 打包完成：pending_pack → packed
+                db.add(pkg)
+
+            # F021 完成后更新货物状态：pending_pack → packed
             goods_codes = [gs["goods_code"] for gs in schedule_result["goods_schedules"]]
             for gc in goods_codes:
                 goods = db.query(Goods).filter(Goods.goods_code == gc).first()

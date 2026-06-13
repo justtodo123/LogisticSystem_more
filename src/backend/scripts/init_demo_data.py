@@ -247,9 +247,19 @@ async def _create_drivers(db: Session):
 
 async def _create_orders_and_goods(db: Session):
     """创建订单（50条）+ 货物（每单2-7个）"""
-    # 获取所有0级分拣中心作为目的地
+    # 获取所有0级分拣中心作为目的地（L2节点）
     l2_nodes = db.query(Node).join(SortingCenter).filter(SortingCenter.level == 0).all()
+  
+    # 获取所有存储中心作为货物起点（L0节点）
+    l0_nodes = db.query(Node).filter(Node.node_type == "storage_center").all()
     
+    if not l2_nodes:
+        print("错误：未找到0级分拣中心（L2），请先初始化节点数据")
+        return
+    if not l0_nodes:
+        print("错误：未找到存储中心（L0），请先初始化节点数据")
+        return
+   
     order_count = 0
     goods_count = 0
     
