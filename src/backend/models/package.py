@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, ForeignKey, String, DECIMAL, JSON, DateTime
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, DECIMAL, JSON, DateTime
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .base import Base
@@ -19,6 +19,7 @@ class Package(Base):
     to_longitude = Column(DECIMAL(10, 6), nullable=True)
     to_latitude = Column(DECIMAL(10, 6), nullable=True)
     goods_items = Column(JSON, nullable=False)  # [{"goods_code": "G001", "order_code": "O001"}]
+    schedule_id = Column(Integer, ForeignKey("global_schedules.id"), nullable=True)  # 阶段3新增
     dispatch_id = Column(Integer, nullable=True)  # FK to node_dispatches.id (阶段4添加)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
@@ -26,4 +27,5 @@ class Package(Base):
     # 关系
     from_node = relationship("Node", foreign_keys=[from_node_id], back_populates="packages_from")
     to_node = relationship("Node", foreign_keys=[to_node_id], back_populates="packages_to")
+    global_schedule = relationship("GlobalSchedule", back_populates="packages")
     # dispatch = relationship("NodeDispatch", back_populates="packages")  # NodeDispatch模型尚未实现

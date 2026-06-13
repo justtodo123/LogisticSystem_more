@@ -247,15 +247,27 @@ async def _create_drivers(db: Session):
 
 async def _create_orders_and_goods(db: Session):
     """创建订单（50条）+ 货物（每单2-7个）"""
-    # 获取所有0级分拣中心作为目的地
+    # 获取所有0级分拣中心作为目的地（L2节点）
     l2_nodes = db.query(Node).join(SortingCenter).filter(SortingCenter.level == 0).all()
+  
+    # 获取所有存储中心作为货物起点（L0节点）
+    l0_nodes = db.query(Node).filter(Node.node_type == "storage_center").all()
     
+    if not l2_nodes:
+        print("错误：未找到0级分拣中心（L2），请先初始化节点数据")
+        return
+    if not l0_nodes:
+        print("错误：未找到存储中心（L0），请先初始化节点数据")
+        return
+   
     order_count = 0
     goods_count = 0
     
     for i in range(50):
         # 随机选择目的地节点
         dest_node = random.choice(l2_nodes)
+        # 随机选择货物起点节点
+        origin_node = random.choice(l0_nodes)
         
         # 创建订单
         order_code = f"O{i+1:03d}"
@@ -282,7 +294,7 @@ async def _create_orders_and_goods(db: Session):
                     goods_type=random.choice(["电子产品", "服装", "食品", "日用品"]),
                     weight=random.uniform(0.5, 10.0),
                     volume=random.uniform(0.1, 2.0),
-                    node_id=dest_node.id,
+                    node_id=origin_node.id,  # 货物起点：存储中心
                     status="pending_pack"
                 )
                 db.add(goods)
