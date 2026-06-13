@@ -1,0 +1,79 @@
+[
+  {
+    "goods_code": "G20260612001",
+    "goods_name": "笔记本电脑",
+    "goods_type": "电子产品",
+    "weight": 2.5,
+    "volume": 0.02,
+    "node_code": "SC001",
+    "order_code": "O20260612001",
+    "status": "pending_pack",
+    "created_at": "2026-06-12T08:35:00+08:00"
+  },
+  {
+    "goods_code": "G20260612002",
+    "goods_name": "办公椅",
+    "goods_type": "家具",
+    "weight": 15.0,
+    "volume": 0.8,
+    "node_code": "SC001",
+    "order_code": "O20260612001",
+    "status": "pending_pack",
+    "created_at": "2026-06-12T08:36:00+08:00"
+  },
+  {
+    "goods_code": "G20260612003",
+    "goods_name": "运动鞋",
+    "goods_type": "服饰",
+    "weight": 0.8,
+    "volume": 0.01,
+    "node_code": "SC002",
+    "order_code": "O20260612002",
+    "status": "packed",
+    "created_at": "2026-06-12T09:05:00+08:00"
+  },
+  {
+    "goods_code": "G20260612004",
+    "goods_name": "微波炉",
+    "goods_type": "家电",
+    "weight": 12.0,
+    "volume": 0.15,
+    "node_code": "SC002",
+    "order_code": "O20260612003",
+    "status": "in_transit",
+    "created_at": "2026-06-11T14:25:00+08:00"
+  },
+  {
+    "goods_code": "G20260612005",
+    "goods_name": "图书套装",
+    "goods_type": "文具",
+    "weight": 3.2,
+    "volume": 0.05,
+    "node_code": "SC003",
+    "order_code": "O20260612004",
+    "status": "delivered",
+    "created_at": "2026-06-10T10:10:00+08:00"
+  },
+  {
+    "goods_code": "G20260612006",
+    "goods_name": "显示器",
+    "goods_type": "电子产品",
+    "weight": 5.5,
+    "volume": 0.08,
+    "node_code": "SC004",
+    "order_code": "O20260612005",
+    "status": "exception",
+    "created_at": "2026-06-09T16:50:00+08:00"
+  },
+  {
+    "goods_code": "G20260612007",
+    "goods_name": "键盘",
+    "goods_type": "电子产品",
+    "weight": 0.6,
+    "volume": 0.005,
+    "node_code": "SC001",
+    "order_code": "O20260612006",
+    "status": "pending_pack",
+    "created_at": "2026-06-12T10:20:00+08:00"
+  }
+]

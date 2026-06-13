@@ -1,0 +1,63 @@
+[
+  {
+    "package_code": "PKG20260612001",
+    "weight": 18.5,
+    "volume": 0.82,
+    "status": "packed",
+    "from_node_code": "SC001",
+    "to_node_code": "SO101",
+    "goods_items": [
+      { "goods_code": "G20260612001", "order_code": "O20260612001" },
+      { "goods_code": "G20260612002", "order_code": "O20260612001" }
+    ],
+    "created_at": "2026-06-12T09:00:00+08:00"
+  },
+  {
+    "package_code": "PKG20260612002",
+    "weight": 0.8,
+    "volume": 0.01,
+    "status": "in_transit",
+    "from_node_code": "SC002",
+    "to_node_code": "SO101",
+    "goods_items": [
+      { "goods_code": "G20260612003", "order_code": "O20260612002" }
+    ],
+    "created_at": "2026-06-12T09:30:00+08:00"
+  },
+  {
+    "package_code": "PKG20260612003",
+    "weight": 12.0,
+    "volume": 0.15,
+    "status": "in_transit",
+    "from_node_code": "SO101",
+    "to_node_code": "SO003",
+    "goods_items": [
+      { "goods_code": "G20260612004", "order_code": "O20260612003" }
+    ],
+    "created_at": "2026-06-11T15:00:00+08:00"
+  },
+  {
+    "package_code": "PKG20260612004",
+    "weight": 3.2,
+    "volume": 0.05,
+    "status": "delivered",
+    "from_node_code": "SO101",
+    "to_node_code": "SO004",
+    "goods_items": [
+      { "goods_code": "G20260612005", "order_code": "O20260612004" }
+    ],
+    "created_at": "2026-06-10T12:00:00+08:00"
+  },
+  {
+    "package_code": "PKG20260612005",
+    "weight": 5.5,
+    "volume": 0.08,
+    "status": "exception",
+    "from_node_code": "SC004",
+    "to_node_code": "SO101",
+    "goods_items": [
+      { "goods_code": "G20260612006", "order_code": "O20260612005" }
+    ],
+    "created_at": "2026-06-09T17:00:00+08:00"
+  }
+]
