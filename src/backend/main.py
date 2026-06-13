@@ -1,7 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel
 import os
+from api.auth import router as auth_router
+from utils.response import error_response
 
 
 class HealthResponse(BaseModel):
@@ -9,6 +13,7 @@ class HealthResponse(BaseModel):
     code: int = 0
     message: str = "success"
     data: dict = {"status": "ok"}
+    meta: dict = {"degraded": False, "degraded_reason": None}
 
 
 # 创建FastAPI应用实例
@@ -35,7 +40,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 注册认证路由
+app.include_router(auth_router)
+
+
+# ─── 全局异常处理器 ───────────────────────────────────────────────
+# 所有 HTTPException（包括 dependencies.py 抛出、FastAPI 内置校验、HTTPBearer 等）
+# 统一转为 {code, message, data, meta} 格式
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """将 HTTPException 转为统一响应格式"""
+    status_code = exc.status_code
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+
+    if status_code == 401:
+        # 根据 detail 区分 Token 过期 vs 无效/未登录
+        if "过期" in detail or "expired" in detail.lower():
+            code = 40101
+            message = "Token 已过期，请重新登录"
+        else:
+            code = 40100
+            message = "未登录或 Token 无效"
+    elif status_code == 403:
+        code = 40300
+        message = detail
+    elif status_code == 404:
+        code = 40400
+        message = "资源不存在"
+    elif status_code == 422:
+        code = 40000
+        message = "参数校验失败"
+        return JSONResponse(
+            status_code=status_code,
+            content=error_response(code, message, {"detail": detail}),
+        )
+    elif status_code == 500:
+        code = 50000
+        message = "服务器内部错误"
+    else:
+        code = status_code * 100
+        message = detail
+
+    return JSONResponse(
+        status_code=status_code,
+        content=error_response(code, message),
+    )
+
+
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
     """健康检查接口"""
     return HealthResponse()
+
