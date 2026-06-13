@@ -22,6 +22,7 @@ from models.goods import Goods
 from models.vehicle import Vehicle
 from models.driver import Driver
 from models.order import Order
+from models.global_schedule import GlobalSchedule
 from utils.response import success_response, error_response
 
 
@@ -122,7 +123,6 @@ class DispatchService:
         
         # 按调度方案筛选
         if schedule_code:
-            from models.global_schedule import GlobalSchedule
             schedule = db.query(GlobalSchedule).filter(
                 GlobalSchedule.schedule_code == schedule_code
             ).first()
