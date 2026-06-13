@@ -1,11 +1,11 @@
 # 阶段4：节点间调度 F005 - API 契约文档
 
-> **文档版本**：V1.0
-> **创建日期**：2026年6月14日
-> **开发阶段**：阶段4（节点间调度 F005）
-> **API 基础路径**：`http://localhost:8000/api`
-> **API 协议**：HTTP/JSON，UTF-8
-> **参考资料**：PRD V2.7、系统架构设计说明书 V1.0、阶段4开发文档 V1.9、阶段4实际实现代码
+> **文档版本**：V1.0  
+> **创建日期**：2026年6月14日  
+> **开发阶段**：阶段4（节点间调度 F005）  
+> **API 基础路径**：`http://localhost:8000/api`  
+> **API 协议**：HTTP/JSON，UTF-8  
+> **参考资料**：PRD V2.7、系统架构设计说明书 V1.0、阶段4开发文档 V1.0、阶段4实际实现代码
 
 ---
 
@@ -29,7 +29,7 @@
 ### 2.1 基础信息
 
 | 项 | 约定 |
-| --- | --- |
+|---|---|
 | Base URL | `http://localhost:8000/api` |
 | 协议 | HTTP/JSON，UTF-8 |
 | 版本 | MVP 不加 `/v1` 前缀 |
@@ -58,7 +58,7 @@
 ```json
 {
   "code": 40001,
-  "message": "L0→L1调度失败：没有可用的车辆",
+  "message": "节点调度失败：L0→L1调度失败：节点 SC001 没有可用的车辆（载重不足或无不空闲车辆）",
   "data": null,
   "meta": {
     "degraded": false,
@@ -75,7 +75,7 @@
   "message": "参数校验失败",
   "data": {
     "fields": {
-      "schedule_code": "调度方案编号不能为空"
+      "schedule_code": "必填"
     }
   },
   "meta": {
@@ -128,11 +128,11 @@ Authorization: Bearer {access_token}
 ### 2.4 错误码定义
 
 | code | HTTP | 说明 | 触发场景 |
-| --- | --- | --- | --- |
+|---|---|---|---|
 | 0 | 200 | 成功 | 接口调用成功 |
 | 40000 | 400 | 参数校验失败 | 请求体字段验证失败 |
 | 40001 | 200 | 节点调度失败 | F005 算法无法完成调度（无可用车辆、L0→L1未完成等） |
-| 40401 | 200 | 调度方案不存在 | GET /api/schedule/node-dispatch 方案编号无效 |
+| 40401 | 200 | 调度方案不存在 | POST /api/schedule/node-dispatch 的 schedule_code 无效 |
 | 40402 | 200 | 调度批次不存在 | GET /api/schedule/batches/{code} 批次编号无效 |
 | 40100 | 401 | 未登录或 Token 无效 | Token 缺失、格式错误、签名验证失败 |
 | 40101 | 401 | Token 已过期 | Token 的 exp 字段已过期 |
@@ -149,7 +149,7 @@ Authorization: Bearer {access_token}
 ### 3.1 API 清单
 
 | 方法 | 路径 | 说明 | 认证要求 | 权限要求 |
-| --- | --- | --- | --- | --- |
+|---|---|---|---|---|
 | POST | `/api/schedule/node-dispatch` | 触发节点调度（F005） | 需要认证 | dispatcher |
 | GET | `/api/schedule/batches` | 调度批次列表 | 需要认证 | dispatcher + manager |
 | GET | `/api/schedule/batches/{batch_code}` | 调度批次详情 | 需要认证 | dispatcher + manager |
@@ -162,8 +162,11 @@ Authorization: Bearer {access_token}
 
 **流程**：
 
-1. F005 节点调度算法：分配车辆与司机（L0→L1 和 L1→L2）
-2. 单事务写入数据库并更新包裹/货物/车辆/司机状态
+1. F005 节点调度算法：第一次调用（L0→L1），分配车辆与司机
+2. 写入 dispatch_batches + node_dispatches（level_phase=0）
+3. 第二次调用（L1→L2），分配车辆与司机
+4. 写入 node_dispatches（level_phase=1）
+5. 单事务写入数据库并更新包裹/货物/车辆/司机状态
 
 **请求**：
 
@@ -175,16 +178,16 @@ Authorization: Bearer {access_token}
 
 ```json
 {
-  "schedule_code": "GS20260614001",  // 全局调度方案编号
-  "demo_mode": false                // 是否演示模式（跳过L1送达等待）
+  "schedule_code": "GS20260614001",  // 必填，全局调度方案编号
+  "demo_mode": false                // 可选，是否演示模式（跳过L1送达等待），默认 false
 }
 ```
 
 **请求体验证规则**：
 
 | 字段 | 类型 | 必填 | 验证规则 |
-| --- | --- | --- | --- |
-| schedule_code | string | 是 | 全局调度方案编号，格式：GS + YYYYMMDD + 3位序号 |
+|---|---|---|---|
+| schedule_code | string | 是 | 全局调度方案编号，必须存在 |
 | demo_mode | bool | 否 | 是否演示模式，默认 false |
 
 **响应成功（HTTP 200）**：
@@ -194,28 +197,30 @@ Authorization: Bearer {access_token}
   "code": 0,
   "message": "success",
   "data": {
-    "batch_code": "BATCH001",
-    "status": "l0_l1_done",
+    "batch_code": "BATCH20260614001",
+    "status": "completed",
     "dispatches": [
       {
-        "vehicle_code": "VEH001",
-        "driver_code": "DRV001",
+        "vehicle_code": "VEHSC00101",
+        "driver_code": "DRVSC00101",
         "tasks": [
           {
             "from_node_code": "SC001",
-            "to_node_code": "SO001",
-            "package_codes": ["PKG001", "PKG002"],
+            "to_node_code": "L1001",
+            "package_codes": ["PKG202606140001"],
             "is_return": false
           },
           {
-            "from_node_code": "SO001",
+            "from_node_code": "L1001",
             "to_node_code": "SC001",
             "package_codes": [],
             "is_return": true
           }
         ],
-        "total_distance": 15.2,
-        "total_time": 45.5
+        "total_distance": 25.3,
+        "total_time": 0.42,
+        "vehicle_id": 1,
+        "driver_id": 1
       }
     ]
   },
@@ -229,12 +234,12 @@ Authorization: Bearer {access_token}
 **响应字段说明**：
 
 | 字段 | 类型 | 说明 |
-| --- | --- | --- |
+|---|---|---|
 | batch_code | string | 调度批次编号，格式：BATCH + YYYYMMDD + 3位序号 |
 | status | string | 批次状态：pending / l0_l1_done / completed / failed |
-| dispatches | array | 调度方案列表（每辆车一个方案） |
+| dispatches | array | 调度明细列表（L0→L1 + L1→L2） |
 | dispatches[].vehicle_code | string | 车辆编号 |
-| dispatches[].driver_code | string | 司机编号（可为null） |
+| dispatches[].driver_code | string | 司机编号 |
 | dispatches[].tasks | array | 任务列表 |
 | dispatches[].tasks[].from_node_code | string | 起始节点编号 |
 | dispatches[].tasks[].to_node_code | string | 目的节点编号 |
@@ -242,15 +247,17 @@ Authorization: Bearer {access_token}
 | dispatches[].tasks[].is_return | bool | 是否返回任务 |
 | dispatches[].total_distance | float | 总距离（公里） |
 | dispatches[].total_time | float | 总时间（小时） |
+| dispatches[].vehicle_id | int | 车辆ID（内部） |
+| dispatches[].driver_id | int | 司机ID（内部） |
 
 **响应失败（HTTP 200，业务错误）**：
 
 | code | message | 说明 |
-| --- | --- | --- |
-| 40001 | L0→L1调度失败：没有可用的车辆 | 无空闲车辆 |
-| 40001 | L0→L1调度失败：L0→L1没有可调度的包裹 | 包裹状态不是packed |
-| 40001 | L1→L2调度失败：L0→L1未完成 | demo_mode=false且L0→L1包裹未送达 |
-| 40001 | 调度方案不存在：GS20260614999 | schedule_code无效 |
+|---|---|---|
+| 40001 | 节点调度失败：L0→L1调度失败：节点 SC001 没有可用的车辆（载重不足或无不空闲车辆） | 车辆不足或载重不够 |
+| 40001 | 节点调度失败：L1→L2调度失败：节点 L1001 没有可用的车辆 | L1→L2 车辆不足 |
+| 40001 | 节点调度失败：L0→L1未完成，不能执行L1→L2 | demo_mode=false 且 L0→L1 未完成 |
+| 40401 | 调度方案不存在：GS20260614999 | schedule_code 无效 |
 
 **cURL 示例**：
 
@@ -260,7 +267,7 @@ curl -X POST "http://localhost:8000/api/schedule/node-dispatch" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
   -d '{
     "schedule_code": "GS20260614001",
-    "demo_mode": false
+    "demo_mode": true
   }'
 ```
 
@@ -278,22 +285,24 @@ curl -X POST "http://localhost:8000/api/schedule/node-dispatch" \
   "code": 0,
   "message": "success",
   "data": {
-    "batch_code": "BATCH001",
-    "status": "l0_l1_done",
+    "batch_code": "BATCH20260614001",
+    "status": "completed",
     "dispatches": [
       {
-        "vehicle_code": "VEH001",
-        "driver_code": "DRV001",
+        "vehicle_code": "VEHSC00101",
+        "driver_code": "DRVSC00101",
         "tasks": [
           {
             "from_node_code": "SC001",
-            "to_node_code": "SO001",
-            "package_codes": ["PKG001", "PKG002"],
+            "to_node_code": "L1001",
+            "package_codes": ["PKG202606140001"],
             "is_return": false
           }
         ],
-        "total_distance": 15.2,
-        "total_time": 45.5
+        "total_distance": 25.3,
+        "total_time": 0.42,
+        "vehicle_id": 1,
+        "driver_id": 1
       }
     ]
   },
@@ -318,9 +327,9 @@ curl -X POST "http://localhost:8000/api/schedule/node-dispatch" \
 - **查询参数**：
 
 | 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| schedule_code | string | 否 | 按全局调度方案编号筛选 |
-| status | string | 否 | 按批次状态筛选：pending / l0_l1_done / completed / failed |
+|---|---|---|---|
+| schedule_code | string | 否 | 按调度方案编号筛选 |
+| status | string | 否 | 按状态筛选：pending / l0_l1_done / completed / failed |
 | page | int | 否 | 页码，默认 1 |
 | page_size | int | 否 | 每页数量，默认 20，最大 100 |
 
@@ -333,14 +342,12 @@ curl -X POST "http://localhost:8000/api/schedule/node-dispatch" \
   "data": {
     "items": [
       {
-        "batch_code": "BATCH001",
+        "batch_code": "BATCH20260614001",
         "schedule_code": "GS20260614001",
-        "status": "l0_l1_done",
+        "status": "completed",
         "demo_mode": false,
         "l0_l1_dispatch_count": 5,
-        "l1_l2_dispatch_count": 0,
-        "version": 1,
-        "is_replan": false,
+        "l1_l2_dispatch_count": 8,
         "created_at": "2026-06-14T10:30:00"
       }
     ],
@@ -358,16 +365,14 @@ curl -X POST "http://localhost:8000/api/schedule/node-dispatch" \
 **响应字段说明**：
 
 | 字段 | 类型 | 说明 |
-| --- | --- | --- |
+|---|---|---|
 | items | array | 调度批次列表 |
 | items[].batch_code | string | 批次编号 |
 | items[].schedule_code | string | 全局调度方案编号 |
-| items[].status | string | 批次状态 |
+| items[].status | string | 批次状态：pending / l0_l1_done / completed / failed |
 | items[].demo_mode | bool | 是否演示模式 |
-| items[].l0_l1_dispatch_count | int | L0→L1调度次数 |
-| items[].l1_l2_dispatch_count | int | L1→L2调度次数 |
-| items[].version | int | 版本号 |
-| items[].is_replan | bool | 是否重规划 |
+| items[].l0_l1_dispatch_count | int | L0→L1 调度明细数量 |
+| items[].l1_l2_dispatch_count | int | L1→L2 调度明细数量 |
 | items[].created_at | string | 创建时间（ISO 8601） |
 | total | int | 总记录数 |
 | page | int | 当前页码 |
@@ -390,14 +395,12 @@ curl -X GET "http://localhost:8000/api/schedule/batches?page=1&page_size=20" \
   "data": {
     "items": [
       {
-        "batch_code": "BATCH001",
+        "batch_code": "BATCH20260614001",
         "schedule_code": "GS20260614001",
-        "status": "l0_l1_done",
+        "status": "completed",
         "demo_mode": false,
         "l0_l1_dispatch_count": 5,
-        "l1_l2_dispatch_count": 0,
-        "version": 1,
-        "is_replan": false,
+        "l1_l2_dispatch_count": 8,
         "created_at": "2026-06-14T10:30:00"
       }
     ],
@@ -426,7 +429,7 @@ curl -X GET "http://localhost:8000/api/schedule/batches?page=1&page_size=20" \
 - **路径参数**：
 
 | 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
+|---|---|---|---|
 | batch_code | string | 是 | 调度批次编号 |
 
 **响应成功（HTTP 200）**：
@@ -436,34 +439,33 @@ curl -X GET "http://localhost:8000/api/schedule/batches?page=1&page_size=20" \
   "code": 0,
   "message": "success",
   "data": {
-    "batch_code": "BATCH001",
+    "batch_code": "BATCH20260614001",
     "schedule_code": "GS20260614001",
-    "status": "l0_l1_done",
-    "demo_mode": false,
-    "l0_l1_dispatch_count": 5,
-    "l1_l2_dispatch_count": 0,
-    "version": 1,
-    "is_replan": false,
+    "status": "completed",
     "dispatches": [
       {
-        "dispatch_code": "DISP001",
-        "vehicle_code": "VEH001",
-        "driver_code": "DRV001",
+        "dispatch_code": "DISP20260614001",
+        "vehicle_code": "VEHSC00101",
+        "driver_code": "DRVSC00101",
         "level_phase": 0,
         "tasks": [
           {
             "from_node_code": "SC001",
-            "to_node_code": "SO001",
-            "package_codes": ["PKG001", "PKG002"],
+            "to_node_code": "L1001",
+            "package_codes": ["PKG202606140001"],
             "is_return": false
+          },
+          {
+            "from_node_code": "L1001",
+            "to_node_code": "SC001",
+            "package_codes": [],
+            "is_return": true
           }
         ],
-        "total_distance": 15.2,
-        "total_time": 45.5,
-        "assigned_at": "2026-06-14T10:30:00"
+        "total_distance": 25.3,
+        "total_time": 0.42
       }
-    ],
-    "created_at": "2026-06-14T10:30:00"
+    ]
   },
   "meta": {
     "degraded": false,
@@ -475,20 +477,15 @@ curl -X GET "http://localhost:8000/api/schedule/batches?page=1&page_size=20" \
 **响应字段说明**：
 
 | 字段 | 类型 | 说明 |
-| --- | --- | --- |
+|---|---|---|
 | batch_code | string | 批次编号 |
 | schedule_code | string | 全局调度方案编号 |
-| status | string | 批次状态 |
-| demo_mode | bool | 是否演示模式 |
-| l0_l1_dispatch_count | int | L0→L1调度次数 |
-| l1_l2_dispatch_count | int | L1→L2调度次数 |
-| version | int | 版本号 |
-| is_replan | bool | 是否重规划 |
-| dispatches | array | 节点调度明细列表 |
+| status | string | 批次状态：pending / l0_l1_done / completed / failed |
+| dispatches | array | 调度明细列表 |
 | dispatches[].dispatch_code | string | 调度明细编号 |
 | dispatches[].vehicle_code | string | 车辆编号 |
 | dispatches[].driver_code | string | 司机编号 |
-| dispatches[].level_phase | int | 调度阶段：0=L0→L1, 1=L1→L2 |
+| dispatches[].level_phase | int | 层级阶段：0（L0→L1）/ 1（L1→L2） |
 | dispatches[].tasks | array | 任务列表 |
 | dispatches[].tasks[].from_node_code | string | 起始节点编号 |
 | dispatches[].tasks[].to_node_code | string | 目的节点编号 |
@@ -496,19 +493,17 @@ curl -X GET "http://localhost:8000/api/schedule/batches?page=1&page_size=20" \
 | dispatches[].tasks[].is_return | bool | 是否返回任务 |
 | dispatches[].total_distance | float | 总距离（公里） |
 | dispatches[].total_time | float | 总时间（小时） |
-| dispatches[].assigned_at | string | 分配时间（ISO 8601） |
-| created_at | string | 创建时间（ISO 8601） |
 
 **响应失败（HTTP 200，业务错误）**：
 
 | code | message | 说明 |
-| --- | --- | --- |
+|---|---|---|
 | 40402 | 调度批次不存在：BATCH20260614999 | 批次编号无效 |
 
 **cURL 示例**：
 
 ```bash
-curl -X GET "http://localhost:8000/api/schedule/batches/BATCH001" \
+curl -X GET "http://localhost:8000/api/schedule/batches/BATCH20260614001" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -520,34 +515,27 @@ curl -X GET "http://localhost:8000/api/schedule/batches/BATCH001" \
   "code": 0,
   "message": "success",
   "data": {
-    "batch_code": "BATCH001",
+    "batch_code": "BATCH20260614001",
     "schedule_code": "GS20260614001",
-    "status": "l0_l1_done",
-    "demo_mode": false,
-    "l0_l1_dispatch_count": 5,
-    "l1_l2_dispatch_count": 0,
-    "version": 1,
-    "is_replan": false,
+    "status": "completed",
     "dispatches": [
       {
-        "dispatch_code": "DISP001",
-        "vehicle_code": "VEH001",
-        "driver_code": "DRV001",
+        "dispatch_code": "DISP20260614001",
+        "vehicle_code": "VEHSC00101",
+        "driver_code": "DRVSC00101",
         "level_phase": 0,
         "tasks": [
           {
             "from_node_code": "SC001",
-            "to_node_code": "SO001",
-            "package_codes": ["PKG001", "PKG002"],
+            "to_node_code": "L1001",
+            "package_codes": ["PKG202606140001"],
             "is_return": false
           }
         ],
-        "total_distance": 15.2,
-        "total_time": 45.5,
-        "assigned_at": "2026-06-14T10:30:00"
+        "total_distance": 25.3,
+        "total_time": 0.42
       }
-    ],
-    "created_at": "2026-06-14T10:30:00"
+    ]
   },
   "meta": {
     "degraded": false,
@@ -564,9 +552,9 @@ curl -X GET "http://localhost:8000/api/schedule/batches/BATCH001" \
 
 ```
 1. 用户访问调度工作台页
-2. 用户选择全局调度方案
-3. 用户点击"开始节点调度"按钮
-4. 前端调用 POST /api/schedule/node-dispatch
+2. 用户选择全局调度方案（GS20260614001）
+3. 用户点击"节点调度"按钮
+4. 前端调用 POST /api/schedule/node-dispatch（demo_mode=true 用于演示）
 5. 后端返回 batch_code
 6. 前端跳转至调度批次详情页
 ```
@@ -635,22 +623,18 @@ export interface NodeDispatchRequest {
 export interface NodeDispatchResponse {
   batch_code: string
   status: string
-  dispatches: DispatchItem[]
-}
-
-export interface DispatchItem {
-  vehicle_code: string
-  driver_code: string
-  tasks: TaskItem[]
-  total_distance: number
-  total_time: number
-}
-
-export interface TaskItem {
-  from_node_code: string
-  to_node_code: string
-  package_codes: string[]
-  is_return: boolean
+  dispatches: Array<{
+    vehicle_code: string
+    driver_code: string
+    tasks: Array<{
+      from_node_code: string
+      to_node_code: string
+      package_codes: string[]
+      is_return: boolean
+    }>
+    total_distance: number
+    total_time: number
+  }>
 }
 
 export async function createNodeDispatch(data: NodeDispatchRequest) {
@@ -679,7 +663,7 @@ export async function getDispatchBatchDetail(batch_code: string) {
 <template>
   <div>
     <el-button type="primary" @click="handleNodeDispatch" :loading="loading">
-      开始节点调度
+      节点调度
     </el-button>
 
     <el-table :data="batches">
@@ -700,12 +684,10 @@ export async function getDispatchBatchDetail(batch_code: string) {
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { listDispatchBatches } from '@/api/schedule'
-import { useRouter } from 'vue-router'
+import { listDispatchBatches, createNodeDispatch } from '@/api/schedule'
 
 const batches = ref([])
 const loading = ref(false)
-const router = useRouter()
 
 const loadBatches = async () => {
   const res = await listDispatchBatches({ page: 1, page_size: 20 })
@@ -713,12 +695,24 @@ const loadBatches = async () => {
 }
 
 const handleNodeDispatch = async () => {
-  // 跳转到节点调度页面
-  router.push('/schedule/node-dispatch')
+  loading.value = true
+  try {
+    const res = await createNodeDispatch({ 
+      schedule_code: 'GS20260614001', 
+      demo_mode: true 
+    })
+    ElMessage.success(`节点调度成功：${res.data.batch_code}`)
+    loadBatches()
+  } catch (error: any) {
+    ElMessage.error(error.message || '节点调度失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 const viewDetail = (batch_code: string) => {
-  router.push(`/schedule/batches/${batch_code}`)
+  // 跳转至批次详情页
+  router.push(`/dispatch-batches/${batch_code}`)
 }
 
 loadBatches()
@@ -749,16 +743,16 @@ loadBatches()
 
 - [ ] `DispatchService.create_node_dispatch` 已实现
 - [ ] F005 算法调用正确（node_dispatch.py）
-- [ ] 单事务写入：dispatch_batches + node_dispatches + 更新 packages/goods/vehicles/drivers 状态
+- [ ] 单事务写入：dispatch_batches + node_dispatches + 更新 packages/vehicles/drivers 状态
 - [ ] 事务回滚：F005 异常时全局回滚
 
 ### 5.4 算法实现
 
 - [ ] F005 节点调度算法已实现（node_dispatch.py）
-- [ ] L0→L1 调度逻辑已实现
-- [ ] L1→L2 调度逻辑已实现（demo_mode=true 跳过L1送达等待）
-- [ ] 车辆匹配逻辑：载重匹配 + 节点优先级
-- [ ] 返回任务添加逻辑已实现
+- [ ] F005 第一次调用（L0→L1）正确
+- [ ] F005 第二次调用（L1→L2）正确
+- [ ] 车辆匹配策略：载重匹配 + 节点优先级
+- [ ] 返回任务添加：每个车辆任务列表末尾添加 is_return=true
 
 ### 5.5 Swagger 文档
 
@@ -773,33 +767,33 @@ loadBatches()
 ### 6.1 触发节点调度测试
 
 | 测试用例 | 请求 | 预期响应 |
-| --- | --- | --- |
-| 正常调度（L0→L1） | `{ "schedule_code": "GS20260614001", "demo_mode": false }` | 200, code=0, 返回 batch_code |
-| 演示模式（L0→L1 + L1→L2） | `{ "schedule_code": "GS20260614001", "demo_mode": true }` | 200, code=0, 返回 batch_code |
-| 无可用车辆 | 无空闲车辆 | 200, code=40001, message="没有可用的车辆" |
-| L0→L1未完成 | demo_mode=false且L0→L1包裹未送达 | 200, code=40001, message="L0→L1调度失败" |
-| 调度方案不存在 | `{ "schedule_code": "GS999" }` | 200, code=40001, message="调度方案不存在" |
+|---|---|---|
+| 正常调度（demo_mode=true） | `{ "schedule_code": "GS20260614001", "demo_mode": true }` | 200, code=0, 返回 batch_code |
+| 正常调度（demo_mode=false） | `{ "schedule_code": "GS20260614001", "demo_mode": false }` | 200, code=0, 返回 batch_code |
+| 无可用车辆 | 车辆状态=delivering | 200, code=40001, message="没有可用的车辆" |
+| L0→L1 未完成 | demo_mode=false 且 L0→L1 未完成 | 200, code=40001, message="L0→L1未完成" |
+| 调度方案不存在 | `{ "schedule_code": "GS999" }` | 200, code=40401, message="调度方案不存在" |
 
 ### 6.2 调度批次列表测试
 
 | 测试用例 | 请求 | 预期响应 |
-| --- | --- | --- |
+|---|---|---|
 | 获取列表 | `GET /api/schedule/batches?page=1` | 200, code=0, 返回 items 数组 |
 | 按方案筛选 | `GET /api/schedule/batches?schedule_code=GS20260614001` | 200, code=0, 返回该方案的批次 |
-| 按状态筛选 | `GET /api/schedule/batches?status=l0_l1_done` | 200, code=0, 返回该状态的批次 |
+| 按状态筛选 | `GET /api/schedule/batches?status=completed` | 200, code=0, 返回 completed 批次 |
 | 分页 | `GET /api/schedule/batches?page=1&page_size=10` | 200, code=0, total=1, items.length=1 |
 
 ### 6.3 批次详情测试
 
 | 测试用例 | 请求 | 预期响应 |
-| --- | --- | --- |
-| 正常获取 | `GET /api/schedule/batches/BATCH001` | 200, code=0, 返回批次详情 |
+|---|---|---|
+| 正常获取 | `GET /api/schedule/batches/BATCH20260614001` | 200, code=0, 返回批次详情 |
 | 批次不存在 | `GET /api/schedule/batches/BATCH999` | 200, code=40402, message="调度批次不存在" |
 
 ### 6.4 权限测试
 
 | 测试用例 | 用户角色 | 接口 | 预期响应 |
-| --- | --- | --- | --- |
+|---|---|---|---|
 | dispatcher 调用节点调度 | dispatcher | POST /api/schedule/node-dispatch | 200, code=0 |
 | manager 调用节点调度 | manager | POST /api/schedule/node-dispatch | 403, code=40300 |
 | manager 查看列表 | manager | GET /api/schedule/batches | 200, code=0 |
@@ -809,7 +803,7 @@ loadBatches()
 ## 7. 变更历史
 
 | 版本 | 日期 | 修改内容 | 作者 |
-| --- | --- | --- | --- |
+|---|---|---|---|
 | V1.0 | 2026-06-14 | 初版：阶段4 节点间调度 F005 API 契约文档 | AI 开发助手 |
 
 ---

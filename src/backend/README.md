@@ -292,16 +292,17 @@ src/backend/
 ## 数据库
 
 - **开发**：SQLite，零配置，数据库文件位于 `data/logistics.db`
-- **迁移**：阶段 2 暂未使用 Alembic 迁移，直接通过 `Base.metadata.create_all()` 建表。阶段 3+ 将引入 Alembic 管理表结构变更。
+- **迁移**：已启用 Alembic 迁移管理表结构变更（阶段 3 引入）
 
 ```bash
-# 阶段 2：直接建表
-python -c "from config.database import engine, Base; from models import *; Base.metadata.create_all(bind=engine)"
+# 初始化/更新数据库（使用 Alembic 迁移）
+alembic upgrade head
 
-# 阶段 3+：使用 Alembic 迁移（待启用）
-# alembic upgrade head
-# alembic revision --autogenerate -m "描述"
-# alembic downgrade -1
+# 创建新的迁移版本
+alembic revision --autogenerate -m "描述"
+
+# 回滚到上一个版本
+alembic downgrade -1
 ```
 
 ## 开发规范
@@ -325,12 +326,12 @@ python -c "from config.database import engine, Base; from models import *; Base.
 
 ## 已知问题与设计决策
 
-### 阶段 3 已知问题
+### 阶段 4 已知问题
 
 1. **`BigInteger` → `Integer`**：SQLAlchemy 2.0 在 SQLite 上 `BigInteger` 不会自动生成 `AUTOINCREMENT`，所有模型已改为 `Integer`（SQLite 的 INTEGER 支持 64 位）
-2. **`Package.dispatch_id` 外键暂未添加**：指向 `node_dispatches` 表（阶段 4 实现），当前为普通 `Integer` 列
-3. **Alembic 迁移暂未启用**：直接通过 `Base.metadata.create_all()` 建表，后续阶段将引入 Alembic
-4. **调度算法仅支持 `traditional`**：DeepSeek AI 调度（`algorithm=deepseek`）将在阶段 8 实现
+2. **调度算法仅支持 `traditional`**：DeepSeek AI 调度（`algorithm=deepseek`）将在阶段 8 实现
+3. **F005 算法简化**：当前车辆匹配仅考虑载重，未考虑距离评分（阶段 5 或阶段 6 补充）
+4. **演示数据车辆载重**：已调整为 50.0（原 10.0 不足以承载单个包裹重量）
 
 ### 演示数据规模
 

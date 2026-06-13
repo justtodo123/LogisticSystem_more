@@ -199,7 +199,7 @@ async def _create_vehicles(db: Session):
                 vehicle = Vehicle(
                     vehicle_code=vehicle_code,
                     model="东风卡车",
-                    capacity=10.0,
+                    capacity=50.0,
                     energy_type="fuel",
                     vehicle_type="normal",
                     capability_tags=None,
