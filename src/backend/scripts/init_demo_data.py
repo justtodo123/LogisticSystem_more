@@ -249,8 +249,6 @@ async def _create_orders_and_goods(db: Session):
     """创建订单（50条）+ 货物（每单2-7个）"""
     # 获取所有0级分拣中心作为目的地
     l2_nodes = db.query(Node).join(SortingCenter).filter(SortingCenter.level == 0).all()
-    # 获取所有存储中心作为货物起点
-    l0_nodes = db.query(Node).filter(Node.node_type == "storage_center").all()
     
     order_count = 0
     goods_count = 0
