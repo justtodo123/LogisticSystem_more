@@ -15,7 +15,7 @@ class GoodsService:
 
     @staticmethod
     async def get_goods(page: int, page_size: int, status: str = None, 
-                       node_code: str = None, db: Session = None) -> Dict[str, Any]:
+                       node_code: str = None, order_code: str = None, db: Session = None) -> Dict[str, Any]:
         """获取货物列表"""
         try:
             # 1. 构建查询（使用joinedload预加载关联对象，减少N+1查询）
@@ -29,6 +29,11 @@ class GoodsService:
                 node = db.query(Node).filter(Node.node_code == node_code).first()
                 if node:
                     query = query.filter(Goods.node_id == node.id)
+            if order_code:
+                # 需要联表查询orders表
+                order = db.query(Order).filter(Order.order_code == order_code).first()
+                if order:
+                    query = query.filter(Goods.order_id == order.id)
 
             # 2. 分页
             total = query.count()

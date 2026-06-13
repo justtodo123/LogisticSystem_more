@@ -9,6 +9,7 @@ import os
 from models.order import Order
 from models.goods import Goods
 from models.node import Node
+from models.sorting_center import SortingCenter
 from schemas.order import OrderCreate, OrderUpdate, OrderResponse, OrderImportResponse
 from core.error_codes import (CODE_SUCCESS, CODE_PARAM_ERROR, CODE_INTERNAL_ERROR,
                              CODE_ORDER_NOT_FOUND, CODE_ORDER_STATUS_NOT_ALLOWED,
@@ -26,6 +27,15 @@ class OrderService:
             dest_node = db.query(Node).filter(Node.node_code == order_create.destination_node_code).first()
             if not dest_node:
                 return {"code": CODE_NODE_NOT_FOUND, "message": "目的地节点不存在", "data": None}
+            
+            # 1.5 校验目的地节点必须是0级分拣中心
+            if dest_node.node_type != "sorting_center":
+                return {"code": CODE_PARAM_ERROR, "message": "目的地必须是分拣中心", "data": None}
+            
+            # 查询sorting_center表校验level
+            sorting_center = db.query(SortingCenter).filter(SortingCenter.node_id == dest_node.id).first()
+            if not sorting_center or sorting_center.level != 0:
+                return {"code": CODE_PARAM_ERROR, "message": "目的地必须是0级分拣中心", "data": None}
 
             # 2. 生成order_code
             import time
@@ -223,7 +233,12 @@ class OrderService:
             if order.status in ["delivering", "completed", "exception"]:
                 return {"code": CODE_ORDER_STATUS_NOT_ALLOWED, "message": "订单状态不允许删除", "data": None}
 
-            # 3. 删除订单（会级联删除货物）
+            # 3. 先删除关联的goods（避免NOT NULL约束错误）
+            goods_list = db.query(Goods).filter(Goods.order_id == order.id).all()
+            for goods in goods_list:
+                db.delete(goods)
+
+            # 4. 删除订单
             db.delete(order)
             db.commit()
 
