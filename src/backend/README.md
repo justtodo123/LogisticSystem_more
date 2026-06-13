@@ -4,8 +4,8 @@
 
 ## 项目状态
 
-**当前阶段**：阶段 2（基础数据管理）已完成  
-**下一阶段**：阶段 3（全局调度 F007 + 打包 F021）
+**当前阶段**：阶段 3（全局调度 F007 + 打包 F021）已完成  
+**下一阶段**：阶段 4（节点间调度 F005）
 
 ## 技术栈
 
@@ -87,6 +87,7 @@ src/backend/
 │   ├── vehicles.py            # 车辆管理 (GET/POST/PUT/DELETE /api/vehicles)
 │   ├── drivers.py             # 司机管理 (GET/POST/PUT/DELETE /api/drivers)
 │   ├── nodes.py               # 节点管理 (GET /api/nodes, POST/PUT/DELETE storage-centers/sorting-centers)
+│   ├── schedule.py            # 调度管理 (POST /api/schedule/global, GET 列表/详情)
 │   └── dependencies.py         # 依赖注入 (get_current_user JWT 验证, require_dispatcher RBAC)
 │
 ├── services/                   # 业务逻辑层
@@ -97,7 +98,8 @@ src/backend/
 │   ├── package_service.py      # 包裹服务 (CRUD, 重新打包)
 │   ├── vehicle_service.py     # 车辆服务 (CRUD)
 │   ├── driver_service.py      # 司机服务 (CRUD)
-│   └── node_service.py        # 节点服务 (存储中心/分拣中心 CRUD)
+│   ├── node_service.py        # 节点服务 (存储中心/分拣中心 CRUD)
+│   └── schedule_service.py    # 调度编排服务 (F007→F021→写库, 单事务)
 │
 ├── models/                     # SQLAlchemy ORM 模型
 │   ├── __init__.py
@@ -111,7 +113,8 @@ src/backend/
 │   ├── goods.py               # Goods 模型 (货物)
 │   ├── package.py             # Package 模型 (包裹)
 │   ├── vehicle.py             # Vehicle 模型 (车辆)
-│   └── driver.py              # Driver 模型 (司机)
+│   ├── driver.py              # Driver 模型 (司机)
+│   └── global_schedule.py     # GlobalSchedule 模型 (F007 调度结果)
 │
 ├── schemas/                    # Pydantic 请求/响应模型
 │   ├── __init__.py
@@ -140,16 +143,21 @@ src/backend/
 │   ├── __init__.py
 │   └── init_demo_data.py      # 演示数据初始化 (用户、节点、车辆、司机、订单、货物)
 │
-├── algorithms/                 # 算法引擎 (F005/F006/F007/F021, 阶段 3+ 实现)
-│   └── __init__.py
+├── algorithms/                 # 算法引擎 (F005/F006/F007/F021)
+│   ├── __init__.py
+│   ├── global_schedule.py      # F007 全局调度 (贪心算法, L0→L1→L2 路径规划)
+│   └── packaging.py            # F021 打包 (L0→L1 按节点对, L1→L2 按订单)
 │
 ├── tests/                      # 测试
 │   ├── conftest.py             # 测试夹具与配置
-│   ├── test_phase3_api.py      # 阶段3 API 测试
+│   ├── test_phase3_api.py      # 阶段3 API 集成测试
 │   ├── test_api/               # API 层测试
 │   │   └── test_schedule.py    # 调度接口测试
-│   └── test_services/          # 服务层测试
-│       └── test_schedule_service.py
+│   ├── test_services/          # 服务层测试
+│   │   └── test_schedule_service.py  # 调度编排服务测试
+│   └── test_algorithms/        # 算法层测试
+│       ├── test_global_schedule.py   # F007 全局调度算法测试
+│       └── test_packaging.py         # F021 打包算法测试
 │
 ├── data/                       # 数据文件
 │   └── logistics.db            # SQLite 数据库
@@ -162,7 +170,7 @@ src/backend/
 
 ## API 接口
 
-### 已实现（阶段 1-2）
+### 已实现（阶段 1-3）
 
 #### 认证与权限（阶段 1）
 
@@ -207,7 +215,15 @@ src/backend/
 | `PUT` | `/api/nodes/sorting-centers/{code}` | 编辑分拣中心 | Bearer Token (dispatcher) |
 | `DELETE` | `/api/nodes/sorting-centers/{code}` | 删除分拣中心 | Bearer Token (dispatcher) |
 
-### 规划中（阶段 3-8）
+#### 全局调度（阶段 3）
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| `POST` | `/api/schedule/global` | 触发全局调度 (F007 + F021) | Bearer Token (dispatcher) |
+| `GET` | `/api/schedule/global` | 历史调度方案列表（分页） | Bearer Token |
+| `GET` | `/api/schedule/global/{code}` | 调度方案详情（含 goods_schedules + packages） | Bearer Token |
+
+### 规划中（阶段 4-8）
 
 详见 `docs/` 目录下的 MVP 开发计划。核心接口包括：
 
@@ -237,11 +253,13 @@ src/backend/
 |------|-------------|------|
 | `0` | 200 | 成功 |
 | `40000` | 400 | 参数校验失败 |
+| `40001` | 200 | 全局调度失败（业务错误，如"没有找到符合条件的订单"） |
 | `40100` | 200 | 用户名或密码错误（登录接口） |
 | `40100` | 401 | 未登录或 Token 无效 |
 | `40101` | 401 | Token 已过期，请重新登录 |
 | `40300` | 403 | 无权限执行此操作 |
 | `40400` | 404 | 资源不存在 |
+| `40401` | 200 | 调度方案不存在 |
 | `50000` | 500 | 服务器内部错误 |
 
 > **注意**：所有 HTTP 异常（401/403/404/422/500）均由 `main.py` 中 `StarletteHTTPException` 全局异常处理器统一转为 `{code, message, data, meta}` 格式，前端可统一通过 `code` 字段判断，无需关注 HTTP 状态码差异。
@@ -293,11 +311,12 @@ python -c "from config.database import engine, Base; from models import *; Base.
 
 ## 已知问题与设计决策
 
-### 阶段 2 已知问题
+### 阶段 3 已知问题
 
 1. **`BigInteger` → `Integer`**：SQLAlchemy 2.0 在 SQLite 上 `BigInteger` 不会自动生成 `AUTOINCREMENT`，所有模型已改为 `Integer`（SQLite 的 INTEGER 支持 64 位）
 2. **`Package.dispatch_id` 外键暂未添加**：指向 `node_dispatches` 表（阶段 4 实现），当前为普通 `Integer` 列
-3. **Alembic 迁移暂未启用**：阶段 2 直接通过 `Base.metadata.create_all()` 建表，阶段 3+ 将引入 Alembic
+3. **Alembic 迁移暂未启用**：直接通过 `Base.metadata.create_all()` 建表，后续阶段将引入 Alembic
+4. **调度算法仅支持 `traditional`**：DeepSeek AI 调度（`algorithm=deepseek`）将在阶段 8 实现
 
 ### 演示数据规模
 
@@ -345,6 +364,20 @@ python -c "from config.database import engine, Base; from models import *; Base.
 | 业务校验 | 订单目的地校验（必须0级分拣中心）、删除配送中订单拒绝、repack状态校验 | ✅ |
 | 响应格式 | 统一{code, message, data, meta} + 分页含total/items + 不含数据库id | ✅ |
 
+### 阶段 3 自测（全局调度 F007 + F021）
+
+测试时间：2026-06-13，结果：**全部通过**
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| F007 算法 | 贪心算法选择 L1、硬约束检查（容量/同订单汇聚/存储时长）、评分计算 | ✅ |
+| F021 打包 | L0→L1 按节点对打包、L1→L2 按订单打包、货物状态更新 | ✅ |
+| API 集成 | POST /api/schedule/global 触发调度、GET 列表/详情、调度结果可复现 | ✅ |
+| 事务原子性 | global_schedules + packages + orders/goods 状态更新单事务 | ✅ |
+| 权限 | dispatcher 可触发调度、manager 返回 403 | ✅ |
+| 错误处理 | 无 pending 订单 → 40001、不存在的 schedule_code → 40401 | ✅ |
+| 数据完整性 | 2 条调度记录、59 个包裹、207 个货物状态 packed、53 个订单状态 delivering | ✅ |
+
 ## 相关文档
 
 - [项目宪章](../../.codebuddy/CODEBUDDY.md)
@@ -354,3 +387,5 @@ python -c "from config.database import engine, Base; from models import *; Base.
 - [阶段 2 API 契约文档](../../My_doc/阶段2-API契约文档.md)（V1.4）
 - [阶段 2 测试报告](../../My_doc/阶段2-测试报告.md)（63/63 通过）
 - [联调反馈 - 阶段2 - 致后端](../../My_doc/联调反馈-阶段2-致后端.md)
+- [阶段 3 开发文档](../../My_doc/阶段3开发文档-全局调度F007+F021.md)
+- [阶段 3 API 契约文档](../../docs/api-contract/api-contract-phase3.md)（V1.0）
