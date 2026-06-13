@@ -12,6 +12,7 @@ from api.vehicles import router as vehicles_router
 from api.drivers import router as drivers_router
 from api.nodes import router as nodes_router
 from api.schedule import router as schedule_router
+from api.routes import router as routes_router
 from utils.response import error_response
 
 
@@ -58,6 +59,9 @@ app.include_router(vehicles_router)
 app.include_router(drivers_router)
 app.include_router(nodes_router)
 app.include_router(schedule_router)
+
+# 注册路径规划路由
+app.include_router(routes_router)
 
 
 # ─── 全局异常处理器 ───────────────────────────────────────────────
@@ -108,4 +112,12 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 async def health_check():
     """健康检查接口"""
     return HealthResponse()
+
+
+# 应用启动时初始化数据库（创建所有表）
+@app.on_event("startup")
+async def startup_event():
+    """应用启动事件"""
+    from config.database import init_db
+    init_db()
 

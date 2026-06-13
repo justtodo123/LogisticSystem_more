@@ -58,6 +58,7 @@ class DispatchService:
             # 2. 更新状态（包裹、货物、车辆、司机）
             batch_code = dispatch_result["batch_code"]
             dispatches = dispatch_result["dispatches"]
+            batch_status = dispatch_result["status"]
             
             # 更新车辆和司机状态
             for dispatch_data in dispatches:
@@ -76,7 +77,16 @@ class DispatchService:
                     if driver:
                         driver.status = 'busy'
             
-            # 3. 提交事务
+            # 3. 【新增】仅当F005两次都完成后（status="completed"）才调用F006
+            if batch_status == "completed":
+                from services.route_service import RouteService
+                await RouteService.create_route_planning(
+                    batch_code=batch_code,
+                    dispatch_codes=None,  # 处理批次下所有dispatch
+                    db=db
+                )
+            
+            # 4. 提交事务
             db.commit()
             
             # 4. 返回结果

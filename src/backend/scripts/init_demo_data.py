@@ -20,6 +20,9 @@ from models.goods import Goods
 
 async def init_demo_data(db: Session):
     """初始化演示数据"""
+    # 0. 清理旧数据（按依赖逆序删除）
+    await _cleanup_old_data(db)
+    
     # 1. 创建用户（dispatcher、manager）
     await _create_users(db)
     
@@ -42,6 +45,22 @@ async def init_demo_data(db: Session):
     await _create_orders_and_goods(db)
     
     print("演示数据初始化完成")
+
+
+async def _cleanup_old_data(db: Session):
+    """清理旧数据（按依赖逆序删除）"""
+    # 删除顺序：先删子表，再删父表
+    db.query(Goods).delete()
+    db.query(Order).delete()
+    db.query(Vehicle).delete()
+    db.query(Driver).delete()
+    db.query(SortingCenter).delete()
+    db.query(StorageCenter).delete()
+    db.query(Node).delete()
+    db.query(User).filter(User.username.in_(["dispatcher", "manager"])).delete()
+    
+    db.commit()
+    print("旧数据清理完成")
 
 
 async def _create_users(db: Session):
