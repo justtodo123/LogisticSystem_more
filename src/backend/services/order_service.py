@@ -5,6 +5,7 @@ from datetime import datetime
 import openpyxl
 import tempfile
 import os
+import random
 
 from models.order import Order
 from models.goods import Goods
@@ -37,6 +38,23 @@ class OrderService:
             if not sorting_center or sorting_center.level != 0:
                 return {"code": CODE_PARAM_ERROR, "message": "目的地必须是0级分拣中心", "data": None}
 
+            # 1.6 确定存储中心（货物起点）
+            storage_center_code = order_create.storage_center_code
+            if storage_center_code:
+                # 指定了存储中心，校验存在且类型正确
+                sc_node = db.query(Node).filter(
+                    Node.node_code == storage_center_code,
+                    Node.node_type == "storage_center"
+                ).first()
+                if not sc_node:
+                    return {"code": CODE_PARAM_ERROR, "message": "指定的存储中心不存在", "data": None}
+            else:
+                # 未指定则随机分配一个存储中心
+                sc_nodes = db.query(Node).filter(Node.node_type == "storage_center").all()
+                if not sc_nodes:
+                    return {"code": CODE_INTERNAL_ERROR, "message": "系统中无可用存储中心，请先初始化演示数据", "data": None}
+                sc_node = random.choice(sc_nodes)
+
             # 2. 生成order_code
             import time
             order_code = f"O{int(time.time() * 1000)}"
@@ -51,7 +69,7 @@ class OrderService:
             db.add(order)
             db.flush()  # 获取order.id
 
-            # 4. 创建Goods记录
+            # 4. 创建Goods记录（node_id 设为存储中心，即货物起始位置）
             for idx, goods_item in enumerate(order_create.goods):
                 goods_code = f"G{int(time.time() * 1000)}_{idx}"
                 goods = Goods(
@@ -61,7 +79,7 @@ class OrderService:
                     goods_type=goods_item.goods_type,
                     weight=goods_item.weight,
                     volume=goods_item.volume,
-                    node_id=dest_node.id,  # 初始在目的地节点
+                    node_id=sc_node.id,
                     status="pending_pack"
                 )
                 db.add(goods)
@@ -76,6 +94,8 @@ class OrderService:
                     "order_code": order.order_code,
                     "destination_node_code": dest_node.node_code,
                     "destination_node_name": dest_node.name,
+                    "storage_center_code": sc_node.node_code,
+                    "storage_center_name": sc_node.name,
                     "time_window": order.time_window,
                     "status": order.status,
                     "goods_count": len(order_create.goods),
@@ -274,6 +294,7 @@ class OrderService:
                     # 解析行数据
                     row_data = dict(zip(headers, row))
                     destination_node_code = row_data.get("destination_node_code")
+                    storage_center_code = row_data.get("storage_center_code")  # 可选列
                     time_window = row_data.get("time_window")
                     goods_name = row_data.get("goods_name")
                     goods_type = row_data.get("goods_type")
@@ -289,6 +310,20 @@ class OrderService:
                     if not dest_node:
                         raise ValueError(f"目的地节点不存在: {destination_node_code}")
 
+                    # 确定存储中心
+                    if storage_center_code:
+                        sc_node = db.query(Node).filter(
+                            Node.node_code == storage_center_code,
+                            Node.node_type == "storage_center"
+                        ).first()
+                        if not sc_node:
+                            raise ValueError(f"存储中心不存在: {storage_center_code}")
+                    else:
+                        sc_nodes = db.query(Node).filter(Node.node_type == "storage_center").all()
+                        if not sc_nodes:
+                            raise ValueError("系统中无可用存储中心")
+                        sc_node = random.choice(sc_nodes)
+
                     # 创建订单
                     import time
                     order_code = f"O{int(time.time() * 1000)}_{row_idx}"
@@ -301,7 +336,7 @@ class OrderService:
                     db.add(order)
                     db.flush()
 
-                    # 创建货物
+                    # 创建货物（node_id 设为存储中心）
                     goods_code = f"G{int(time.time() * 1000)}_{row_idx}"
                     goods = Goods(
                         goods_code=goods_code,
@@ -310,7 +345,7 @@ class OrderService:
                         goods_type=goods_type,
                         weight=weight,
                         volume=volume,
-                        node_id=dest_node.id,
+                        node_id=sc_node.id,
                         status="pending_pack"
                     )
                     db.add(goods)

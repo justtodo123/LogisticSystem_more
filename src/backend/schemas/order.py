@@ -14,6 +14,7 @@ class GoodsCreate(BaseModel):
 class OrderCreate(BaseModel):
     """订单创建请求"""
     destination_node_code: str
+    storage_center_code: Optional[str] = None
     time_window: str
     goods: List[GoodsCreate]
 
