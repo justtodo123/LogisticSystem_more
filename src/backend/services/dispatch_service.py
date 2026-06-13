@@ -17,6 +17,11 @@ from sqlalchemy.orm import Session
 from algorithms.node_dispatch import run_node_dispatch
 from models.dispatch_batch import DispatchBatch
 from models.node_dispatch import NodeDispatch
+from models.package import Package
+from models.goods import Goods
+from models.vehicle import Vehicle
+from models.driver import Driver
+from models.order import Order
 from utils.response import success_response, error_response
 
 
@@ -47,21 +52,42 @@ class DispatchService:
             统一响应格式 dict
         """
         try:
-            # TODO: 实现 F005 算法调用和数据库写入
-            # 1. 调用 F005 算法
-            # dispatch_result = run_node_dispatch(db, schedule_code, demo_mode)
+            # 1. 调用 F005 算法（纯计算，不提交事务）
+            dispatch_result = run_node_dispatch(db, schedule_code, demo_mode)
             
-            # 2. 写入数据库
-            # ...
+            # 2. 更新状态（包裹、货物、车辆、司机）
+            batch_code = dispatch_result["batch_code"]
+            dispatches = dispatch_result["dispatches"]
             
-            # 3. 返回结果
+            # 更新车辆和司机状态
+            for dispatch_data in dispatches:
+                # 更新车辆状态：idle → delivering
+                vehicle = db.query(Vehicle).filter(
+                    Vehicle.vehicle_code == dispatch_data["vehicle_code"]
+                ).first()
+                if vehicle:
+                    vehicle.status = 'delivering'
+                
+                # 更新司机状态：idle → busy
+                if dispatch_data.get("driver_code"):
+                    driver = db.query(Driver).filter(
+                        Driver.driver_code == dispatch_data["driver_code"]
+                    ).first()
+                    if driver:
+                        driver.status = 'busy'
+            
+            # 3. 提交事务
+            db.commit()
+            
+            # 4. 返回结果
             return success_response(data={
-                "batch_code": "TODO",
-                "status": "TODO",
-                "dispatches": []
+                "batch_code": batch_code,
+                "status": dispatch_result["status"],
+                "dispatches": dispatches
             })
             
         except Exception as e:
+            db.rollback()
             return error_response(code=40001, message=f"节点调度失败：{str(e)}")
 
     @staticmethod
@@ -81,10 +107,44 @@ class DispatchService:
         Returns:
             统一响应格式 dict
         """
-        # TODO: 实现查询逻辑
+        # 构建查询
+        query = db.query(DispatchBatch)
+        
+        # 按调度方案筛选
+        if schedule_code:
+            from models.global_schedule import GlobalSchedule
+            schedule = db.query(GlobalSchedule).filter(
+                GlobalSchedule.schedule_code == schedule_code
+            ).first()
+            if schedule:
+                query = query.filter(DispatchBatch.global_schedule_id == schedule.id)
+        
+        # 按状态筛选
+        if status:
+            query = query.filter(DispatchBatch.status == status)
+        
+        # 执行查询
+        batches = query.order_by(DispatchBatch.created_at.desc()).all()
+        
+        # 构建响应
+        items = []
+        for batch in batches:
+            # 获取调度方案编码
+            schedule = db.query(GlobalSchedule).filter(
+                GlobalSchedule.id == batch.global_schedule_id
+            ).first()
+            schedule_code = schedule.schedule_code if schedule else None
+            
+            items.append({
+                "batch_code": batch.batch_code,
+                "schedule_code": schedule_code,
+                "status": batch.status,
+                "created_at": batch.created_at.isoformat() if batch.created_at else None
+            })
+        
         return success_response(data={
-            "items": [],
-            "total": 0
+            "items": items,
+            "total": len(items)
         })
 
     @staticmethod
@@ -102,10 +162,47 @@ class DispatchService:
         Returns:
             统一响应格式 dict
         """
-        # TODO: 实现查询逻辑
+        # 查询调度批次
+        batch = db.query(DispatchBatch).filter(
+            DispatchBatch.batch_code == batch_code
+        ).first()
+        
+        if not batch:
+            return error_response(code=404, message=f"调度批次不存在：{batch_code}")
+        
+        # 获取调度方案编码
+        from models.global_schedule import GlobalSchedule
+        schedule = db.query(GlobalSchedule).filter(
+            GlobalSchedule.id == batch.global_schedule_id
+        ).first()
+        schedule_code = schedule.schedule_code if schedule else None
+        
+        # 查询调度明细
+        dispatches = db.query(NodeDispatch).filter(
+            NodeDispatch.dispatch_batch_id == batch.id
+        ).all()
+        
+        # 构建调度明细响应
+        dispatch_list = []
+        for dispatch in dispatches:
+            # 获取车辆和司机编码
+            vehicle = db.query(Vehicle).filter(Vehicle.id == dispatch.vehicle_id).first()
+            driver = db.query(Driver).filter(Driver.id == dispatch.driver_id).first() if dispatch.driver_id else None
+            
+            dispatch_list.append({
+                "dispatch_code": dispatch.dispatch_code,
+                "vehicle_code": vehicle.vehicle_code if vehicle else None,
+                "driver_code": driver.driver_code if driver else None,
+                "level_phase": dispatch.level_phase,
+                "tasks": dispatch.tasks,
+                "total_distance": float(dispatch.total_distance),
+                "total_time": float(dispatch.total_time)
+            })
+        
+        # 构建响应
         return success_response(data={
-            "batch_code": batch_code,
-            "schedule_code": "TODO",
-            "status": "TODO",
-            "dispatches": []
+            "batch_code": batch.batch_code,
+            "schedule_code": schedule_code,
+            "status": batch.status,
+            "dispatches": dispatch_list
         })
