@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
+from api.dependencies import get_current_user, require_dispatcher
 from schemas.package import PackageRepack
 from services.package_service import PackageService
 from config.database import get_db
@@ -11,6 +12,7 @@ from core.response_schema import (
     PackageDetailData,
     PackageRepackData
 )
+from models.user import User
 
 router = APIRouter(prefix="/api/packages", tags=["包裹管理"])
 
@@ -22,7 +24,8 @@ async def list_packages(
     status: Optional[str] = None,
     from_node_code: Optional[str] = None,
     to_node_code: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """包裹列表"""
     result = await PackageService.get_packages(page, page_size, status, from_node_code, to_node_code, db)
@@ -32,7 +35,8 @@ async def list_packages(
 @router.get("/{package_code}", response_model=ResponseSchema[PackageDetailData])
 async def get_package(
     package_code: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """包裹详情"""
     result = await PackageService.get_package(package_code, db)
@@ -43,7 +47,8 @@ async def get_package(
 async def repack_package(
     package_code: str,
     repack: PackageRepack,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher)
 ):
     """手动重新打包"""
     result = await PackageService.repack_package(package_code, repack, db)

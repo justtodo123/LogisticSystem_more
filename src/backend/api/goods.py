@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
+from api.dependencies import get_current_user, require_dispatcher
 from schemas.goods import GoodsUpdate
 from services.goods_service import GoodsService
 from config.database import get_db
@@ -11,6 +12,7 @@ from core.response_schema import (
     GoodsDetailData,
     GoodsUpdateData
 )
+from models.user import User
 
 router = APIRouter(prefix="/api/goods", tags=["货物管理"])
 
@@ -21,17 +23,20 @@ async def list_goods(
     page_size: int = 20,
     status: Optional[str] = None,
     node_code: Optional[str] = None,
-    db: Session = Depends(get_db)
+    order_code: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """货物列表"""
-    result = await GoodsService.get_goods(page, page_size, status, node_code, db)
+    result = await GoodsService.get_goods(page, page_size, status, node_code, order_code, db)
     return result
 
 
 @router.get("/{goods_code}", response_model=ResponseSchema[GoodsDetailData])
 async def get_good(
     goods_code: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """货物详情"""
     result = await GoodsService.get_good(goods_code, db)
@@ -42,7 +47,8 @@ async def get_good(
 async def update_good(
     goods_code: str,
     goods: GoodsUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher)
 ):
     """编辑货物"""
     result = await GoodsService.update_good(goods_code, goods, db)

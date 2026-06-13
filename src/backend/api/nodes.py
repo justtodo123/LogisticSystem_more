@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
+from api.dependencies import get_current_user, require_dispatcher
 from schemas.node import StorageCenterCreate, StorageCenterUpdate, SortingCenterCreate, SortingCenterUpdate
 from services.node_service import NodeService
 from config.database import get_db
@@ -16,6 +17,7 @@ from core.response_schema import (
     SortingCenterUpdateData,
     SortingCenterDeleteData
 )
+from models.user import User
 
 router = APIRouter(prefix="/api/nodes", tags=["节点管理"])
 
@@ -25,17 +27,20 @@ async def list_nodes(
     page: int = 1,
     page_size: int = 20,
     node_type: Optional[str] = None,
-    db: Session = Depends(get_db)
+    level: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """节点列表"""
-    result = await NodeService.get_nodes(page, page_size, node_type, db)
+    result = await NodeService.get_nodes(page, page_size, node_type, level, db)
     return result
 
 
 @router.post("/storage-centers", response_model=ResponseSchema[StorageCenterCreateData])
 async def create_storage_center(
     center: StorageCenterCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher)
 ):
     """新增存储中心"""
     result = await NodeService.create_storage_center(center.dict(), db)
@@ -46,7 +51,8 @@ async def create_storage_center(
 async def update_storage_center(
     node_code: str,
     center: StorageCenterUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher)
 ):
     """编辑存储中心"""
     result = await NodeService.update_storage_center(node_code, center.dict(exclude_unset=True), db)
@@ -56,7 +62,8 @@ async def update_storage_center(
 @router.delete("/storage-centers/{node_code}", response_model=ResponseSchema[StorageCenterDeleteData])
 async def delete_storage_center(
     node_code: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher)
 ):
     """删除存储中心"""
     result = await NodeService.delete_storage_center(node_code, db)
@@ -66,7 +73,8 @@ async def delete_storage_center(
 @router.post("/sorting-centers", response_model=ResponseSchema[SortingCenterCreateData])
 async def create_sorting_center(
     center: SortingCenterCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher)
 ):
     """新增分拣中心"""
     result = await NodeService.create_sorting_center(center.dict(), db)
@@ -77,7 +85,8 @@ async def create_sorting_center(
 async def update_sorting_center(
     node_code: str,
     center: SortingCenterUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher)
 ):
     """编辑分拣中心"""
     result = await NodeService.update_sorting_center(node_code, center.dict(exclude_unset=True), db)
@@ -87,7 +96,8 @@ async def update_sorting_center(
 @router.delete("/sorting-centers/{node_code}", response_model=ResponseSchema[SortingCenterDeleteData])
 async def delete_sorting_center(
     node_code: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher)
 ):
     """删除分拣中心"""
     result = await NodeService.delete_sorting_center(node_code, db)
@@ -97,7 +107,8 @@ async def delete_sorting_center(
 @router.get("/{node_code}", response_model=ResponseSchema[NodeDetailData])
 async def get_node(
     node_code: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """节点详情"""
     result = await NodeService.get_node(node_code, db)

@@ -263,13 +263,17 @@ class NodeService:
             return {"code": CODE_INTERNAL_ERROR, "message": f"删除分拣中心失败: {str(e)}", "data": None}
 
     @staticmethod
-    async def get_nodes(page: int, page_size: int, node_type: str = None, db: Session = None) -> Dict[str, Any]:
+    async def get_nodes(page: int, page_size: int, node_type: str = None, level: int = None, db: Session = None) -> Dict[str, Any]:
         """获取节点列表"""
         try:
             # 1. 构建查询
             query = db.query(Node)
             if node_type:
                 query = query.filter(Node.node_type == node_type)
+            if level is not None:
+                # 按level筛选：使用子查询找出指定level的sorting_center对应的node_id
+                matching_node_ids = db.query(SortingCenter.node_id).filter(SortingCenter.level == level).subquery()
+                query = query.filter(Node.id.in_(matching_node_ids))
 
             # 2. 分页
             total = query.count()
@@ -288,6 +292,20 @@ class NodeService:
                     "created_at": node.created_at.isoformat(),
                     "updated_at": node.updated_at.isoformat()
                 }
+                
+                # 根据节点类型添加扩展字段
+                if node.node_type == "storage_center":
+                    storage_center = db.query(StorageCenter).filter(StorageCenter.node_id == node.id).first()
+                    if storage_center:
+                        item["capacity"] = float(storage_center.capacity)
+                        item["inventory"] = storage_center.inventory
+                elif node.node_type == "sorting_center":
+                    sorting_center = db.query(SortingCenter).filter(SortingCenter.node_id == node.id).first()
+                    if sorting_center:
+                        item["level"] = sorting_center.level
+                        item["capacity"] = float(sorting_center.capacity) if sorting_center.capacity else None
+                        item["max_storage_time"] = sorting_center.max_storage_time
+                
                 items.append(item)
 
             return {
