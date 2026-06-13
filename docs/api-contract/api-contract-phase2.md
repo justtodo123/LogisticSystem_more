@@ -1,9 +1,12 @@
 # 阶段2：基础数据管理 - API 契约文档
 
-> **文档版本**：V1.3
+> **文档版本**：V1.4
 > **更新时间**：2026年6月13日
 > **阶段范围**：F001订单管理、F001-1货物管理、F001-2包裹管理、F002车辆管理、F003司机管理、F004存储中心管理、F004-1分拣中心管理
 > **参考资料**：PRD V2.7、系统架构设计说明书V1.0、阶段2开发文档V1.2、阶段2实际实现
+> 
+> **更新说明（V1.4）**：
+> - 补充§8.1节点列表Query参数：新增`level`筛选参数（0/1，仅当node_type=sorting_center时有效）
 > 
 > **更新说明（V1.3）**：
 > - 根据实际实现更新：货物管理只有GET/PUT，无POST/DELETE
@@ -1008,6 +1011,7 @@ GET /api/nodes
 | page | int | 否 | 页码，默认1 |
 | page_size | int | 否 | 每页数量，默认20 |
 | node_type | string | 否 | 节点类型筛选：storage_center/sorting_center |
+| level | int | 否 | 分拣中心等级筛选：0/1（仅当node_type=sorting_center时有效） |
 
 **响应 data**：
 
