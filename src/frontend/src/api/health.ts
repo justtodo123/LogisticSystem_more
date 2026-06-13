@@ -1,5 +1,6 @@
 import request from './request'
 
-export function getHealth() {
-  return request.get('/health')
+export async function getHealth() {
+  const { data } = await request.get('/health')
+  return data
 }

@@ -4,5 +4,15 @@ import 'element-plus/dist/index.css'
 import './style.css'
 import App from './App.vue'
 import router from './router'
+import { useAuthStore } from './stores/auth'
 
-createApp(App).use(createPinia()).use(router).mount('#app')
+const app = createApp(App)
+const pinia = createPinia()
+
+app.use(pinia)
+
+const authStore = useAuthStore()
+await authStore.restore()
+
+app.use(router)
+app.mount('#app')
