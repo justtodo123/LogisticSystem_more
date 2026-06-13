@@ -1,0 +1,141 @@
+[
+  {
+    "node_code": "SC001",
+    "name": "华中仓储中心A",
+    "location": "武汉市洪山区珞喻路1号",
+    "latitude": 30.52,
+    "longitude": 114.35,
+    "node_type": "storage_center",
+    "capacity": 5000,
+    "inventory": 1200,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "node_code": "SC002",
+    "name": "华中仓储中心B",
+    "location": "武汉市江夏区光谷大道88号",
+    "latitude": 30.48,
+    "longitude": 114.42,
+    "node_type": "storage_center",
+    "capacity": 4500,
+    "inventory": 980,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "node_code": "SC003",
+    "name": "华中仓储中心C",
+    "location": "武汉市蔡甸区汉阳大街200号",
+    "latitude": 30.55,
+    "longitude": 114.28,
+    "node_type": "storage_center",
+    "capacity": 3800,
+    "inventory": 760,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "node_code": "SC004",
+    "name": "华中仓储中心D",
+    "location": "武汉市东西湖区金银湖路66号",
+    "latitude": 30.62,
+    "longitude": 114.22,
+    "node_type": "storage_center",
+    "capacity": 4200,
+    "inventory": 1100,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "node_code": "SC005",
+    "name": "华中仓储中心E",
+    "location": "武汉市汉阳区琴台大道18号",
+    "latitude": 30.54,
+    "longitude": 114.26,
+    "node_type": "storage_center",
+    "capacity": 3600,
+    "inventory": 640,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "node_code": "SO101",
+    "name": "一级分拣中心东湖",
+    "location": "武汉市东湖高新区光谷广场",
+    "latitude": 30.51,
+    "longitude": 114.4,
+    "node_type": "sorting_center",
+    "level": 1,
+    "capacity": 2000,
+    "max_storage_time": 48,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "node_code": "SO102",
+    "name": "一级分拣中心汉阳",
+    "location": "武汉市汉阳区王家湾",
+    "latitude": 30.55,
+    "longitude": 114.21,
+    "node_type": "sorting_center",
+    "level": 1,
+    "capacity": 1800,
+    "max_storage_time": 48,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "node_code": "SO001",
+    "name": "零级分拣站珞喻路",
+    "location": "武汉市洪山区珞喻路1037号",
+    "latitude": 30.53,
+    "longitude": 114.36,
+    "node_type": "sorting_center",
+    "level": 0,
+    "capacity": 500,
+    "max_storage_time": 24,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "node_code": "SO002",
+    "name": "零级分拣站街道口",
+    "location": "武汉市洪山区珞狮路",
+    "latitude": 30.52,
+    "longitude": 114.34,
+    "node_type": "sorting_center",
+    "level": 0,
+    "capacity": 450,
+    "max_storage_time": 24,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "node_code": "SO003",
+    "name": "零级分拣站光谷",
+    "location": "武汉市东湖高新区关山大道",
+    "latitude": 30.5,
+    "longitude": 114.41,
+    "node_type": "sorting_center",
+    "level": 0,
+    "capacity": 480,
+    "max_storage_time": 24,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "node_code": "SO004",
+    "name": "零级分拣站江汉路",
+    "location": "武汉市江汉区江汉路步行街",
+    "latitude": 30.58,
+    "longitude": 114.29,
+    "node_type": "sorting_center",
+    "level": 0,
+    "capacity": 420,
+    "max_storage_time": 24,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "node_code": "SO005",
+    "name": "零级分拣站武昌站",
+    "location": "武汉市武昌区中山路",
+    "latitude": 30.53,
+    "longitude": 114.32,
+    "node_type": "sorting_center",
+    "level": 0,
+    "capacity": 460,
+    "max_storage_time": 24,
+    "created_at": "2026-06-01T08:00:00+08:00"
+  }
+]

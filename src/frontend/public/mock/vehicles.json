@@ -1,0 +1,57 @@
+[
+  {
+    "vehicle_code": "鄂A12345",
+    "model": "轻卡4.2米",
+    "capacity": 3.5,
+    "energy_type": "fuel",
+    "vehicle_type": "normal",
+    "status": "idle",
+    "node_code": "SC001",
+    "last_arrived_node_code": "SC001",
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "vehicle_code": "鄂A12346",
+    "model": "电动厢货",
+    "capacity": 2.0,
+    "energy_type": "electric",
+    "vehicle_type": "normal",
+    "status": "delivering",
+    "node_code": "SC002",
+    "last_arrived_node_code": "SO101",
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "vehicle_code": "鄂A12347",
+    "model": "轻卡4.2米",
+    "capacity": 3.5,
+    "energy_type": "fuel",
+    "vehicle_type": "normal",
+    "status": "idle",
+    "node_code": "SC003",
+    "last_arrived_node_code": "SC003",
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "vehicle_code": "鄂A12348",
+    "model": "混动厢货",
+    "capacity": 2.5,
+    "energy_type": "hybrid",
+    "vehicle_type": "normal",
+    "status": "maintenance",
+    "node_code": "SO101",
+    "last_arrived_node_code": "SO101",
+    "created_at": "2026-06-01T08:00:00+08:00"
+  },
+  {
+    "vehicle_code": "鄂A12349",
+    "model": "电动厢货",
+    "capacity": 2.0,
+    "energy_type": "electric",
+    "vehicle_type": "normal",
+    "status": "idle",
+    "node_code": "SC004",
+    "last_arrived_node_code": "SC004",
+    "created_at": "2026-06-01T08:00:00+08:00"
+  }
+]
