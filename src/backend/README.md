@@ -4,8 +4,8 @@
 
 ## 项目状态
 
-**当前阶段**：阶段 4（节点间调度 F005）已完成  
-**下一阶段**：阶段 5（路径规划与可视化 F006）
+**当前阶段**：阶段 5（路径规划与可视化 F006）已完成  
+**下一阶段**：阶段 6（模拟送达 F013-1）
 
 ## 技术栈
 
@@ -88,6 +88,7 @@ src/backend/
 │   ├── drivers.py             # 司机管理 (GET/POST/PUT/DELETE /api/drivers)
 │   ├── nodes.py               # 节点管理 (GET /api/nodes, POST/PUT/DELETE storage-centers/sorting-centers)
 │   ├── schedule.py            # 调度管理 (POST /api/schedule/global, POST /api/schedule/node-dispatch, GET 列表/详情)
+│   ├── routes.py              # 路径规划 (POST /api/routes/plan, GET /api/routes, GET /api/routes/{code}, GET /api/routes/by-vehicle/{code}/coordinates)
 │   └── dependencies.py         # 依赖注入 (get_current_user JWT 验证, require_dispatcher RBAC)
 │
 ├── services/                   # 业务逻辑层
@@ -100,7 +101,8 @@ src/backend/
 │   ├── driver_service.py      # 司机服务 (CRUD)
 │   ├── node_service.py        # 节点服务 (存储中心/分拣中心 CRUD)
 │   ├── schedule_service.py    # 调度编排服务 (F007→F021→写库, 单事务)
-│   └── dispatch_service.py    # 节点调度服务 (F005→写库, 单事务)
+│   ├── dispatch_service.py    # 节点调度服务 (F005→写库, 单事务)
+│   └── route_service.py      # 路径规划服务 (F006→写库, 单事务)
 │
 ├── models/                     # SQLAlchemy ORM 模型
 │   ├── __init__.py
@@ -117,7 +119,8 @@ src/backend/
 │   ├── driver.py              # Driver 模型 (司机)
 │   ├── global_schedule.py     # GlobalSchedule 模型 (F007 调度结果)
 │   ├── dispatch_batch.py      # DispatchBatch 模型 (F005 调度批次)
-│   └── node_dispatch.py      # NodeDispatch 模型 (F005 节点调度明细)
+│   ├── node_dispatch.py      # NodeDispatch 模型 (F005 节点调度明细)
+│   └── route.py              # Route 模型 (F006 路径规划结果)
 │
 ├── schemas/                    # Pydantic 请求/响应模型
 │   ├── __init__.py
@@ -129,6 +132,7 @@ src/backend/
 │   ├── driver.py              # DriverCreate, DriverUpdate
 │   ├── node.py                # StorageCenterCreate/Update, SortingCenterCreate/Update
 │   ├── dispatch.py             # NodeDispatchRequest, DispatchBatchResponse, NodeDispatchResponse
+│   ├── route.py               # RoutePlanRequest, RouteListResponse, RouteDetailResponse, RouteCoordinatesResponse
 │   └── log_event.py           # LogEventResponse
 │
 ├── core/                       # 核心模块
@@ -151,20 +155,26 @@ src/backend/
 │   ├── __init__.py
 │   ├── global_schedule.py      # F007 全局调度 (贪心算法, L0→L1→L2 路径规划)
 │   ├── packaging.py            # F021 打包 (L0→L1 按节点对, L1→L2 按订单)
-│   └── node_dispatch.py       # F005 节点调度 (L0→L1, L1→L2 两次串行调用)
+│   ├── node_dispatch.py       # F005 节点调度 (L0→L1, L1→L2 两次串行调用)
+│   └── route_planning.py     # F006 路径规划 (Haversine + 2-opt 优化)
 │
 ├── tests/                      # 测试
 │   ├── conftest.py             # 测试夹具与配置
 │   ├── phase3_api_verification.py  # 阶段3 API 集成验证脚本
 │   ├── test_api/               # API 层测试
-│   │   └── test_schedule.py    # 调度接口测试
+│   │   ├── test_schedule.py    # 调度接口测试
+│   │   └── test_routes.py     # 路径规划接口测试
 │   ├── test_services/          # 服务层测试
 │   │   ├── test_schedule_service.py  # 调度编排服务测试
-│   │   └── test_dispatch_service.py # 节点调度服务测试
-│   └── test_algorithms/        # 算法层测试
-│       ├── test_global_schedule.py   # F007 全局调度算法测试
-│       ├── test_packaging.py         # F021 打包算法测试
-│       └── test_node_dispatch.py    # F005 节点调度算法测试
+│   │   ├── test_dispatch_service.py # 节点调度服务测试
+│   │   └── test_route_service.py    # 路径规划服务测试
+│   ├── test_algorithms/        # 算法层测试
+│   │   ├── test_global_schedule.py   # F007 全局调度算法测试
+│   │   ├── test_packaging.py         # F021 打包算法测试
+│   │   ├── test_node_dispatch.py    # F005 节点调度算法测试
+│   │   └── test_route_planning.py  # F006 路径规划算法测试
+│   └── test_integration/       # 集成测试
+│       └── test_routes_integration.py  # 路径规划集成测试
 │
 ├── data/                       # 数据文件
 │   └── logistics.db            # SQLite 数据库
@@ -238,11 +248,19 @@ src/backend/
 | `GET` | `/api/schedule/batches` | 调度批次列表（分页、筛选） | Bearer Token |
 | `GET` | `/api/schedule/batches/{code}` | 调度批次详情（含 dispatches） | Bearer Token |
 
-### 规划中（阶段 5-8）
+#### 路径规划（阶段 5）
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| `POST` | `/api/routes/plan` | 手动触发路径规划 (F006) | Bearer Token (dispatcher) |
+| `GET` | `/api/routes` | 路线列表（分页、筛选） | Bearer Token |
+| `GET` | `/api/routes/{code}` | 路线详情（含 route_segments） | Bearer Token |
+| `GET` | `/api/routes/by-vehicle/{code}/coordinates` | 车辆路线坐标（供可视化） | Bearer Token |
+
+### 规划中（阶段 6-8）
 
 详见 `docs/` 目录下的 MVP 开发计划。核心接口包括：
 
-- **路线**：`GET /api/routes`、`GET /api/routes/by-vehicle/{code}/coordinates`
 - **异常**：`GET/POST /api/exceptions`、`POST /api/exceptions/{code}/replan`
 - **模拟**：`POST /api/simulation/deliver`
 - **AI**：`POST /api/ai/parse`
@@ -407,6 +425,22 @@ alembic downgrade -1
 | 错误处理 | 无可用车辆 → 40001、L0→L1 未完成 → 40001、不存在的 schedule_code → 40401 | ✅ |
 | 数据完整性 | 调度批次、节点调度明细、包裹状态更新、车辆/司机状态更新 | ✅ |
 
+### 阶段 5 自测（路径规划 F006）
+
+测试时间：2026-06-14，结果：**25/25 通过（100%）**
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| F006 算法 | Haversine 距离计算、路径路段生成、碳排放计算 | ✅ |
+| F006 算法 | 2-opt 优化（MVP不触发）、空任务列表错误、节点不存在错误 | ✅ |
+| API 集成 | POST /api/routes/plan 触发路径规划、GET /api/routes 列表、GET /api/routes/{code} 详情 | ✅ |
+| API 集成 | GET /api/routes/by-vehicle/{code}/coordinates 车辆路线坐标 | ✅ |
+| 事务原子性 | routes 表写入与 F005 在同一个事务中 | ✅ |
+| 权限 | dispatcher 可触发路径规划、manager 返回 403 | ✅ |
+| 错误处理 | 批次不存在 → 40001、路线不存在 → 40400、车辆不存在 → 40400 | ✅ |
+| 数据完整性 | 路线记录、route_segments JSON、总距离/时间/碳排放 | ✅ |
+| 集成测试 | 完整路径规划流程（API→算法→数据库→查询） | ✅ |
+
 ## 相关文档
 
 - [项目宪章](../../.codebuddy/CODEBUDDY.md)
@@ -420,3 +454,5 @@ alembic downgrade -1
 - [阶段 3 API 契约文档](../../docs/api-contract/api-contract-phase3.md)（V1.0）
 - [阶段 4 开发文档](../../My_doc/阶段4开发文档.md)
 - [阶段 4 API 契约文档](../../My_doc/阶段4-API契约文档.md)（V1.0）
+- [阶段 5 开发文档](../../My_doc/阶段5开发文档-F006路径规划.md)
+- [阶段 5 API 契约文档](../../My_doc/阶段5-API契约文档.md)（V1.0）
