@@ -81,12 +81,12 @@ src/backend/
 ├── api/                        # 路由层
 │   ├── __init__.py
 │   ├── auth.py                 # 认证端点 (POST /login, GET /me, POST /logout)
-│   ├── orders.py              # 订单管理 (GET/POST/PUT/DELETE /api/orders)
-│   ├── goods.py               # 货物管理 (GET/POST/PUT/DELETE /api/goods)
-│   ├── packages.py            # 包裹管理 (GET/POST/PUT/DELETE /api/packages)
+│   ├── orders.py              # 订单管理 (GET/POST/PUT/DELETE /api/orders + POST /import)
+│   ├── goods.py               # 货物管理 (GET/PUT /api/goods)
+│   ├── packages.py            # 包裹管理 (GET /api/packages + POST /repack)
 │   ├── vehicles.py            # 车辆管理 (GET/POST/PUT/DELETE /api/vehicles)
 │   ├── drivers.py             # 司机管理 (GET/POST/PUT/DELETE /api/drivers)
-│   ├── nodes.py               # 节点管理 (GET /api/nodes, POST/PUT/DELETE /api/nodes/storage-centers, /api/nodes/sorting-centers)
+│   ├── nodes.py               # 节点管理 (GET /api/nodes, POST/PUT/DELETE storage-centers/sorting-centers)
 │   └── dependencies.py         # 依赖注入 (get_current_user JWT 验证, require_dispatcher RBAC)
 │
 ├── services/                   # 业务逻辑层
@@ -116,12 +116,13 @@ src/backend/
 ├── schemas/                    # Pydantic 请求/响应模型
 │   ├── __init__.py
 │   ├── user.py                 # UserLoginRequest, UserLoginResponse, UserResponse
-│   ├── order.py               # OrderCreate, OrderUpdate, OrderResponse
-│   ├── goods.py               # GoodsCreate, GoodsUpdate, GoodsResponse
-│   ├── package.py             # PackageCreate, PackageUpdate, PackageResponse
-│   ├── vehicle.py             # VehicleCreate, VehicleUpdate, VehicleResponse
-│   ├── driver.py              # DriverCreate, DriverUpdate, DriverResponse
-│   └── node.py               # NodeCreate, NodeUpdate, NodeResponse
+│   ├── order.py               # OrderCreate, OrderUpdate
+│   ├── goods.py               # GoodsUpdate
+│   ├── package.py             # PackageRepack
+│   ├── vehicle.py             # VehicleCreate, VehicleUpdate
+│   ├── driver.py              # DriverCreate, DriverUpdate
+│   ├── node.py                # StorageCenterCreate/Update, SortingCenterCreate/Update
+│   └── log_event.py           # LogEventResponse
 │
 ├── core/                       # 核心模块
 │   ├── error_codes.py          # 错误码定义
@@ -141,6 +142,14 @@ src/backend/
 │
 ├── algorithms/                 # 算法引擎 (F005/F006/F007/F021, 阶段 3+ 实现)
 │   └── __init__.py
+│
+├── tests/                      # 测试
+│   ├── conftest.py             # 测试夹具与配置
+│   ├── test_phase3_api.py      # 阶段3 API 测试
+│   ├── test_api/               # API 层测试
+│   │   └── test_schedule.py    # 调度接口测试
+│   └── test_services/          # 服务层测试
+│       └── test_schedule_service.py
 │
 ├── data/                       # 数据文件
 │   └── logistics.db            # SQLite 数据库
@@ -175,14 +184,9 @@ src/backend/
 | `DELETE` | `/api/orders/{code}` | 删除订单 | Bearer Token (dispatcher) |
 | `GET` | `/api/goods` | 货物列表（分页、筛选） | Bearer Token |
 | `GET` | `/api/goods/{code}` | 货物详情 | Bearer Token |
-| `POST` | `/api/goods` | 创建货物 | Bearer Token (dispatcher) |
 | `PUT` | `/api/goods/{code}` | 编辑货物 | Bearer Token (dispatcher) |
-| `DELETE` | `/api/goods/{code}` | 删除货物 | Bearer Token (dispatcher) |
 | `GET` | `/api/packages` | 包裹列表（分页、筛选） | Bearer Token |
 | `GET` | `/api/packages/{code}` | 包裹详情 | Bearer Token |
-| `POST` | `/api/packages` | 创建包裹 | Bearer Token (dispatcher) |
-| `PUT` | `/api/packages/{code}` | 编辑包裹 | Bearer Token (dispatcher) |
-| `DELETE` | `/api/packages/{code}` | 删除包裹 | Bearer Token (dispatcher) |
 | `POST` | `/api/packages/{code}/repack` | 重新打包 | Bearer Token (dispatcher) |
 | `GET` | `/api/vehicles` | 车辆列表（分页、筛选） | Bearer Token |
 | `GET` | `/api/vehicles/{code}` | 车辆详情 | Bearer Token |
@@ -326,27 +330,27 @@ python -c "from config.database import engine, Base; from models import *; Base.
 
 ### 阶段 2 自测（基础数据管理）
 
-使用 `scripts/_test_api.py`（临时测试脚本，不提交）测试结果：
+测试时间：2026-06-13，结果：**63/63 通过（100%）**
 
-| 模块 | 接口 | 状态 |
-|------|------|------|
-| Health | `GET /api/health` | ✅ |
-| Auth | `POST /api/auth/login` | ✅ |
-| Auth | `GET /api/auth/me` | ✅ |
-| Orders | `GET/POST/PUT` | ✅ |
-| Goods | `GET/POST/PUT` | ✅ |
-| Packages | `GET` | ✅ |
-| Vehicles | `GET/POST/PUT/DELETE` | ✅ |
-| Drivers | `GET/POST/PUT/DELETE` | ✅ |
-| Nodes | `GET/POST/PUT/DELETE` (storage + sorting) | ✅ |
-
-> 测试覆盖率：32/37 接口通过（86%），剩余 5 个为预期失败（重复创建返回 409）
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| 数据完整性 | 节点57个（L0:5, L1:2, L2:50）、车辆70、司机70、订单53、货物200 | ✅ |
+| Orders | GET/POST/PUT/DELETE + 导入 + 状态筛选 + 不含id | ✅ |
+| Goods | GET列表/详情 + PUT编辑 + 按order_code/status筛选 | ✅ |
+| Packages | GET列表/详情 + repack（状态校验） | ✅ |
+| Vehicles | GET/POST/PUT/DELETE + 按status/node_code筛选 | ✅ |
+| Drivers | GET/POST/PUT/DELETE + 按node_code筛选 | ✅ |
+| Nodes | GET列表/详情 + level筛选 + node_type筛选 + 存储中心CRUD + 分拣中心CRUD | ✅ |
+| 权限 | manager 全部写操作返回403、无Token返回401 | ✅ |
+| 业务校验 | 订单目的地校验（必须0级分拣中心）、删除配送中订单拒绝、repack状态校验 | ✅ |
+| 响应格式 | 统一{code, message, data, meta} + 分页含total/items + 不含数据库id | ✅ |
 
 ## 相关文档
 
 - [项目宪章](../../.codebuddy/CODEBUDDY.md)
 - [系统架构设计说明书](../../docs/architecture/系统架构设计说明书.md)
 - [MVP 开发计划 - 后端](../../docs/MVP开发计划-后端.md)
-- [阶段 1 开发文档](../../My_doc/阶段1-认证与权限-开发文档.md)
-- [阶段 1 API 契约文档](../../My_doc/阶段1-认证与权限-API契约文档.md)
 - [阶段 2 开发文档](../../My_doc/阶段2-开发文档.md)
+- [阶段 2 API 契约文档](../../My_doc/阶段2-API契约文档.md)（V1.4）
+- [阶段 2 测试报告](../../My_doc/阶段2-测试报告.md)（63/63 通过）
+- [联调反馈 - 阶段2 - 致后端](../../My_doc/联调反馈-阶段2-致后端.md)
