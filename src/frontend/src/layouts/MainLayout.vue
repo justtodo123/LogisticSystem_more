@@ -5,6 +5,17 @@ import { useAuthStore } from '@/stores/auth'
 const route = useRoute()
 const authStore = useAuthStore()
 
+const menuItems = [
+  { index: '/dashboard', label: '调度工作台' },
+  { index: '/orders', label: '订单管理' },
+  { index: '/goods', label: '货物管理' },
+  { index: '/packages', label: '包裹管理' },
+  { index: '/vehicles', label: '车辆管理' },
+  { index: '/drivers', label: '司机管理' },
+  { index: '/nodes/storage', label: '存储中心' },
+  { index: '/nodes/sorting', label: '分拣中心' },
+]
+
 function handleLogout() {
   authStore.logout()
 }
@@ -24,7 +35,13 @@ function handleLogout() {
     <el-container>
       <el-aside width="200px" class="layout-aside">
         <el-menu :default-active="route.path" router>
-          <el-menu-item index="/dashboard">调度工作台</el-menu-item>
+          <el-menu-item
+            v-for="item in menuItems"
+            :key="item.index"
+            :index="item.index"
+          >
+            {{ item.label }}
+          </el-menu-item>
         </el-menu>
       </el-aside>
       <el-main class="layout-main">

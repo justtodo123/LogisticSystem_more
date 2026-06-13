@@ -10,7 +10,7 @@ const authStore = useAuthStore()
     <p class="dashboard-desc">
       欢迎，{{ authStore.displayName }}（{{ authStore.role }}）
     </p>
-    <p class="dashboard-hint">阶段 3 将在此接入全局调度与路线可视化。</p>
+    <p class="dashboard-hint">基础数据管理请从侧栏进入；全局调度将在阶段 3 接入。</p>
 
     <div class="dashboard-actions">
       <el-button v-if="authStore.isDispatcher" type="primary">新增</el-button>
