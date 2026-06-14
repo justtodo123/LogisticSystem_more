@@ -4,8 +4,8 @@
 
 ## 项目状态
 
-**当前阶段**：阶段 5（路径规划与可视化 F006）已完成  
-**下一阶段**：阶段 6（模拟送达 F013-1）
+**当前阶段**：阶段 6（模拟送达 F013-1）已完成  
+**下一阶段**：阶段 7（异常与重规划 F013）
 
 ## 技术栈
 
@@ -257,12 +257,17 @@ src/backend/
 | `GET` | `/api/routes/{code}` | 路线详情（含 route_segments） | Bearer Token |
 | `GET` | `/api/routes/by-vehicle/{code}/coordinates` | 车辆路线坐标（供可视化） | Bearer Token |
 
-### 规划中（阶段 6-8）
+#### 模拟送达（阶段 6）
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| `POST` | `/api/simulation/deliver` | 模拟送达，驱动状态流转 | Bearer Token (dispatcher) |
+
+### 规划中（阶段 7-8）
 
 详见 `docs/` 目录下的 MVP 开发计划。核心接口包括：
 
 - **异常**：`GET/POST /api/exceptions`、`POST /api/exceptions/{code}/replan`
-- **模拟**：`POST /api/simulation/deliver`
 - **AI**：`POST /api/ai/parse`
 
 ## 统一响应格式
