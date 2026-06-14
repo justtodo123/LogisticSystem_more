@@ -1,10 +1,10 @@
 """
-测试固件（Fixtures）
+测试固件（Fixtures）- 全局共享
 
 提供：
 - 内存 SQLite 数据库会话
-- 测试基础数据（节点、订单、货物）
-- 复用的数据工厂函数
+- 测试基础数据工厂（节点、订单、货物、车辆、司机）
+- 认证辅助函数
 """
 import pytest
 from sqlalchemy import create_engine
@@ -57,6 +57,7 @@ def test_nodes(db_session):
     - SO002: 1级分拣中心 (L1)，容量=100，最大存储时长=24h
     - SO010: 0级分拣中心 (L2)
     - SO011: 0级分拣中心 (L2)
+    - SO012: 0级分拣中心 (L2)
     """
     nodes_data = [
         {
@@ -238,45 +239,6 @@ def test_goods(db_session, test_orders, test_nodes):
 
 
 @pytest.fixture(scope="function")
-def full_test_data(db_session, test_nodes, test_orders, test_goods):
-    """
-    整合所有测试数据，方便一次性获取
-    返回: (nodes_dict, orders_dict, goods_dict)
-    """
-    return test_nodes, test_orders, test_goods
-
-
-# ── 辅助函数 ──────────────────────────────────────────────────
-
-
-def make_nodes_for_capacity_test(db_session):
-    """
-    创建用于容量限制测试的特殊节点：
-    - SO_LIMITED: 容量=1 的 L1（只能装一个包裹）
-    """
-    node = Node(
-        node_code="SO_LIMITED",
-        name="容量受限L1",
-        location="测试",
-        latitude=30.0,
-        longitude=114.0,
-        node_type="sorting_center",
-    )
-    db_session.add(node)
-    db_session.flush()
-
-    sc = SortingCenter(
-        node_id=node.id,
-        level=1,
-        capacity=1,  # 极小的容量
-        max_storage_time=24,
-    )
-    db_session.add(sc)
-    db_session.commit()
-    return node
-
-
-@pytest.fixture(scope="function")
 def test_vehicles(db_session, test_nodes):
     """
     创建测试车辆数据：
@@ -380,3 +342,76 @@ def test_drivers(db_session, test_nodes):
 
     db_session.commit()
     return driver_objects
+
+
+@pytest.fixture(scope="function")
+def test_users(db_session):
+    """
+    创建测试用户数据：
+    - dispatcher: 调度员角色
+    - manager: 管理者角色
+    """
+    from config.database import settings
+    from services.auth_service import get_password_hash
+    
+    users_data = [
+        {
+            "username": "dispatcher",
+            "password": "123456",
+            "role": "dispatcher",
+            "display_name": "调度员",
+        },
+        {
+            "username": "manager",
+            "password": "123456",
+            "role": "manager",
+            "display_name": "管理者",
+        },
+    ]
+    
+    user_objects = {}
+    for ud in users_data:
+        user = User(
+            username=ud["username"],
+            password_hash=get_password_hash(ud["password"]),
+            role=ud["role"],
+            display_name=ud["display_name"],
+            is_active=True,
+        )
+        db_session.add(user)
+        user_objects[ud["username"]] = user
+    
+    db_session.commit()
+    return user_objects
+
+
+# ── 认证辅助函数 ──────────────────────────────────────────────
+
+
+def create_jwt_token(username, role):
+    """生成 JWT Token"""
+    from config.database import settings
+    import jwt
+    from datetime import datetime, timedelta, timezone
+    
+    return jwt.encode(
+        {
+            "sub": username,
+            "role": role,
+            "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+        },
+        settings.JWT_SECRET,
+        algorithm="HS256",
+    )
+
+
+@pytest.fixture(scope="function")
+def dispatcher_token():
+    """生成 dispatcher 角色的 JWT Token"""
+    return create_jwt_token("dispatcher", "dispatcher")
+
+
+@pytest.fixture(scope="function")
+def manager_token():
+    """生成 manager 角色的 JWT Token"""
+    return create_jwt_token("manager", "manager")

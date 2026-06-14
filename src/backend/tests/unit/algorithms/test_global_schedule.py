@@ -1,10 +1,9 @@
 """
-test_global_schedule.py — F007 全局调度算法单元测试
+算法单元测试：F007 全局调度（global_schedule）
 
-测试用例：
-1. 正常情况，生成路径
-2. 硬约束触发，无法调度（L1 容量不足）
-3. 贪心选择，选择第一个满足条件的 L1（评分最低）
+测试目标：
+- global_schedule 函数的正常流程和异常流程
+- 验证输出结构、约束满足、边界条件
 """
 import pytest
 from algorithms.global_schedule import global_schedule
@@ -87,7 +86,6 @@ class TestGlobalScheduleHardConstraint:
         """
         测试没有 L1 节点时抛出 ValueError
         """
-        # 数据库中有订单但没有 L1 节点 → 应该失败
         from models.node import Node
         from models.order import Order
         from models.sorting_center import SortingCenter

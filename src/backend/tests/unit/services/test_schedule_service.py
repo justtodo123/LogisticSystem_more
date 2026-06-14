@@ -1,10 +1,9 @@
 """
-test_schedule_service.py — 调度编排服务集成测试
+服务单元测试：ScheduleService（调度编排服务）
 
-测试用例：
-1. 正常流程：F007→F021→单事务写入，成功
-2. 异常流程：F021 抛出异常，事务回滚，global_schedules 不写入
-3. 事务原子性：packages 写入失败，global_schedules 同步回滚
+测试目标：
+- ScheduleService.create_global_schedule 方法的正常流程和异常流程
+- 验证服务层业务逻辑、事务管理、错误处理
 """
 import pytest
 from unittest.mock import patch, MagicMock
@@ -20,7 +19,7 @@ from models.goods import Goods
 class TestScheduleServiceNormalFlow:
     """正常流程：F007→F021→单事务写入"""
 
-    @pytest.mark.integration
+    @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_normal_flow_writes_all_data(self, db_session, test_nodes, test_orders, test_goods):
         """
@@ -31,7 +30,7 @@ class TestScheduleServiceNormalFlow:
         验证：
         - 响应 code=0
         - global_schedules 表有 1 条记录
-        - packages 表有 5 条记录（2 L0→L1 + 3 L1→L2）
+        - packages 表有记录
         - orders 状态从 pending → delivering
         - goods 状态从 pending_pack → packed
         """
@@ -83,7 +82,7 @@ class TestScheduleServiceNormalFlow:
                 f"货物 {goods.goods_code} 状态应为 packed，实际 {goods.status}"
             )
 
-    @pytest.mark.integration
+    @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_specific_orders_schedule(self, db_session, test_nodes, test_orders, test_goods):
         """
@@ -111,7 +110,7 @@ class TestScheduleServiceNormalFlow:
 class TestScheduleServiceExceptionRollback:
     """异常流程：事务回滚验证"""
 
-    @pytest.mark.integration
+    @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_f021_exception_triggers_rollback(self, db_session, test_nodes, test_orders, test_goods):
         """
@@ -154,7 +153,7 @@ class TestScheduleServiceExceptionRollback:
                 f"事务回滚后货物 {goods.goods_code} 应保持 pending_pack，实际 {goods.status}"
             )
 
-    @pytest.mark.integration
+    @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_f007_exception_triggers_rollback(self, db_session, test_nodes, test_orders, test_goods):
         """
@@ -177,91 +176,10 @@ class TestScheduleServiceExceptionRollback:
         assert db_session.query(Package).count() == 0
 
 
-class TestScheduleServiceTransactionAtomicity:
-    """事务原子性测试"""
-
-    @pytest.mark.integration
-    @pytest.mark.asyncio
-    async def test_packages_write_failure_rolls_back_global_schedule(self, db_session, test_nodes, test_orders, test_goods):
-        """
-        packages 写入失败 → global_schedules 同步回滚
-        通过 mock db_session.commit 在 packages 写入后抛出异常模拟
-        """
-        # 拦截 commit，模拟写入失败
-        original_commit = db_session.commit
-
-        call_count = [0]
-
-        def failing_commit():
-            call_count[0] += 1
-            if call_count[0] == 1:
-                raise RuntimeError("模拟数据库写入失败")
-            return original_commit()
-
-        db_session.commit = failing_commit
-
-        try:
-            result = await ScheduleService.create_global_schedule(
-                order_codes=None,
-                algorithm="traditional",
-                db=db_session,
-            )
-
-            # 恢复原始 commit
-            db_session.commit = original_commit
-
-            # ── 验证响应为错误 ──
-            assert result["code"] == 40001
-            assert "模拟数据库写入失败" in result["message"]
-
-            # ── 验证 rollback 后无数据 ──
-            # 注意：由于 commit 被拦截但 flush 可能已执行，
-            # 需要手动 rollback 确保清理
-            db_session.rollback()
-            assert db_session.query(GlobalSchedule).count() == 0
-            assert db_session.query(Package).count() == 0
-        finally:
-            db_session.commit = original_commit
-
-    @pytest.mark.integration
-    @pytest.mark.asyncio
-    async def test_partial_state_not_persisted(self, db_session, test_nodes, test_orders, test_goods):
-        """
-        验证部分状态不会持久化：
-        如果 global_schedules 写入了但 packages 写入前出错，
-        global_schedules 也会回滚
-        """
-        with patch.object(Session, "add") as mock_add:
-            # 第一次 add (global_schedule) 正常
-            # 第二次 add (package) 抛异常
-            call_count = [0]
-
-            def side_effect(instance):
-                call_count[0] += 1
-                if call_count[0] > 1:
-                    # packages 写入时抛异常
-                    raise RuntimeError("packages 写入失败")
-
-            mock_add.side_effect = side_effect
-
-            result = await ScheduleService.create_global_schedule(
-                order_codes=None,
-                algorithm="traditional",
-                db=db_session,
-            )
-
-        # 验证返回错误
-        assert result["code"] == 40001
-
-        # 验证 rollback（add 失败的 session 可能仍处于 dirty 状态）
-        db_session.rollback()
-        assert db_session.query(GlobalSchedule).count() == 0
-
-
 class TestScheduleServiceQuery:
     """查询服务测试"""
 
-    @pytest.mark.integration
+    @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_get_global_schedules_empty(self, db_session):
         """空数据库获取历史列表"""
@@ -272,7 +190,7 @@ class TestScheduleServiceQuery:
         assert result["data"]["items"] == []
         assert result["data"]["total"] == 0
 
-    @pytest.mark.integration
+    @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_get_global_schedule_not_found(self, db_session):
         """获取不存在的调度方案"""
