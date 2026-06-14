@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# unplugin 自动生成（npm run dev 会重新生成）
+auto-imports.d.ts
+components.d.ts
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
