@@ -32,7 +32,30 @@ class TestDeliverPackages:
         """
         # 创建测试包裹（需要先创建包裹记录）
         from models.package import Package
+        from models.node_dispatch import NodeDispatch
+        from models.dispatch_batch import DispatchBatch
         import json
+        
+        # 创建 DispatchBatch
+        dispatch_batch = DispatchBatch(
+            batch_code="BATCH001",
+            status="pending"
+        )
+        db_session.add(dispatch_batch)
+        db_session.commit()
+        
+        # 创建 NodeDispatch
+        node_dispatch = NodeDispatch(
+            dispatch_code="ND001",
+            dispatch_batch_id=dispatch_batch.id,
+            vehicle_id=test_vehicles["VEH001"].id,
+            driver_id=1,
+            level_phase=0,
+            total_distance=10.0,
+            total_time=30.0,
+        )
+        db_session.add(node_dispatch)
+        db_session.commit()
         
         package = Package(
             package_code="PKG001",
@@ -41,7 +64,7 @@ class TestDeliverPackages:
             weight=10.0,
             volume=0.5,
             status="in_transit",  # 在途状态
-            vehicle_id=test_vehicles["VEH001"].id,
+            dispatch_id=node_dispatch.id,
             goods_items=json.dumps([{"goods_code": "G001", "order_code": "O001"}]),
         )
         db_session.add(package)
@@ -83,7 +106,30 @@ class TestDeliverPackages:
         """
         # 创建测试包裹
         from models.package import Package
+        from models.node_dispatch import NodeDispatch
+        from models.dispatch_batch import DispatchBatch
         import json
+        
+        # 创建 DispatchBatch
+        dispatch_batch = DispatchBatch(
+            batch_code="BATCH002",
+            status="pending"
+        )
+        db_session.add(dispatch_batch)
+        db_session.commit()
+        
+        # 创建 NodeDispatch
+        node_dispatch = NodeDispatch(
+            dispatch_code="ND002",
+            dispatch_batch_id=dispatch_batch.id,
+            vehicle_id=test_vehicles["VEH001"].id,
+            driver_id=1,
+            level_phase=0,
+            total_distance=10.0,
+            total_time=30.0,
+        )
+        db_session.add(node_dispatch)
+        db_session.commit()
         
         package = Package(
             package_code="PKG001",
@@ -92,7 +138,7 @@ class TestDeliverPackages:
             weight=10.0,
             volume=0.5,
             status="in_transit",  # 在途状态
-            vehicle_id=test_vehicles["VEH001"].id,
+            dispatch_id=node_dispatch.id,
             goods_items=json.dumps([{"goods_code": "G001", "order_code": "O001"}]),
         )
         db_session.add(package)

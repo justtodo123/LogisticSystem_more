@@ -135,7 +135,7 @@ class TestAuthenticateUser:
         db_session.commit()
         
         # 认证用户
-        authenticated_user = authenticate_user("testuser", "123456", db_session)
+        authenticated_user = authenticate_user(db_session, "testuser", "123456")
         
         # 验证认证成功
         assert authenticated_user is not None
@@ -157,7 +157,7 @@ class TestAuthenticateUser:
         db_session.commit()
         
         # 认证用户（错误密码）
-        authenticated_user = authenticate_user("testuser", "wrong", db_session)
+        authenticated_user = authenticate_user(db_session, "testuser", "wrong")
         
         # 验证认证失败
         assert authenticated_user is None
@@ -166,7 +166,7 @@ class TestAuthenticateUser:
     def test_authenticate_user_not_found(self, db_session):
         """测试用户不存在"""
         # 认证用户（不存在的用户）
-        authenticated_user = authenticate_user("nonexist", "123456", db_session)
+        authenticated_user = authenticate_user(db_session, "nonexist", "123456")
         
         # 验证认证失败
         assert authenticated_user is None
@@ -190,7 +190,7 @@ class TestGetUserByUsername:
         db_session.commit()
         
         # 获取用户
-        found_user = get_user_by_username("testuser", db_session)
+        found_user = get_user_by_username(db_session, "testuser")
         
         # 验证获取成功
         assert found_user is not None
@@ -201,7 +201,7 @@ class TestGetUserByUsername:
     def test_get_user_by_username_not_found(self, db_session):
         """测试用户不存在"""
         # 获取用户（不存在的用户）
-        found_user = get_user_by_username("nonexist", db_session)
+        found_user = get_user_by_username(db_session, "nonexist")
         
         # 验证获取失败
         assert found_user is None
