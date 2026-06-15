@@ -124,7 +124,7 @@ class TestGetDispatchBatches:
     async def test_get_batches_empty(self, db_session):
         """测试空数据库返回空列表"""
         result = await DispatchService.get_dispatch_batches(
-            page=1, page_size=20, db=db_session
+            schedule_code=None, status=None, db=db_session
         )
         
         assert result["code"] == 0
@@ -154,7 +154,7 @@ class TestGetDispatchBatches:
         
         # 查询批次列表
         result = await DispatchService.get_dispatch_batches(
-            page=1, page_size=20, db=db_session
+            schedule_code=None, status=None, db=db_session
         )
         
         assert result["code"] == 0
@@ -188,19 +188,19 @@ class TestGetDispatchBatchDetail:
         batch_code = batch_result["data"]["batch_code"]
         
         # 获取批次详情
-        result = await DispatchService.get_dispatch_batch(
+        result = await DispatchService.get_dispatch_batch_detail(
             batch_code=batch_code, db=db_session
         )
         
         assert result["code"] == 0
         assert result["data"]["batch_code"] == batch_code
-        assert "node_dispatches" in result["data"]
+        assert "dispatches" in result["data"]
 
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_get_batch_detail_not_found(self, db_session):
         """测试批次不存在"""
-        result = await DispatchService.get_dispatch_batch(
+        result = await DispatchService.get_dispatch_batch_detail(
             batch_code="BATCH_NONEXIST", db=db_session
         )
         

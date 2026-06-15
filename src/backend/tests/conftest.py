@@ -278,6 +278,14 @@ def test_vehicles(db_session, test_nodes):
             "node_code": "SC002",
             "last_arrived_node_code": "SC002",
         },
+        {
+            "vehicle_code": "VEH005",
+            "model": "测试车型E",
+            "capacity": 130.0,
+            "energy_type": "electric",
+            "node_code": "SO002",
+            "last_arrived_node_code": "SO002",
+        },
     ]
 
     vehicle_objects = {}

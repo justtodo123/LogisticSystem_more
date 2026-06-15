@@ -75,17 +75,20 @@ class TestNodeDispatchNormal:
         
         # 验证返回结构
         assert "batch_code" in result
-        assert "total_packages" in result
-        assert "node_dispatches" in result
-        assert result["total_packages"] >= 0
+        assert "dispatches" in result
+        assert len(result["dispatches"]) >= 0
         
-        # 验证 node_dispatches 结构
-        for nd in result["node_dispatches"]:
+        # 验证 dispatches 结构
+        for nd in result["dispatches"]:
             assert "vehicle_code" in nd
             assert "driver_code" in nd
-            assert "from_node_code" in nd
-            assert "to_node_code" in nd
-            assert "package_codes" in nd
+            assert "tasks" in nd
+            # 验证 tasks 结构
+            for task in nd["tasks"]:
+                assert "from_node_code" in task
+                assert "to_node_code" in task
+                assert "package_codes" in task
+                assert "is_return" in task
 
     @pytest.mark.unit
     def test_node_dispatch_no_packages(self, db_session, test_nodes):
@@ -187,6 +190,20 @@ class TestNodeDispatchEdgeCases:
             goods_schedules=json.dumps(schedule_result["goods_schedules"]),
         )
         db_session.add(gs)
+        db_session.commit()
+        
+        # 执行打包（生成包裹）
+        from algorithms.packaging import packaging
+        packages = packaging(
+            schedule_result={"goods_schedules": schedule_result["goods_schedules"]},
+            schedule_id=gs.id,
+            db=db_session,
+        )
+        
+        # 将包裹添加到数据库会话，并更新状态为 'packed'
+        for pkg in packages:
+            pkg.status = 'packed'  # 节点调度需要 status='packed' 的包裹
+            db_session.add(pkg)
         db_session.commit()
         
         # 调用节点调度，应该抛出 ValueError 异常（没有可用的车辆）

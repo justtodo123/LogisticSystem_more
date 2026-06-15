@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import Optional
 import jwt
 import bcrypt
 from sqlalchemy.orm import Session
@@ -7,9 +8,12 @@ from config.database import settings
 from models.user import User
 
 
-def create_access_token(username: str, role: str) -> str:
+def create_access_token(username: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
     """签发JWT Token"""
-    expire = datetime.utcnow() + timedelta(seconds=settings.JWT_EXPIRE_SECONDS)
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(seconds=settings.JWT_EXPIRE_SECONDS)
     to_encode = {"sub": username, "role": role, "exp": expire}
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm="HS256")
     return encoded_jwt

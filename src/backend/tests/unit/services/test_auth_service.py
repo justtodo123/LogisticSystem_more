@@ -110,10 +110,11 @@ class TestCreateAccessToken:
         token = create_access_token(
             username=user.username,
             role=user.role,
+            expires_delta=timedelta(seconds=-1),  # 过期时间为过去
         )
         
         # 验证Token解码会失败
-        with pytest.raises(PyJWTError):
+        with pytest.raises(ValueError):  # decode_token 在token过期时会抛出 ValueError
             decode_token(token)
 
 

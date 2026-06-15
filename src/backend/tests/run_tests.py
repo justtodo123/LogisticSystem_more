@@ -4,7 +4,7 @@
 
 用法：
     python tests/run_tests.py              # 运行所有测试
-    python tests/run_tests.py --unit      # 只运行单元测试
+           # 只运行单元测试
     python tests/run_tests.py --integration # 只运行集成测试
     python tests/run_tests.py --api       # 只运行API测试
     python tests/run_tests.py --cov      # 运行测试并生成覆盖率报告

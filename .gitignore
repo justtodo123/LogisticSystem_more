@@ -55,7 +55,6 @@ htmlcov/
 coverage.xml
 *.cover
 .hypothesis/
-src/backend/pytest.ini
 tests/report.md
 tests/test_report.md
 
