@@ -2,11 +2,11 @@
 算法单元测试：F006 路径规划（route_planning）
 
 测试目标：
-- route_planning 函数的正常流程和异常流程
+- run_route_planning 函数的正常流程和异常流程
 - 验证输出结构、路径优化、错误处理
 """
 import pytest
-from algorithms.route_planning import route_planning
+from algorithms.route_planning import run_route_planning
 from models.node_dispatch import NodeDispatch
 from models.vehicle import Vehicle
 from models.node import Node
@@ -26,28 +26,27 @@ class TestRoutePlanningNormal:
         """
         # 创建节点调度记录
         node_dispatch = NodeDispatch(
-            node_dispatch_code="ND001",
-            batch_id=1,
+            dispatch_code="ND001",
+            dispatch_batch_id=1,
             vehicle_id=test_vehicles["VEH001"].id,
             driver_id=1,
-            from_node_id=test_nodes["SC001"].id,
-            to_node_id=test_nodes["SO001"].id,
             level_phase=0,
-            status="pending",
             tasks=json.dumps([{"from_node_code": "SC001", "to_node_code": "SO001", "package_codes": ["PKG001"], "is_return": False}]),
+            total_distance=0.0,
+            total_time=0.0,
         )
         db_session.add(node_dispatch)
         db_session.commit()
         
         # 调用路径规划
-        result = route_planning(
-            node_dispatch_id=node_dispatch.id,
+        result = run_route_planning(
             db=db_session,
+            dispatch_id=node_dispatch.id,
         )
         
         # 验证返回结构
         assert "route_code" in result
-        assert result["route_code"].startswith("RT")
+        assert result["route_code"].startswith("ROUTE")
         assert "total_distance" in result
         assert "total_time" in result
         assert "total_emission" in result
@@ -77,25 +76,24 @@ class TestRoutePlanningNormal:
         """
         # 创建节点调度记录（包含返回任务）
         node_dispatch = NodeDispatch(
-            node_dispatch_code="ND001",
-            batch_id=1,
+            dispatch_code="ND001",
+            dispatch_batch_id=1,
             vehicle_id=test_vehicles["VEH001"].id,
             driver_id=1,
-            from_node_id=test_nodes["SC001"].id,
-            to_node_id=test_nodes["SO001"].id,
             level_phase=0,
-            status="pending",
             tasks=json.dumps([
                 {"from_node_code": "SC001", "to_node_code": "SO001", "package_codes": ["PKG001"], "is_return": True}
             ]),
+            total_distance=0.0,
+            total_time=0.0,
         )
         db_session.add(node_dispatch)
         db_session.commit()
         
         # 调用路径规划
-        result = route_planning(
-            node_dispatch_id=node_dispatch.id,
+        result = run_route_planning(
             db=db_session,
+            dispatch_id=node_dispatch.id,
         )
         
         # 验证返回结构
@@ -117,7 +115,7 @@ class TestRoutePlanningEdgeCases:
         """
         # route_planning 可能抛出异常
         with pytest.raises(Exception):
-            route_planning(
+            run_route_planning(
                 node_dispatch_id=999,  # 不存在的ID
                 db=db_session,
             )
@@ -132,22 +130,21 @@ class TestRoutePlanningEdgeCases:
         """
         # 创建节点调度记录（空任务）
         node_dispatch = NodeDispatch(
-            node_dispatch_code="ND001",
-            batch_id=1,
+            dispatch_code="ND001",
+            dispatch_batch_id=1,
             vehicle_id=test_vehicles["VEH001"].id,
             driver_id=1,
-            from_node_id=test_nodes["SC001"].id,
-            to_node_id=test_nodes["SO001"].id,
             level_phase=0,
-            status="pending",
             tasks=json.dumps([]),  # 空任务
+            total_distance=0.0,
+            total_time=0.0,
         )
         db_session.add(node_dispatch)
         db_session.commit()
         
         # 调用路径规划
         try:
-            result = route_planning(
+            result = run_route_planning(
                 node_dispatch_id=node_dispatch.id,
                 db=db_session,
             )

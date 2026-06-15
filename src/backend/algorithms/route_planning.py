@@ -138,6 +138,9 @@ def run_route_planning(db: Session, dispatch_id: int) -> Dict[str, Any]:
     
     # 3. 解析 tasks (JSON数组)
     tasks = dispatch.tasks
+    if isinstance(tasks, str):
+        import json
+        tasks = json.loads(tasks)
     if not tasks or not isinstance(tasks, list):
         raise ValueError(f"节点调度明细任务列表为空或格式错误：dispatch_id={dispatch_id}")
     

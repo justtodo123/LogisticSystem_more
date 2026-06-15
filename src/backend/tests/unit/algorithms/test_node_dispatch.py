@@ -2,11 +2,11 @@
 算法单元测试：F005 节点调度（node_dispatch）
 
 测试目标：
-- node_dispatch 函数的正常流程和异常流程
+- run_node_dispatch 函数的正常流程和异常流程
 - 验证输出结构、车辆分配、司机分配、错误处理
 """
 import pytest
-from algorithms.node_dispatch import node_dispatch
+from algorithms.node_dispatch import run_node_dispatch
 from models.package import Package
 from models.vehicle import Vehicle
 from models.driver import Driver
@@ -27,16 +27,41 @@ class TestNodeDispatchNormal:
         """
         # 先执行全局调度
         from algorithms.global_schedule import global_schedule
+        from models.global_schedule import GlobalSchedule
+        import json
         schedule_result = global_schedule(
             order_codes=None,
             algorithm="traditional",
             db=db_session,
         )
-        assert schedule_result["code"] == 0
         schedule_code = schedule_result["schedule_code"]
         
+        # 手动创建 GlobalSchedule 记录（因为 global_schedule() 只返回结果，不写入数据库）
+        gs = GlobalSchedule(
+            schedule_code=schedule_code,
+            order_codes=json.dumps(schedule_result["order_codes"]),
+            total_distance=schedule_result["total_distance"],
+            total_time=schedule_result["total_time"],
+            total_goods=schedule_result["total_goods"],
+            score=schedule_result["score"],
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+            goods_schedules=json.dumps(schedule_result["goods_schedules"]),
+        )
+        db_session.add(gs)
+        db_session.commit()
+        
+        # 先执行打包（生成包裹）
+        from algorithms.packaging import packaging
+        packages = packaging(
+            schedule_result={"goods_schedules": schedule_result["goods_schedules"]},
+            schedule_id=gs.id,
+            db=db_session,
+        )
+        
         # 调用节点调度
-        result = node_dispatch(
+        result = run_node_dispatch(
             schedule_code=schedule_code,
             demo_mode=True,
             db=db_session,
@@ -84,7 +109,7 @@ class TestNodeDispatchNormal:
         db_session.commit()
         
         # 调用节点调度
-        result = node_dispatch(
+        result = run_node_dispatch(
             schedule_code="GS001",
             demo_mode=True,
             db=db_session,
@@ -107,7 +132,7 @@ class TestNodeDispatchEdgeCases:
         """
         # node_dispatch 可能抛出异常或返回错误字典
         try:
-            result = node_dispatch(
+            result = run_node_dispatch(
                 schedule_code="GS_NONEXIST",
                 demo_mode=True,
                 db=db_session,
@@ -133,16 +158,33 @@ class TestNodeDispatchEdgeCases:
         """
         # 先执行全局调度
         from algorithms.global_schedule import global_schedule
+        from models.global_schedule import GlobalSchedule
+        import json
         schedule_result = global_schedule(
             order_codes=None,
             algorithm="traditional",
             db=db_session,
         )
-        assert schedule_result["code"] == 0
         schedule_code = schedule_result["schedule_code"]
         
+        # 手动创建 GlobalSchedule 记录（因为 global_schedule() 只返回结果，不写入数据库）
+        gs = GlobalSchedule(
+            schedule_code=schedule_code,
+            order_codes=json.dumps(schedule_result["order_codes"]),
+            total_distance=schedule_result["total_distance"],
+            total_time=schedule_result["total_time"],
+            total_goods=schedule_result["total_goods"],
+            score=schedule_result["score"],
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+            goods_schedules=json.dumps(schedule_result["goods_schedules"]),
+        )
+        db_session.add(gs)
+        db_session.commit()
+        
         # 调用节点调度（应该失败，因为没有车辆）
-        result = node_dispatch(
+        result = run_node_dispatch(
             schedule_code=schedule_code,
             demo_mode=True,
             db=db_session,

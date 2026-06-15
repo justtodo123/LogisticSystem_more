@@ -1,0 +1,465 @@
+执行命令：D:\Git Demo\LogisticSystem\src\backend\.venv\Scripts\python.exe -m pytest -m unit -v tests/
+------------------------------------------------------------
+============================= test session starts =============================
+platform win32 -- Python 3.12.7, pytest-9.1.0, pluggy-1.6.0 -- D:\Git Demo\LogisticSystem\src\backend\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: d:\Git Demo\LogisticSystem\src\backend
+configfile: pytest.ini
+plugins: anyio-4.13.0, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 193 items / 137 deselected / 56 selected
+
+tests/unit/algorithms/test_global_schedule.py::TestGlobalScheduleNormal::test_normal_schedule_generates_paths PASSED [  1%]
+tests/unit/algorithms/test_global_schedule.py::TestGlobalScheduleHardConstraint::test_no_l1_available_raises_error PASSED [  3%]
+tests/unit/algorithms/test_global_schedule.py::TestGlobalScheduleHardConstraint::test_l1_capacity_exceeded_raises_error PASSED [  5%]
+tests/unit/algorithms/test_global_schedule.py::TestGlobalScheduleGreedySelection::test_greedy_selects_lowest_score_l1 PASSED [  7%]
+tests/unit/algorithms/test_global_schedule.py::TestGlobalScheduleGreedySelection::test_same_order_same_l1_enforcement PASSED [  8%]
+tests/unit/algorithms/test_global_schedule.py::TestGlobalScheduleGreedySelection::test_invalid_algorithm_raises_error PASSED [ 10%]
+tests/unit/algorithms/test_global_schedule.py::TestGlobalScheduleGreedySelection::test_no_pending_orders_raises_error PASSED [ 12%]
+tests/unit/algorithms/test_node_dispatch.py::TestNodeDispatchNormal::test_node_dispatch_success FAILED [ 14%]
+tests/unit/algorithms/test_node_dispatch.py::TestNodeDispatchNormal::test_node_dispatch_no_packages FAILED [ 16%]
+tests/unit/algorithms/test_node_dispatch.py::TestNodeDispatchEdgeCases::test_node_dispatch_schedule_not_found PASSED [ 17%]
+tests/unit/algorithms/test_node_dispatch.py::TestNodeDispatchEdgeCases::test_node_dispatch_no_available_vehicles FAILED [ 19%]
+tests/unit/algorithms/test_packaging.py::TestPackagingNormal::test_packaging_generates_packages FAILED [ 21%]
+tests/unit/algorithms/test_packaging.py::TestPackagingNormal::test_packaging_l0_l1_merge FAILED [ 23%]
+tests/unit/algorithms/test_packaging.py::TestPackagingNormal::test_packaging_l1_l2_by_order FAILED [ 25%]
+tests/unit/algorithms/test_packaging.py::TestPackagingEdgeCases::test_packaging_empty_input FAILED [ 26%]
+tests/unit/algorithms/test_packaging.py::TestPackagingEdgeCases::test_packaging_invalid_goods_code PASSED [ 28%]
+tests/unit/algorithms/test_route_planning.py::TestRoutePlanningNormal::test_route_planning_success FAILED [ 30%]
+tests/unit/algorithms/test_route_planning.py::TestRoutePlanningNormal::test_route_planning_return_trip FAILED [ 32%]
+tests/unit/algorithms/test_route_planning.py::TestRoutePlanningEdgeCases::test_route_planning_node_dispatch_not_found PASSED [ 33%]
+tests/unit/algorithms/test_route_planning.py::TestRoutePlanningEdgeCases::test_route_planning_empty_tasks FAILED [ 35%]
+tests/unit/services/test_auth_service.py::TestGetPasswordHash::test_get_password_hash PASSED [ 37%]
+tests/unit/services/test_auth_service.py::TestVerifyPassword::test_verify_password_correct PASSED [ 39%]
+tests/unit/services/test_auth_service.py::TestVerifyPassword::test_verify_password_wrong PASSED [ 41%]
+tests/unit/services/test_auth_service.py::TestCreateAccessToken::test_create_access_token FAILED [ 42%]
+tests/unit/services/test_auth_service.py::TestCreateAccessToken::test_create_access_token_expired FAILED [ 44%]
+tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_success FAILED [ 46%]
+tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_wrong_password FAILED [ 48%]
+tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_not_found FAILED [ 50%]
+tests/unit/services/test_auth_service.py::TestGetUserByUsername::test_get_user_by_username_success FAILED [ 51%]
+tests/unit/services/test_auth_service.py::TestGetUserByUsername::test_get_user_by_username_not_found FAILED [ 53%]
+tests/unit/services/test_dispatch_service.py::TestCreateNodeDispatch::test_create_node_dispatch_success FAILED [ 55%]
+tests/unit/services/test_dispatch_service.py::TestCreateNodeDispatch::test_create_node_dispatch_schedule_not_found PASSED [ 57%]
+tests/unit/services/test_dispatch_service.py::TestCreateNodeDispatch::test_create_node_dispatch_no_available_vehicles PASSED [ 58%]
+tests/unit/services/test_dispatch_service.py::TestGetDispatchBatches::test_get_batches_empty FAILED [ 60%]
+tests/unit/services/test_dispatch_service.py::TestGetDispatchBatches::test_get_batches_with_data FAILED [ 62%]
+tests/unit/services/test_dispatch_service.py::TestGetDispatchBatchDetail::test_get_batch_detail_success FAILED [ 64%]
+tests/unit/services/test_dispatch_service.py::TestGetDispatchBatchDetail::test_get_batch_detail_not_found FAILED [ 66%]
+tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_success FAILED [ 67%]
+tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_node_dispatch_not_found FAILED [ 69%]
+tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_algorithm_error FAILED [ 71%]
+tests/unit/services/test_route_service.py::TestGetRoutes::test_get_routes_empty FAILED [ 73%]
+tests/unit/services/test_route_service.py::TestGetRoutes::test_get_routes_with_data FAILED [ 75%]
+tests/unit/services/test_route_service.py::TestGetRouteDetail::test_get_route_detail_success FAILED [ 76%]
+tests/unit/services/test_route_service.py::TestGetRouteDetail::test_get_route_detail_not_found FAILED [ 78%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceNormalFlow::test_normal_flow_writes_all_data PASSED [ 80%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceNormalFlow::test_specific_orders_schedule PASSED [ 82%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceExceptionRollback::test_f021_exception_triggers_rollback PASSED [ 83%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceExceptionRollback::test_f007_exception_triggers_rollback PASSED [ 85%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceQuery::test_get_global_schedules_empty PASSED [ 87%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceQuery::test_get_global_schedule_not_found PASSED [ 89%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_by_vehicle_success FAILED [ 91%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_by_package_success FAILED [ 92%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_no_params FAILED [ 94%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_package_not_in_transit FAILED [ 96%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_vehicle_not_found FAILED [ 98%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_package_not_found PASSED [100%]
+
+================================== FAILURES ===================================
+______________ TestNodeDispatchNormal.test_node_dispatch_success ______________
+tests\unit\algorithms\test_node_dispatch.py:35: in test_node_dispatch_success
+    assert schedule_result["code"] == 0
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'code'
+____________ TestNodeDispatchNormal.test_node_dispatch_no_packages ____________
+tests\unit\algorithms\test_node_dispatch.py:87: in test_node_dispatch_no_packages
+    result = run_node_dispatch(
+algorithms\node_dispatch.py:384: in run_node_dispatch
+    raise ValueError("L0→L1没有可调度的包裹")
+E   ValueError: L0→L1没有可调度的包裹
+_____ TestNodeDispatchEdgeCases.test_node_dispatch_no_available_vehicles ______
+tests\unit\algorithms\test_node_dispatch.py:141: in test_node_dispatch_no_available_vehicles
+    assert schedule_result["code"] == 0
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'code'
+____________ TestPackagingNormal.test_packaging_generates_packages ____________
+tests\unit\algorithms\test_packaging.py:46: in test_packaging_generates_packages
+    result = packaging(
+E   TypeError: packaging() got an unexpected keyword argument 'goods_schedules'
+_______________ TestPackagingNormal.test_packaging_l0_l1_merge ________________
+tests\unit\algorithms\test_packaging.py:101: in test_packaging_l0_l1_merge
+    result = packaging(
+E   TypeError: packaging() got an unexpected keyword argument 'goods_schedules'
+______________ TestPackagingNormal.test_packaging_l1_l2_by_order ______________
+tests\unit\algorithms\test_packaging.py:161: in test_packaging_l1_l2_by_order
+    result = packaging(
+E   TypeError: packaging() got an unexpected keyword argument 'goods_schedules'
+______________ TestPackagingEdgeCases.test_packaging_empty_input ______________
+tests\unit\algorithms\test_packaging.py:190: in test_packaging_empty_input
+    result = packaging(
+E   TypeError: packaging() got an unexpected keyword argument 'goods_schedules'
+_____________ TestRoutePlanningNormal.test_route_planning_success _____________
+tests\unit\algorithms\test_route_planning.py:28: in test_route_planning_success
+    node_dispatch = NodeDispatch(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:596: in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:594: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+.venv\Lib\site-packages\sqlalchemy\orm\decl_base.py:2179: in _declarative_constructor
+    raise TypeError(
+E   TypeError: 'node_dispatch_code' is an invalid keyword argument for NodeDispatch
+___________ TestRoutePlanningNormal.test_route_planning_return_trip ___________
+tests\unit\algorithms\test_route_planning.py:79: in test_route_planning_return_trip
+    node_dispatch = NodeDispatch(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:596: in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:594: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+.venv\Lib\site-packages\sqlalchemy\orm\decl_base.py:2179: in _declarative_constructor
+    raise TypeError(
+E   TypeError: 'node_dispatch_code' is an invalid keyword argument for NodeDispatch
+_________ TestRoutePlanningEdgeCases.test_route_planning_empty_tasks __________
+tests\unit\algorithms\test_route_planning.py:134: in test_route_planning_empty_tasks
+    node_dispatch = NodeDispatch(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:596: in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:594: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+.venv\Lib\site-packages\sqlalchemy\orm\decl_base.py:2179: in _declarative_constructor
+    raise TypeError(
+E   TypeError: 'node_dispatch_code' is an invalid keyword argument for NodeDispatch
+_______________ TestCreateAccessToken.test_create_access_token ________________
+tests\unit\services\test_auth_service.py:80: in test_create_access_token
+    token = create_access_token(
+E   TypeError: create_access_token() got an unexpected keyword argument 'data'
+___________ TestCreateAccessToken.test_create_access_token_expired ____________
+tests\unit\services\test_auth_service.py:110: in test_create_access_token_expired
+    token = create_access_token(
+E   TypeError: create_access_token() got an unexpected keyword argument 'data'
+_____________ TestAuthenticateUser.test_authenticate_user_success _____________
+tests\unit\services\test_auth_service.py:138: in test_authenticate_user_success
+    authenticated_user = authenticate_user("testuser", "123456", db_session)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services\auth_service.py:39: in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+E   AttributeError: 'str' object has no attribute 'query'
+_________ TestAuthenticateUser.test_authenticate_user_wrong_password __________
+tests\unit\services\test_auth_service.py:160: in test_authenticate_user_wrong_password
+    authenticated_user = authenticate_user("testuser", "wrong", db_session)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services\auth_service.py:39: in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+E   AttributeError: 'str' object has no attribute 'query'
+____________ TestAuthenticateUser.test_authenticate_user_not_found ____________
+tests\unit\services\test_auth_service.py:169: in test_authenticate_user_not_found
+    authenticated_user = authenticate_user("nonexist", "123456", db_session)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services\auth_service.py:39: in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+E   AttributeError: 'str' object has no attribute 'query'
+___________ TestGetUserByUsername.test_get_user_by_username_success ___________
+tests\unit\services\test_auth_service.py:193: in test_get_user_by_username_success
+    found_user = get_user_by_username("testuser", db_session)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services\auth_service.py:47: in get_user_by_username
+    return db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+E   AttributeError: 'str' object has no attribute 'query'
+__________ TestGetUserByUsername.test_get_user_by_username_not_found __________
+tests\unit\services\test_auth_service.py:204: in test_get_user_by_username_not_found
+    found_user = get_user_by_username("nonexist", db_session)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services\auth_service.py:47: in get_user_by_username
+    return db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+E   AttributeError: 'str' object has no attribute 'query'
+__________ TestCreateNodeDispatch.test_create_node_dispatch_success ___________
+tests\unit\services\test_dispatch_service.py:52: in test_create_node_dispatch_success
+    assert result["code"] == 0
+E   assert 40001 == 0
+________________ TestGetDispatchBatches.test_get_batches_empty ________________
+tests\unit\services\test_dispatch_service.py:126: in test_get_batches_empty
+    result = await DispatchService.get_dispatch_batches(
+E   TypeError: DispatchService.get_dispatch_batches() got an unexpected keyword argument 'page'
+______________ TestGetDispatchBatches.test_get_batches_with_data ______________
+tests\unit\services\test_dispatch_service.py:153: in test_get_batches_with_data
+    assert batch_result["code"] == 0
+E   assert 40001 == 0
+__________ TestGetDispatchBatchDetail.test_get_batch_detail_success ___________
+tests\unit\services\test_dispatch_service.py:187: in test_get_batch_detail_success
+    assert batch_result["code"] == 0
+E   assert 40001 == 0
+_________ TestGetDispatchBatchDetail.test_get_batch_detail_not_found __________
+tests\unit\services\test_dispatch_service.py:203: in test_get_batch_detail_not_found
+    result = await DispatchService.get_dispatch_batch(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: type object 'DispatchService' has no attribute 'get_dispatch_batch'. Did you mean: 'get_dispatch_batches'?
+__________________ TestCreateRoute.test_create_route_success __________________
+tests\unit\services\test_route_service.py:36: in test_create_route_success
+    node_dispatch = NodeDispatch(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:596: in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:594: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+.venv\Lib\site-packages\sqlalchemy\orm\decl_base.py:2179: in _declarative_constructor
+    raise TypeError(
+E   TypeError: 'node_dispatch_code' is an invalid keyword argument for NodeDispatch
+__________ TestCreateRoute.test_create_route_node_dispatch_not_found __________
+tests\unit\services\test_route_service.py:73: in test_create_route_node_dispatch_not_found
+    result = await RouteService.create_route(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: type object 'RouteService' has no attribute 'create_route'
+______________ TestCreateRoute.test_create_route_algorithm_error ______________
+tests\unit\services\test_route_service.py:96: in test_create_route_algorithm_error
+    node_dispatch = NodeDispatch(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:596: in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:594: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+.venv\Lib\site-packages\sqlalchemy\orm\decl_base.py:2179: in _declarative_constructor
+    raise TypeError(
+E   TypeError: 'node_dispatch_code' is an invalid keyword argument for NodeDispatch
+_____________________ TestGetRoutes.test_get_routes_empty _____________________
+tests\unit\services\test_route_service.py:131: in test_get_routes_empty
+    result = await RouteService.get_routes(
+E   TypeError: RouteService.get_routes() missing 1 required positional argument: 'batch_code'
+___________________ TestGetRoutes.test_get_routes_with_data ___________________
+tests\unit\services\test_route_service.py:147: in test_get_routes_with_data
+    route = Route(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:596: in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:594: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+.venv\Lib\site-packages\sqlalchemy\orm\decl_base.py:2179: in _declarative_constructor
+    raise TypeError(
+E   TypeError: 'node_dispatch_id' is an invalid keyword argument for Route
+______________ TestGetRouteDetail.test_get_route_detail_success _______________
+tests\unit\services\test_route_service.py:181: in test_get_route_detail_success
+    route = Route(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:596: in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:594: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+.venv\Lib\site-packages\sqlalchemy\orm\decl_base.py:2179: in _declarative_constructor
+    raise TypeError(
+E   TypeError: 'node_dispatch_id' is an invalid keyword argument for Route
+_____________ TestGetRouteDetail.test_get_route_detail_not_found ______________
+tests\unit\services\test_route_service.py:206: in test_get_route_detail_not_found
+    result = await RouteService.get_route(
+                   ^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: type object 'RouteService' has no attribute 'get_route'. Did you mean: 'get_routes'?
+_____________ TestDeliverPackages.test_deliver_by_vehicle_success _____________
+tests\unit\services\test_simulation_service.py:37: in test_deliver_by_vehicle_success
+    package = Package(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:596: in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:594: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+.venv\Lib\site-packages\sqlalchemy\orm\decl_base.py:2179: in _declarative_constructor
+    raise TypeError(
+E   TypeError: 'vehicle_id' is an invalid keyword argument for Package
+_____________ TestDeliverPackages.test_deliver_by_package_success _____________
+tests\unit\services\test_simulation_service.py:88: in test_deliver_by_package_success
+    package = Package(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:596: in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:594: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+.venv\Lib\site-packages\sqlalchemy\orm\decl_base.py:2179: in _declarative_constructor
+    raise TypeError(
+E   TypeError: 'vehicle_id' is an invalid keyword argument for Package
+_________________ TestDeliverPackages.test_deliver_no_params __________________
+tests\unit\services\test_simulation_service.py:131: in test_deliver_no_params
+    package1 = Package(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:596: in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:594: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+.venv\Lib\site-packages\sqlalchemy\orm\decl_base.py:2179: in _declarative_constructor
+    raise TypeError(
+E   TypeError: 'vehicle_id' is an invalid keyword argument for Package
+___________ TestDeliverPackages.test_deliver_package_not_in_transit ___________
+tests\unit\services\test_simulation_service.py:186: in test_deliver_package_not_in_transit
+    package = Package(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:596: in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:594: in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+.venv\Lib\site-packages\sqlalchemy\orm\decl_base.py:2179: in _declarative_constructor
+    raise TypeError(
+E   TypeError: 'vehicle_id' is an invalid keyword argument for Package
+_____________ TestDeliverPackages.test_deliver_vehicle_not_found ______________
+tests\unit\services\test_simulation_service.py:226: in test_deliver_vehicle_not_found
+    assert "车辆" in result["message"] or "不存在" in result["message"]
+E   AssertionError: assert ('\u8f66\u8f86' in '\u6ca1\u6709\u627e\u5230\u53ef\u9001\u8fbe\u7684\u5305\u88f9' or '\u4e0d\u5b58\u5728' in '\u6ca1\u6709\u627e\u5230\u53ef\u9001\u8fbe\u7684\u5305\u88f9')
+============================== warnings summary ===============================
+config\database.py:6
+  d:\Git Demo\LogisticSystem\src\backend\config\database.py:6: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class Settings(BaseSettings):
+
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\Git Demo\LogisticSystem\src\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+schemas\user.py:19
+  d:\Git Demo\LogisticSystem\src\backend\schemas\user.py:19: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class UserResponse(BaseModel):
+
+schemas\order.py:22
+  d:\Git Demo\LogisticSystem\src\backend\schemas\order.py:22: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class OrderResponse(BaseModel):
+
+schemas\goods.py:24
+  d:\Git Demo\LogisticSystem\src\backend\schemas\goods.py:24: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class GoodsResponse(BaseModel):
+
+schemas\package.py:11
+  d:\Git Demo\LogisticSystem\src\backend\schemas\package.py:11: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class PackageResponse(BaseModel):
+
+schemas\vehicle.py:30
+  d:\Git Demo\LogisticSystem\src\backend\schemas\vehicle.py:30: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class VehicleResponse(BaseModel):
+
+schemas\driver.py:27
+  d:\Git Demo\LogisticSystem\src\backend\schemas\driver.py:27: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class DriverResponse(BaseModel):
+
+schemas\node.py:6
+  d:\Git Demo\LogisticSystem\src\backend\schemas\node.py:6: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class NodeResponse(BaseModel):
+
+schemas\node.py:42
+  d:\Git Demo\LogisticSystem\src\backend\schemas\node.py:42: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class StorageCenterResponse(BaseModel):
+
+schemas\node.py:81
+  d:\Git Demo\LogisticSystem\src\backend\schemas\node.py:81: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SortingCenterResponse(BaseModel):
+
+schemas\dispatch.py:12
+  d:\Git Demo\LogisticSystem\src\backend\schemas\dispatch.py:12: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class NodeDispatchTaskResponse(BaseModel):
+
+schemas\dispatch.py:23
+  d:\Git Demo\LogisticSystem\src\backend\schemas\dispatch.py:23: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class NodeDispatchResponse(BaseModel):
+
+schemas\dispatch.py:37
+  d:\Git Demo\LogisticSystem\src\backend\schemas\dispatch.py:37: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class DispatchBatchResponse(BaseModel):
+
+main.py:120
+  d:\Git Demo\LogisticSystem\src\backend\main.py:120: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+.venv\Lib\site-packages\fastapi\applications.py:4598
+  D:\Git Demo\LogisticSystem\src\backend\.venv\Lib\site-packages\fastapi\applications.py:4598: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/algorithms/test_node_dispatch.py::TestNodeDispatchNormal::test_node_dispatch_success - KeyError: 'code'
+FAILED tests/unit/algorithms/test_node_dispatch.py::TestNodeDispatchNormal::test_node_dispatch_no_packages - ValueError: L0→L1没有可调度的包裹
+FAILED tests/unit/algorithms/test_node_dispatch.py::TestNodeDispatchEdgeCases::test_node_dispatch_no_available_vehicles - KeyError: 'code'
+FAILED tests/unit/algorithms/test_packaging.py::TestPackagingNormal::test_packaging_generates_packages - TypeError: packaging() got an unexpected keyword argument 'goods_schedules'
+FAILED tests/unit/algorithms/test_packaging.py::TestPackagingNormal::test_packaging_l0_l1_merge - TypeError: packaging() got an unexpected keyword argument 'goods_schedules'
+FAILED tests/unit/algorithms/test_packaging.py::TestPackagingNormal::test_packaging_l1_l2_by_order - TypeError: packaging() got an unexpected keyword argument 'goods_schedules'
+FAILED tests/unit/algorithms/test_packaging.py::TestPackagingEdgeCases::test_packaging_empty_input - TypeError: packaging() got an unexpected keyword argument 'goods_schedules'
+FAILED tests/unit/algorithms/test_route_planning.py::TestRoutePlanningNormal::test_route_planning_success - TypeError: 'node_dispatch_code' is an invalid keyword argument for NodeDispatch
+FAILED tests/unit/algorithms/test_route_planning.py::TestRoutePlanningNormal::test_route_planning_return_trip - TypeError: 'node_dispatch_code' is an invalid keyword argument for NodeDispatch
+FAILED tests/unit/algorithms/test_route_planning.py::TestRoutePlanningEdgeCases::test_route_planning_empty_tasks - TypeError: 'node_dispatch_code' is an invalid keyword argument for NodeDispatch
+FAILED tests/unit/services/test_auth_service.py::TestCreateAccessToken::test_create_access_token - TypeError: create_access_token() got an unexpected keyword argument 'data'
+FAILED tests/unit/services/test_auth_service.py::TestCreateAccessToken::test_create_access_token_expired - TypeError: create_access_token() got an unexpected keyword argument 'data'
+FAILED tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_success - AttributeError: 'str' object has no attribute 'query'
+FAILED tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_wrong_password - AttributeError: 'str' object has no attribute 'query'
+FAILED tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_not_found - AttributeError: 'str' object has no attribute 'query'
+FAILED tests/unit/services/test_auth_service.py::TestGetUserByUsername::test_get_user_by_username_success - AttributeError: 'str' object has no attribute 'query'
+FAILED tests/unit/services/test_auth_service.py::TestGetUserByUsername::test_get_user_by_username_not_found - AttributeError: 'str' object has no attribute 'query'
+FAILED tests/unit/services/test_dispatch_service.py::TestCreateNodeDispatch::test_create_node_dispatch_success - assert 40001 == 0
+FAILED tests/unit/services/test_dispatch_service.py::TestGetDispatchBatches::test_get_batches_empty - TypeError: DispatchService.get_dispatch_batches() got an unexpected keyword argument 'page'
+FAILED tests/unit/services/test_dispatch_service.py::TestGetDispatchBatches::test_get_batches_with_data - assert 40001 == 0
+FAILED tests/unit/services/test_dispatch_service.py::TestGetDispatchBatchDetail::test_get_batch_detail_success - assert 40001 == 0
+FAILED tests/unit/services/test_dispatch_service.py::TestGetDispatchBatchDetail::test_get_batch_detail_not_found - AttributeError: type object 'DispatchService' has no attribute 'get_dispatch_batch'. Did you mean: 'get_dispatch_batches'?
+FAILED tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_success - TypeError: 'node_dispatch_code' is an invalid keyword argument for NodeDispatch
+FAILED tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_node_dispatch_not_found - AttributeError: type object 'RouteService' has no attribute 'create_route'
+FAILED tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_algorithm_error - TypeError: 'node_dispatch_code' is an invalid keyword argument for NodeDispatch
+FAILED tests/unit/services/test_route_service.py::TestGetRoutes::test_get_routes_empty - TypeError: RouteService.get_routes() missing 1 required positional argument: 'batch_code'
+FAILED tests/unit/services/test_route_service.py::TestGetRoutes::test_get_routes_with_data - TypeError: 'node_dispatch_id' is an invalid keyword argument for Route
+FAILED tests/unit/services/test_route_service.py::TestGetRouteDetail::test_get_route_detail_success - TypeError: 'node_dispatch_id' is an invalid keyword argument for Route
+FAILED tests/unit/services/test_route_service.py::TestGetRouteDetail::test_get_route_detail_not_found - AttributeError: type object 'RouteService' has no attribute 'get_route'. Did you mean: 'get_routes'?
+FAILED tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_by_vehicle_success - TypeError: 'vehicle_id' is an invalid keyword argument for Package
+FAILED tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_by_package_success - TypeError: 'vehicle_id' is an invalid keyword argument for Package
+FAILED tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_no_params - TypeError: 'vehicle_id' is an invalid keyword argument for Package
+FAILED tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_package_not_in_transit - TypeError: 'vehicle_id' is an invalid keyword argument for Package
+FAILED tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_vehicle_not_found - AssertionError: assert ('\u8f66\u8f86' in '\u6ca1\u6709\u627e\u5230\u53ef\u9001\u8fbe\u7684\u5305\u88f9' or '\u4e0d\u5b58\u5728' in '\u6ca1\u6709\u627e\u5230\u53ef\u9001\u8fbe\u7684\u5305\u88f9')
+========= 34 failed, 22 passed, 137 deselected, 16 warnings in 4.94s ==========
