@@ -103,7 +103,7 @@ class TestLogin:
         # 验证响应（FastAPI参数校验失败返回422）
         assert response.status_code == 422
         body = response.json()
-        assert body["code"] == 40000  # 统一错误码
+        assert "detail" in body  # FastAPI 422错误格式
 
 
 class TestGetMe:

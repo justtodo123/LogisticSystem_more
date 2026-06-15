@@ -25,7 +25,7 @@ def client():
 
 
 @pytest.fixture
-def auth_headers(db_session):
+def auth_headers(client, db_session):
     """认证头（调度员）"""
     # 登录获取token
     response = client.post("/api/auth/login", json={
