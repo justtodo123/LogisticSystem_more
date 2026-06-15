@@ -125,6 +125,7 @@ class SimulationService:
             
             for vehicle_id in vehicle_ids:
                 # 查询该车辆的所有包裹（包括已更新的）
+                db.flush()  # 确保能看到最新的包裹状态
                 vehicle_packages = db.query(Package).join(
                     NodeDispatch, Package.dispatch_id == NodeDispatch.id
                 ).filter(
