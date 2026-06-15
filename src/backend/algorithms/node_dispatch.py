@@ -197,7 +197,7 @@ def _dispatch_level(
             db.query(Package)
             .join(Node, Package.from_node_id == Node.id)
             .join(NodeAlias1, Package.to_node_id == NodeAlias1.id)
-            .join(SortingCenter, Package.to_node_id == SortingCenter.node_id)
+            .join(SortingCenter, NodeAlias1.id == SortingCenter.node_id)
             .filter(
                 Node.node_type == 'storage_center',
                 NodeAlias1.node_type == 'sorting_center',
