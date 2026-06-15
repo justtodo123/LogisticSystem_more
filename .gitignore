@@ -56,6 +56,10 @@ coverage.xml
 *.cover
 .hypothesis/
 src/backend/pytest.ini
+tests/report.md
+tests/test_report.md
+
+
 # ==============================
 # Node.js / Vue 3 / Vite 前端
 # ==============================

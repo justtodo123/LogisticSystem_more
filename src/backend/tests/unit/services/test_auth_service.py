@@ -78,8 +78,8 @@ class TestCreateAccessToken:
         
         # 生成Token
         token = create_access_token(
-            data={"sub": user.username, "role": user.role},
-            expires_delta=timedelta(hours=24),
+            username=user.username,
+            role=user.role,
         )
         
         # 验证Token不为空
@@ -108,8 +108,8 @@ class TestCreateAccessToken:
         
         # 生成过期Token（过期时间为过去）
         token = create_access_token(
-            data={"sub": user.username, "role": user.role},
-            expires_delta=timedelta(hours=-1),  # 过期
+            username=user.username,
+            role=user.role,
         )
         
         # 验证Token解码会失败

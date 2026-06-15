@@ -9,6 +9,8 @@
     python tests/run_tests.py --api       # 只运行API测试
     python tests/run_tests.py --cov      # 运行测试并生成覆盖率报告
     python tests/run_tests.py --fast     # 快速运行（跳过慢速测试）
+    python tests/run_tests.py --md       # 生成Markdown测试报告（默认：tests/report.md）
+    python tests/run_tests.py --md report.md  # 指定报告文件路径
 """
 import sys
 import subprocess
@@ -23,6 +25,7 @@ def main():
     parser.add_argument("--api", action="store_true", help="只运行API测试")
     parser.add_argument("--cov", action="store_true", help="生成覆盖率报告")
     parser.add_argument("--fast", action="store_true", help="快速运行（跳过慢速测试）")
+    parser.add_argument("--md", type=str, nargs="?", const="tests/report.md", help="生成Markdown测试报告（可指定路径，默认：tests/report.md）")
     parser.add_argument("--phase", type=str, help="运行特定阶段的测试（如：--phase phase1）")
     args = parser.parse_args()
     
@@ -46,6 +49,14 @@ def main():
     # 覆盖率报告
     if args.cov:
         cmd.extend(["--cov=.", "--cov-report=html:htmlcov", "--cov-report=term"])
+    
+    # Markdown报告
+    if args.md:
+        # 确保报告文件的目录存在
+        report_dir = os.path.dirname(args.md)
+        if report_dir and not os.path.exists(report_dir):
+            os.makedirs(report_dir, exist_ok=True)
+        cmd.extend(["--md", args.md])
     
     # 添加详细输出
     if not args.fast:
