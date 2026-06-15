@@ -1,0 +1,871 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.7, pytest-9.1.0, pluggy-1.6.0 -- D:\Git Demo\LogisticSystem\src\backend\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: d:\Git Demo\LogisticSystem\src\backend
+configfile: pytest.ini
+plugins: anyio-4.13.0, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 104 items
+
+tests/unit/services/test_auth_service.py::TestGetPasswordHash::test_get_password_hash PASSED [  0%]
+tests/unit/services/test_auth_service.py::TestVerifyPassword::test_verify_password_correct PASSED [  1%]
+tests/unit/services/test_auth_service.py::TestVerifyPassword::test_verify_password_wrong PASSED [  2%]
+tests/unit/services/test_auth_service.py::TestCreateAccessToken::test_create_access_token FAILED [  3%]
+tests/unit/services/test_auth_service.py::TestCreateAccessToken::test_create_access_token_expired FAILED [  4%]
+tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_success FAILED [  5%]
+tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_wrong_password FAILED [  6%]
+tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_not_found FAILED [  7%]
+tests/unit/services/test_auth_service.py::TestGetUserByUsername::test_get_user_by_username_success FAILED [  8%]
+tests/unit/services/test_auth_service.py::TestGetUserByUsername::test_get_user_by_username_not_found FAILED [  9%]
+tests/unit/services/test_dispatch_service.py::TestCreateNodeDispatch::test_create_node_dispatch_success ERROR [ 10%]
+tests/unit/services/test_dispatch_service.py::TestCreateNodeDispatch::test_create_node_dispatch_schedule_not_found PASSED [ 11%]
+tests/unit/services/test_dispatch_service.py::TestCreateNodeDispatch::test_create_node_dispatch_no_available_vehicles ERROR [ 12%]
+tests/unit/services/test_dispatch_service.py::TestGetDispatchBatches::test_get_batches_empty FAILED [ 13%]
+tests/unit/services/test_dispatch_service.py::TestGetDispatchBatches::test_get_batches_with_data ERROR [ 14%]
+tests/unit/services/test_dispatch_service.py::TestGetDispatchBatchDetail::test_get_batch_detail_success ERROR [ 15%]
+tests/unit/services/test_dispatch_service.py::TestGetDispatchBatchDetail::test_get_batch_detail_not_found FAILED [ 16%]
+tests/unit/services/test_driver_service.py::TestDriverServiceCreateDriver::test_create_driver_success FAILED [ 17%]
+tests/unit/services/test_driver_service.py::TestDriverServiceCreateDriver::test_create_driver_code_exists FAILED [ 18%]
+tests/unit/services/test_driver_service.py::TestDriverServiceCreateDriver::test_create_driver_node_not_found FAILED [ 19%]
+tests/unit/services/test_driver_service.py::TestDriverServiceGetDrivers::test_get_drivers_success PASSED [ 20%]
+tests/unit/services/test_driver_service.py::TestDriverServiceGetDriver::test_get_driver_success FAILED [ 21%]
+tests/unit/services/test_driver_service.py::TestDriverServiceGetDriver::test_get_driver_not_found PASSED [ 22%]
+tests/unit/services/test_driver_service.py::TestDriverServiceUpdateDriver::test_update_driver_success PASSED [ 23%]
+tests/unit/services/test_driver_service.py::TestDriverServiceUpdateDriver::test_update_driver_not_found PASSED [ 24%]
+tests/unit/services/test_driver_service.py::TestDriverServiceDeleteDriver::test_delete_driver_success PASSED [ 25%]
+tests/unit/services/test_driver_service.py::TestDriverServiceDeleteDriver::test_delete_driver_not_found PASSED [ 25%]
+tests/unit/services/test_driver_service.py::TestDriverServiceDeleteDriver::test_delete_driver_status_not_allowed PASSED [ 26%]
+tests/unit/services/test_goods_service.py::TestGoodsServiceGetGoods::test_get_goods_success FAILED [ 27%]
+tests/unit/services/test_goods_service.py::TestGoodsServiceGetGoods::test_get_goods_with_status_filter FAILED [ 28%]
+tests/unit/services/test_goods_service.py::TestGoodsServiceGetGoods::test_get_goods_with_node_filter FAILED [ 29%]
+tests/unit/services/test_goods_service.py::TestGoodsServiceGetGood::test_get_good_success PASSED [ 30%]
+tests/unit/services/test_goods_service.py::TestGoodsServiceGetGood::test_get_good_not_found PASSED [ 31%]
+tests/unit/services/test_goods_service.py::TestGoodsServiceUpdateGood::test_update_good_success PASSED [ 32%]
+tests/unit/services/test_goods_service.py::TestGoodsServiceUpdateGood::test_update_good_not_found PASSED [ 33%]
+tests/unit/services/test_goods_service.py::TestGoodsServiceUpdateGood::test_update_good_node_not_found PASSED [ 34%]
+tests/unit/services/test_node_service.py::TestNodeServiceCreateStorageCenter::test_create_storage_center_success FAILED [ 35%]
+tests/unit/services/test_node_service.py::TestNodeServiceCreateStorageCenter::test_create_storage_center_code_exists PASSED [ 36%]
+tests/unit/services/test_node_service.py::TestNodeServiceUpdateStorageCenter::test_update_storage_center_success PASSED [ 37%]
+tests/unit/services/test_node_service.py::TestNodeServiceUpdateStorageCenter::test_update_storage_center_not_found PASSED [ 38%]
+tests/unit/services/test_node_service.py::TestNodeServiceDeleteStorageCenter::test_delete_storage_center_success PASSED [ 39%]
+tests/unit/services/test_node_service.py::TestNodeServiceDeleteStorageCenter::test_delete_storage_center_not_found PASSED [ 40%]
+tests/unit/services/test_node_service.py::TestNodeServiceCreateSortingCenter::test_create_sorting_center_success FAILED [ 41%]
+tests/unit/services/test_node_service.py::TestNodeServiceCreateSortingCenter::test_create_sorting_center_code_exists PASSED [ 42%]
+tests/unit/services/test_node_service.py::TestNodeServiceUpdateSortingCenter::test_update_sorting_center_success PASSED [ 43%]
+tests/unit/services/test_node_service.py::TestNodeServiceUpdateSortingCenter::test_update_sorting_center_not_found PASSED [ 44%]
+tests/unit/services/test_node_service.py::TestNodeServiceDeleteSortingCenter::test_delete_sorting_center_success PASSED [ 45%]
+tests/unit/services/test_node_service.py::TestNodeServiceDeleteSortingCenter::test_delete_sorting_center_not_found PASSED [ 46%]
+tests/unit/services/test_node_service.py::TestNodeServiceGetNodes::test_get_nodes_success PASSED [ 47%]
+tests/unit/services/test_node_service.py::TestNodeServiceGetNodes::test_get_nodes_with_type_filter PASSED [ 48%]
+tests/unit/services/test_node_service.py::TestNodeServiceGetNode::test_get_node_success FAILED [ 49%]
+tests/unit/services/test_node_service.py::TestNodeServiceGetNode::test_get_node_not_found PASSED [ 50%]
+tests/unit/services/test_order_service.py::TestOrderServiceCreateOrder::test_create_order_success FAILED [ 50%]
+tests/unit/services/test_order_service.py::TestOrderServiceCreateOrder::test_create_order_destination_not_found PASSED [ 51%]
+tests/unit/services/test_order_service.py::TestOrderServiceCreateOrder::test_create_order_not_sorting_center PASSED [ 52%]
+tests/unit/services/test_order_service.py::TestOrderServiceCreateOrder::test_create_order_not_level0 PASSED [ 53%]
+tests/unit/services/test_order_service.py::TestOrderServiceGetOrders::test_get_orders_success FAILED [ 54%]
+tests/unit/services/test_order_service.py::TestOrderServiceGetOrders::test_get_orders_with_status_filter FAILED [ 55%]
+tests/unit/services/test_order_service.py::TestOrderServiceGetOrder::test_get_order_success PASSED [ 56%]
+tests/unit/services/test_order_service.py::TestOrderServiceGetOrder::test_get_order_not_found PASSED [ 57%]
+tests/unit/services/test_order_service.py::TestOrderServiceUpdateOrder::test_update_order_success PASSED [ 58%]
+tests/unit/services/test_order_service.py::TestOrderServiceUpdateOrder::test_update_order_not_found PASSED [ 59%]
+tests/unit/services/test_order_service.py::TestOrderServiceUpdateOrder::test_update_order_status_not_allowed PASSED [ 60%]
+tests/unit/services/test_order_service.py::TestOrderServiceDeleteOrder::test_delete_order_success PASSED [ 61%]
+tests/unit/services/test_order_service.py::TestOrderServiceDeleteOrder::test_delete_order_not_found PASSED [ 62%]
+tests/unit/services/test_order_service.py::TestOrderServiceDeleteOrder::test_delete_order_status_not_allowed PASSED [ 63%]
+tests/unit/services/test_package_service.py::TestPackageServiceGetPackages::test_get_packages_success PASSED [ 64%]
+tests/unit/services/test_package_service.py::TestPackageServiceGetPackages::test_get_packages_with_status_filter PASSED [ 65%]
+tests/unit/services/test_package_service.py::TestPackageServiceGetPackage::test_get_package_success PASSED [ 66%]
+tests/unit/services/test_package_service.py::TestPackageServiceGetPackage::test_get_package_not_found PASSED [ 67%]
+tests/unit/services/test_package_service.py::TestPackageServiceRepackPackage::test_repack_package_success FAILED [ 68%]
+tests/unit/services/test_package_service.py::TestPackageServiceRepackPackage::test_repack_package_not_found PASSED [ 69%]
+tests/unit/services/test_package_service.py::TestPackageServiceRepackPackage::test_repack_package_status_not_allowed PASSED [ 70%]
+tests/unit/services/test_package_service.py::TestPackageServiceRepackPackage::test_repack_package_goods_not_belong PASSED [ 71%]
+tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_success ERROR [ 72%]
+tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_node_dispatch_not_found FAILED [ 73%]
+tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_algorithm_error ERROR [ 74%]
+tests/unit/services/test_route_service.py::TestGetRoutes::test_get_routes_empty FAILED [ 75%]
+tests/unit/services/test_route_service.py::TestGetRoutes::test_get_routes_with_data ERROR [ 75%]
+tests/unit/services/test_route_service.py::TestGetRouteDetail::test_get_route_detail_success ERROR [ 76%]
+tests/unit/services/test_route_service.py::TestGetRouteDetail::test_get_route_detail_not_found FAILED [ 77%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceNormalFlow::test_normal_flow_writes_all_data ERROR [ 78%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceNormalFlow::test_specific_orders_schedule ERROR [ 79%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceExceptionRollback::test_f021_exception_triggers_rollback ERROR [ 80%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceExceptionRollback::test_f007_exception_triggers_rollback ERROR [ 81%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceQuery::test_get_global_schedules_empty FAILED [ 82%]
+tests/unit/services/test_schedule_service.py::TestScheduleServiceQuery::test_get_global_schedule_not_found FAILED [ 83%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_by_vehicle_success ERROR [ 84%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_by_package_success ERROR [ 85%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_no_params ERROR [ 86%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_package_not_in_transit ERROR [ 87%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_vehicle_not_found FAILED [ 88%]
+tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_package_not_found FAILED [ 89%]
+tests/unit/services/test_vehicle_service.py::TestVehicleServiceCreateVehicle::test_create_vehicle_success FAILED [ 90%]
+tests/unit/services/test_vehicle_service.py::TestVehicleServiceCreateVehicle::test_create_vehicle_code_exists PASSED [ 91%]
+tests/unit/services/test_vehicle_service.py::TestVehicleServiceCreateVehicle::test_create_vehicle_node_not_found PASSED [ 92%]
+tests/unit/services/test_vehicle_service.py::TestVehicleServiceGetVehicles::test_get_vehicles_success PASSED [ 93%]
+tests/unit/services/test_vehicle_service.py::TestVehicleServiceGetVehicle::test_get_vehicle_success FAILED [ 94%]
+tests/unit/services/test_vehicle_service.py::TestVehicleServiceGetVehicle::test_get_vehicle_not_found PASSED [ 95%]
+tests/unit/services/test_vehicle_service.py::TestVehicleServiceUpdateVehicle::test_update_vehicle_success PASSED [ 96%]
+tests/unit/services/test_vehicle_service.py::TestVehicleServiceUpdateVehicle::test_update_vehicle_not_found PASSED [ 97%]
+tests/unit/services/test_vehicle_service.py::TestVehicleServiceDeleteVehicle::test_delete_vehicle_success PASSED [ 98%]
+tests/unit/services/test_vehicle_service.py::TestVehicleServiceDeleteVehicle::test_delete_vehicle_not_found PASSED [ 99%]
+tests/unit/services/test_vehicle_service.py::TestVehicleServiceDeleteVehicle::test_delete_vehicle_status_not_allowed PASSED [100%]
+
+=================================== ERRORS ====================================
+_ ERROR at setup of TestCreateNodeDispatch.test_create_node_dispatch_success __
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_ ERROR at setup of TestCreateNodeDispatch.test_create_node_dispatch_no_available_vehicles _
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_____ ERROR at setup of TestGetDispatchBatches.test_get_batches_with_data _____
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_ ERROR at setup of TestGetDispatchBatchDetail.test_get_batch_detail_success __
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_________ ERROR at setup of TestCreateRoute.test_create_route_success _________
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_____ ERROR at setup of TestCreateRoute.test_create_route_algorithm_error _____
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+__________ ERROR at setup of TestGetRoutes.test_get_routes_with_data __________
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_____ ERROR at setup of TestGetRouteDetail.test_get_route_detail_success ______
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_ ERROR at setup of TestScheduleServiceNormalFlow.test_normal_flow_writes_all_data _
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_ ERROR at setup of TestScheduleServiceNormalFlow.test_specific_orders_schedule _
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_ ERROR at setup of TestScheduleServiceExceptionRollback.test_f021_exception_triggers_rollback _
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_ ERROR at setup of TestScheduleServiceExceptionRollback.test_f007_exception_triggers_rollback _
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+____ ERROR at setup of TestDeliverPackages.test_deliver_by_vehicle_success ____
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+____ ERROR at setup of TestDeliverPackages.test_deliver_by_package_success ____
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+________ ERROR at setup of TestDeliverPackages.test_deliver_no_params _________
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+__ ERROR at setup of TestDeliverPackages.test_deliver_package_not_in_transit __
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:558: in setup
+    return super().setup()
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:926: in pytest_fixture_setup
+    return (yield)
+            ^^^^^
+tests\conftest.py:107: in test_nodes
+    node = Node(
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+================================== FAILURES ===================================
+_______________ TestCreateAccessToken.test_create_access_token ________________
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2532: in get_property
+    return self._props[key]
+           ^^^^^^^^^^^^^^^^
+E   KeyError: 'exception_events'
+
+The above exception was the direct cause of the following exception:
+tests\unit\services\test_auth_service.py:69: in test_create_access_token
+    user = User(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4269: in _do_configure_registries
+    mapper._post_configure_properties()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2428: in _post_configure_properties
+    prop.init()
+.venv\Lib\site-packages\sqlalchemy\orm\interfaces.py:595: in init
+    self.do_init()
+.venv\Lib\site-packages\sqlalchemy\orm\relationships.py:1661: in do_init
+    self._generate_backref()
+.venv\Lib\site-packages\sqlalchemy\orm\relationships.py:2145: in _generate_backref
+    self._add_reverse_property(self.back_populates)
+.venv\Lib\site-packages\sqlalchemy\orm\relationships.py:1592: in _add_reverse_property
+    other = self.mapper.get_property(key, _configure_mappers=False)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2534: in get_property
+    raise sa_exc.InvalidRequestError(
+E   sqlalchemy.exc.InvalidRequestError: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+___________ TestCreateAccessToken.test_create_access_token_expired ____________
+tests\unit\services\test_auth_service.py:99: in test_create_access_token_expired
+    user = User(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_____________ TestAuthenticateUser.test_authenticate_user_success _____________
+tests\unit\services\test_auth_service.py:127: in test_authenticate_user_success
+    user = User(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_________ TestAuthenticateUser.test_authenticate_user_wrong_password __________
+tests\unit\services\test_auth_service.py:149: in test_authenticate_user_wrong_password
+    user = User(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+____________ TestAuthenticateUser.test_authenticate_user_not_found ____________
+tests\unit\services\test_auth_service.py:169: in test_authenticate_user_not_found
+    authenticated_user = authenticate_user("nonexist", "123456", db_session)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services\auth_service.py:39: in authenticate_user
+    user = db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+E   AttributeError: 'str' object has no attribute 'query'
+___________ TestGetUserByUsername.test_get_user_by_username_success ___________
+tests\unit\services\test_auth_service.py:182: in test_get_user_by_username_success
+    user = User(
+<string>:4: in __init__
+    ???
+.venv\Lib\site-packages\sqlalchemy\orm\state.py:591: in _initialize_instance
+    manager.dispatch.init(self, args, kwargs)
+.venv\Lib\site-packages\sqlalchemy\event\attr.py:516: in __call__
+    fn(*args, **kw)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4420: in _event_on_init
+    instrumenting_mapper._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+__________ TestGetUserByUsername.test_get_user_by_username_not_found __________
+tests\unit\services\test_auth_service.py:204: in test_get_user_by_username_not_found
+    found_user = get_user_by_username("nonexist", db_session)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services\auth_service.py:47: in get_user_by_username
+    return db.query(User).filter(User.username == username).first()
+           ^^^^^^^^
+E   AttributeError: 'str' object has no attribute 'query'
+________________ TestGetDispatchBatches.test_get_batches_empty ________________
+tests\unit\services\test_dispatch_service.py:126: in test_get_batches_empty
+    result = await DispatchService.get_dispatch_batches(
+E   TypeError: DispatchService.get_dispatch_batches() got an unexpected keyword argument 'page'
+_________ TestGetDispatchBatchDetail.test_get_batch_detail_not_found __________
+tests\unit\services\test_dispatch_service.py:203: in test_get_batch_detail_not_found
+    result = await DispatchService.get_dispatch_batch(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: type object 'DispatchService' has no attribute 'get_dispatch_batch'. Did you mean: 'get_dispatch_batches'?
+__________ TestDriverServiceCreateDriver.test_create_driver_success ___________
+tests\unit\services\test_driver_service.py:74: in test_create_driver_success
+    driver_create = DriverCreate(
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for DriverCreate
+E   shift
+E     Field required [type=missing, input_value={'driver_code': 'D1700000...', 'node_code': 'SC001'}, input_type=dict]
+E       For further information visit https://errors.pydantic.dev/2.13/v/missing
+________ TestDriverServiceCreateDriver.test_create_driver_code_exists _________
+tests\unit\services\test_driver_service.py:97: in test_create_driver_code_exists
+    driver_create = DriverCreate(
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for DriverCreate
+E   shift
+E     Field required [type=missing, input_value={'driver_code': 'D1700000...', 'node_code': 'SC001'}, input_type=dict]
+E       For further information visit https://errors.pydantic.dev/2.13/v/missing
+_______ TestDriverServiceCreateDriver.test_create_driver_node_not_found _______
+tests\unit\services\test_driver_service.py:122: in test_create_driver_node_not_found
+    driver_create = DriverCreate(
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for DriverCreate
+E   shift
+E     Field required [type=missing, input_value={'driver_code': 'D1700000... 'node_code': 'INVALID'}, input_type=dict]
+E       For further information visit https://errors.pydantic.dev/2.13/v/missing
+_____________ TestDriverServiceGetDriver.test_get_driver_success ______________
+tests\unit\services\test_driver_service.py:184: in test_get_driver_success
+    assert result["data"]["driver_code"] == "D1700000000000"
+E   AssertionError: assert <MagicMock name='\u5b58\u50a8\u4e2d\u5fc31.driver_code' id='3025490815808'> == 'D1700000000000'
+_______________ TestGoodsServiceGetGoods.test_get_goods_success _______________
+tests\unit\services\test_goods_service.py:75: in test_get_goods_success
+    assert result["code"] == CODE_SUCCESS
+E   assert 50000 == 0
+_________ TestGoodsServiceGetGoods.test_get_goods_with_status_filter __________
+tests\unit\services\test_goods_service.py:94: in test_get_goods_with_status_filter
+    assert result["code"] == CODE_SUCCESS
+E   assert 50000 == 0
+__________ TestGoodsServiceGetGoods.test_get_goods_with_node_filter ___________
+tests\unit\services\test_goods_service.py:115: in test_get_goods_with_node_filter
+    assert result["code"] == CODE_SUCCESS
+E   assert 50000 == 0
+____ TestNodeServiceCreateStorageCenter.test_create_storage_center_success ____
+tests\unit\services\test_node_service.py:95: in test_create_storage_center_success
+    assert result["code"] == CODE_SUCCESS
+E   assert 50000 == 0
+____ TestNodeServiceCreateSortingCenter.test_create_sorting_center_success ____
+tests\unit\services\test_node_service.py:193: in test_create_sorting_center_success
+    assert result["code"] == CODE_SUCCESS
+E   assert 50000 == 0
+________________ TestNodeServiceGetNode.test_get_node_success _________________
+tests\unit\services\test_node_service.py:352: in test_get_node_success
+    assert result["data"]["node_code"] == "SC001"
+E   AssertionError: assert <MagicMock name='mock.node_code' id='3025489172752'> == 'SC001'
+____________ TestOrderServiceCreateOrder.test_create_order_success ____________
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:569: in runtest
+    super().runtest()
+.venv\Lib\site-packages\pytest_asyncio\plugin.py:905: in inner
+    runner.run(coro, context=context)
+C:\Users\Lenovo\miniconda3\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Lenovo\miniconda3\Lib\asyncio\base_events.py:687: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+C:\Users\Lenovo\miniconda3\Lib\unittest\mock.py:1409: in patched
+    with self.decoration_helper(patched,
+C:\Users\Lenovo\miniconda3\Lib\contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+C:\Users\Lenovo\miniconda3\Lib\unittest\mock.py:1374: in decoration_helper
+    arg = exit_stack.enter_context(patching)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\Lenovo\miniconda3\Lib\contextlib.py:526: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+C:\Users\Lenovo\miniconda3\Lib\unittest\mock.py:1463: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+C:\Users\Lenovo\miniconda3\Lib\unittest\mock.py:1436: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'services.order_service' from 'd:\\Git Demo\\LogisticSystem\\src\\backend\\services\\order_service.py'> does not have the attribute 'time'
+______________ TestOrderServiceGetOrders.test_get_orders_success ______________
+tests\unit\services\test_order_service.py:203: in test_get_orders_success
+    assert result["code"] == CODE_SUCCESS
+E   assert 50000 == 0
+________ TestOrderServiceGetOrders.test_get_orders_with_status_filter _________
+tests\unit\services\test_order_service.py:222: in test_get_orders_with_status_filter
+    assert result["code"] == CODE_SUCCESS
+E   assert 50000 == 0
+_________ TestPackageServiceRepackPackage.test_repack_package_success _________
+tests\unit\services\test_package_service.py:157: in test_repack_package_success
+    assert result["code"] == CODE_SUCCESS
+E   assert 50000 == 0
+__________ TestCreateRoute.test_create_route_node_dispatch_not_found __________
+tests\unit\services\test_route_service.py:73: in test_create_route_node_dispatch_not_found
+    result = await RouteService.create_route(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: type object 'RouteService' has no attribute 'create_route'
+_____________________ TestGetRoutes.test_get_routes_empty _____________________
+tests\unit\services\test_route_service.py:131: in test_get_routes_empty
+    result = await RouteService.get_routes(
+E   TypeError: RouteService.get_routes() missing 1 required positional argument: 'batch_code'
+_____________ TestGetRouteDetail.test_get_route_detail_not_found ______________
+tests\unit\services\test_route_service.py:206: in test_get_route_detail_not_found
+    result = await RouteService.get_route(
+                   ^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: type object 'RouteService' has no attribute 'get_route'. Did you mean: 'get_routes'?
+__________ TestScheduleServiceQuery.test_get_global_schedules_empty ___________
+tests\unit\services\test_schedule_service.py:186: in test_get_global_schedules_empty
+    result = await ScheduleService.get_global_schedules(
+services\schedule_service.py:137: in get_global_schedules
+    query = db.query(GlobalSchedule)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:2962: in query
+    return self._query_cls(entities, self, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\query.py:277: in __init__
+    self._set_entities(entities)
+.venv\Lib\site-packages\sqlalchemy\orm\query.py:290: in _set_entities
+    coercions.expect(
+.venv\Lib\site-packages\sqlalchemy\sql\coercions.py:389: in expect
+    insp._post_inspect
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:1234: in __get__
+    obj.__dict__[self.__name__] = result = self.fget(obj)
+                                           ^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2734: in _post_inspect
+    self._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_________ TestScheduleServiceQuery.test_get_global_schedule_not_found _________
+tests\unit\services\test_schedule_service.py:197: in test_get_global_schedule_not_found
+    result = await ScheduleService.get_global_schedule(
+services\schedule_service.py:193: in get_global_schedule
+    db.query(GlobalSchedule)
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:2962: in query
+    return self._query_cls(entities, self, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\query.py:277: in __init__
+    self._set_entities(entities)
+.venv\Lib\site-packages\sqlalchemy\orm\query.py:290: in _set_entities
+    coercions.expect(
+.venv\Lib\site-packages\sqlalchemy\sql\coercions.py:389: in expect
+    insp._post_inspect
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:1234: in __get__
+    obj.__dict__[self.__name__] = result = self.fget(obj)
+                                           ^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2734: in _post_inspect
+    self._check_configure()
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:2411: in _check_configure
+    _configure_registries({self.registry}, cascade=True)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4228: in _configure_registries
+    _do_configure_registries(registries, cascade)
+.venv\Lib\site-packages\sqlalchemy\orm\mapper.py:4265: in _do_configure_registries
+    raise e
+E   sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+_____________ TestDeliverPackages.test_deliver_vehicle_not_found ______________
+tests\unit\services\test_simulation_service.py:226: in test_deliver_vehicle_not_found
+    assert "车辆" in result["message"] or "不存在" in result["message"]
+E   assert ('\u8f66\u8f86' in "\u6a21\u62df\u9001\u8fbe\u5931\u8d25\uff1aOne or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called." or '\u4e0d\u5b58\u5728' in "\u6a21\u62df\u9001\u8fbe\u5931\u8d25\uff1aOne or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.")
+_____________ TestDeliverPackages.test_deliver_package_not_found ______________
+tests\unit\services\test_simulation_service.py:244: in test_deliver_package_not_found
+    assert "包裹" in result["message"] or "不存在" in result["message"]
+E   assert ('\u5305\u88f9' in "\u6a21\u62df\u9001\u8fbe\u5931\u8d25\uff1aOne or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called." or '\u4e0d\u5b58\u5728' in "\u6a21\u62df\u9001\u8fbe\u5931\u8d25\uff1aOne or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.")
+_________ TestVehicleServiceCreateVehicle.test_create_vehicle_success _________
+tests\unit\services\test_vehicle_service.py:90: in test_create_vehicle_success
+    assert result["code"] == CODE_SUCCESS
+E   assert 50000 == 0
+____________ TestVehicleServiceGetVehicle.test_get_vehicle_success ____________
+tests\unit\services\test_vehicle_service.py:191: in test_get_vehicle_success
+    assert result["code"] == CODE_SUCCESS
+E   assert 50000 == 0
+============================== warnings summary ===============================
+config\database.py:6
+  d:\Git Demo\LogisticSystem\src\backend\config\database.py:6: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class Settings(BaseSettings):
+
+schemas\driver.py:27
+  d:\Git Demo\LogisticSystem\src\backend\schemas\driver.py:27: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class DriverResponse(BaseModel):
+
+schemas\goods.py:24
+  d:\Git Demo\LogisticSystem\src\backend\schemas\goods.py:24: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class GoodsResponse(BaseModel):
+
+schemas\node.py:6
+  d:\Git Demo\LogisticSystem\src\backend\schemas\node.py:6: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class NodeResponse(BaseModel):
+
+schemas\node.py:42
+  d:\Git Demo\LogisticSystem\src\backend\schemas\node.py:42: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class StorageCenterResponse(BaseModel):
+
+schemas\node.py:81
+  d:\Git Demo\LogisticSystem\src\backend\schemas\node.py:81: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SortingCenterResponse(BaseModel):
+
+schemas\order.py:22
+  d:\Git Demo\LogisticSystem\src\backend\schemas\order.py:22: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class OrderResponse(BaseModel):
+
+schemas\package.py:11
+  d:\Git Demo\LogisticSystem\src\backend\schemas\package.py:11: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class PackageResponse(BaseModel):
+
+schemas\vehicle.py:30
+  d:\Git Demo\LogisticSystem\src\backend\schemas\vehicle.py:30: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class VehicleResponse(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/services/test_auth_service.py::TestCreateAccessToken::test_create_access_token - sqlalchemy.exc.InvalidRequestError: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+FAILED tests/unit/services/test_auth_service.py::TestCreateAccessToken::test_create_access_token_expired - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+FAILED tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_success - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+FAILED tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_wrong_password - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+FAILED tests/unit/services/test_auth_service.py::TestAuthenticateUser::test_authenticate_user_not_found - AttributeError: 'str' object has no attribute 'query'
+FAILED tests/unit/services/test_auth_service.py::TestGetUserByUsername::test_get_user_by_username_success - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+FAILED tests/unit/services/test_auth_service.py::TestGetUserByUsername::test_get_user_by_username_not_found - AttributeError: 'str' object has no attribute 'query'
+FAILED tests/unit/services/test_dispatch_service.py::TestGetDispatchBatches::test_get_batches_empty - TypeError: DispatchService.get_dispatch_batches() got an unexpected keyword argument 'page'
+FAILED tests/unit/services/test_dispatch_service.py::TestGetDispatchBatchDetail::test_get_batch_detail_not_found - AttributeError: type object 'DispatchService' has no attribute 'get_dispatch_batch'. Did you mean: 'get_dispatch_batches'?
+FAILED tests/unit/services/test_driver_service.py::TestDriverServiceCreateDriver::test_create_driver_success - pydantic_core._pydantic_core.ValidationError: 1 validation error for DriverCreate
+shift
+  Field required [type=missing, input_value={'driver_code': 'D1700000...', 'node_code': 'SC001'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+FAILED tests/unit/services/test_driver_service.py::TestDriverServiceCreateDriver::test_create_driver_code_exists - pydantic_core._pydantic_core.ValidationError: 1 validation error for DriverCreate
+shift
+  Field required [type=missing, input_value={'driver_code': 'D1700000...', 'node_code': 'SC001'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+FAILED tests/unit/services/test_driver_service.py::TestDriverServiceCreateDriver::test_create_driver_node_not_found - pydantic_core._pydantic_core.ValidationError: 1 validation error for DriverCreate
+shift
+  Field required [type=missing, input_value={'driver_code': 'D1700000... 'node_code': 'INVALID'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+FAILED tests/unit/services/test_driver_service.py::TestDriverServiceGetDriver::test_get_driver_success - AssertionError: assert <MagicMock name='\u5b58\u50a8\u4e2d\u5fc31.driver_code' id='3025490815808'> == 'D1700000000000'
+FAILED tests/unit/services/test_goods_service.py::TestGoodsServiceGetGoods::test_get_goods_success - assert 50000 == 0
+FAILED tests/unit/services/test_goods_service.py::TestGoodsServiceGetGoods::test_get_goods_with_status_filter - assert 50000 == 0
+FAILED tests/unit/services/test_goods_service.py::TestGoodsServiceGetGoods::test_get_goods_with_node_filter - assert 50000 == 0
+FAILED tests/unit/services/test_node_service.py::TestNodeServiceCreateStorageCenter::test_create_storage_center_success - assert 50000 == 0
+FAILED tests/unit/services/test_node_service.py::TestNodeServiceCreateSortingCenter::test_create_sorting_center_success - assert 50000 == 0
+FAILED tests/unit/services/test_node_service.py::TestNodeServiceGetNode::test_get_node_success - AssertionError: assert <MagicMock name='mock.node_code' id='3025489172752'> == 'SC001'
+FAILED tests/unit/services/test_order_service.py::TestOrderServiceCreateOrder::test_create_order_success - AttributeError: <module 'services.order_service' from 'd:\\Git Demo\\LogisticSystem\\src\\backend\\services\\order_service.py'> does not have the attribute 'time'
+FAILED tests/unit/services/test_order_service.py::TestOrderServiceGetOrders::test_get_orders_success - assert 50000 == 0
+FAILED tests/unit/services/test_order_service.py::TestOrderServiceGetOrders::test_get_orders_with_status_filter - assert 50000 == 0
+FAILED tests/unit/services/test_package_service.py::TestPackageServiceRepackPackage::test_repack_package_success - assert 50000 == 0
+FAILED tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_node_dispatch_not_found - AttributeError: type object 'RouteService' has no attribute 'create_route'
+FAILED tests/unit/services/test_route_service.py::TestGetRoutes::test_get_routes_empty - TypeError: RouteService.get_routes() missing 1 required positional argument: 'batch_code'
+FAILED tests/unit/services/test_route_service.py::TestGetRouteDetail::test_get_route_detail_not_found - AttributeError: type object 'RouteService' has no attribute 'get_route'. Did you mean: 'get_routes'?
+FAILED tests/unit/services/test_schedule_service.py::TestScheduleServiceQuery::test_get_global_schedules_empty - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+FAILED tests/unit/services/test_schedule_service.py::TestScheduleServiceQuery::test_get_global_schedule_not_found - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+FAILED tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_vehicle_not_found - assert ('\u8f66\u8f86' in "\u6a21\u62df\u9001\u8fbe\u5931\u8d25\uff1aOne or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called." or '\u4e0d\u5b58\u5728' in "\u6a21\u62df\u9001\u8fbe\u5931\u8d25\uff1aOne or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.")
+FAILED tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_package_not_found - assert ('\u5305\u88f9' in "\u6a21\u62df\u9001\u8fbe\u5931\u8d25\uff1aOne or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called." or '\u4e0d\u5b58\u5728' in "\u6a21\u62df\u9001\u8fbe\u5931\u8d25\uff1aOne or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.")
+FAILED tests/unit/services/test_vehicle_service.py::TestVehicleServiceCreateVehicle::test_create_vehicle_success - assert 50000 == 0
+FAILED tests/unit/services/test_vehicle_service.py::TestVehicleServiceGetVehicle::test_get_vehicle_success - assert 50000 == 0
+ERROR tests/unit/services/test_dispatch_service.py::TestCreateNodeDispatch::test_create_node_dispatch_success - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_dispatch_service.py::TestCreateNodeDispatch::test_create_node_dispatch_no_available_vehicles - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_dispatch_service.py::TestGetDispatchBatches::test_get_batches_with_data - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_dispatch_service.py::TestGetDispatchBatchDetail::test_get_batch_detail_success - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_success - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_route_service.py::TestCreateRoute::test_create_route_algorithm_error - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_route_service.py::TestGetRoutes::test_get_routes_with_data - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_route_service.py::TestGetRouteDetail::test_get_route_detail_success - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_schedule_service.py::TestScheduleServiceNormalFlow::test_normal_flow_writes_all_data - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_schedule_service.py::TestScheduleServiceNormalFlow::test_specific_orders_schedule - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_schedule_service.py::TestScheduleServiceExceptionRollback::test_f021_exception_triggers_rollback - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_schedule_service.py::TestScheduleServiceExceptionRollback::test_f007_exception_triggers_rollback - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_by_vehicle_success - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_by_package_success - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_no_params - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+ERROR tests/unit/services/test_simulation_service.py::TestDeliverPackages::test_deliver_package_not_in_transit - sqlalchemy.exc.InvalidRequestError: One or more mappers failed to initialize - can't proceed with initialization of other mappers. Triggering mapper: 'Mapper[ExceptionEvent(exception_events)]'. Original exception was: Mapper 'Mapper[Node(nodes)]' has no property 'exception_events'.  If this property was indicated from other mappers or configure events, ensure registry.configure() has been called.
+============ 32 failed, 56 passed, 9 warnings, 16 errors in 5.64s =============

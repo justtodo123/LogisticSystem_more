@@ -58,7 +58,7 @@ def main():
     print(f"执行命令：{' '.join(cmd)}")
     print("-" * 60)
     
-    result = subprocess.run(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
+    result = subprocess.run(cmd, cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     sys.exit(result.returncode)
 
 

@@ -50,7 +50,8 @@ def sample_goods():
 class TestGoodsServiceGetGoods:
     """测试获取货物列表"""
 
-    def test_get_goods_success(self, mock_db, sample_goods):
+    @pytest.mark.asyncio
+    async def test_get_goods_success(self, mock_db, sample_goods):
         """测试成功获取货物列表"""
         # 模拟数据库查询
         mock_query = MagicMock()
@@ -75,7 +76,8 @@ class TestGoodsServiceGetGoods:
         assert "items" in result["data"]
         assert result["data"]["total"] == 1
 
-    def test_get_goods_with_status_filter(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_get_goods_with_status_filter(self, mock_db):
         """测试按状态筛选货物"""
         # 模拟数据库查询
         mock_query = MagicMock()
@@ -92,7 +94,8 @@ class TestGoodsServiceGetGoods:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["total"] == 0
 
-    def test_get_goods_with_node_filter(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_get_goods_with_node_filter(self, mock_db):
         """测试按节点筛选货物"""
         # 模拟数据库查询
         mock_query = MagicMock()
@@ -116,7 +119,8 @@ class TestGoodsServiceGetGoods:
 class TestGoodsServiceGetGood:
     """测试获取货物详情"""
 
-    def test_get_good_success(self, mock_db, sample_goods):
+    @pytest.mark.asyncio
+    async def test_get_good_success(self, mock_db, sample_goods):
         """测试成功获取货物详情"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -132,7 +136,8 @@ class TestGoodsServiceGetGood:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["goods_code"] == "G1700000000000_0"
 
-    def test_get_good_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_get_good_not_found(self, mock_db):
         """测试货物不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -148,7 +153,8 @@ class TestGoodsServiceGetGood:
 class TestGoodsServiceUpdateGood:
     """测试更新货物"""
 
-    def test_update_good_success(self, mock_db, sample_goods):
+    @pytest.mark.asyncio
+    async def test_update_good_success(self, mock_db, sample_goods):
         """测试成功更新货物"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -168,7 +174,8 @@ class TestGoodsServiceUpdateGood:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["goods_name"] == "更新后的货物"
 
-    def test_update_good_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_update_good_not_found(self, mock_db):
         """测试货物不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -183,7 +190,8 @@ class TestGoodsServiceUpdateGood:
         assert result["code"] == CODE_GOODS_NOT_FOUND
         assert "货物不存在" in result["message"]
 
-    def test_update_good_node_not_found(self, mock_db, sample_goods):
+    @pytest.mark.asyncio
+    async def test_update_good_node_not_found(self, mock_db, sample_goods):
         """测试节点不存在"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [

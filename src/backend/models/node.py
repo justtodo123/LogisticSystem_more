@@ -25,3 +25,4 @@ class Node(Base):
     drivers = relationship("Driver", back_populates="node")
     packages_from = relationship("Package", foreign_keys="Package.from_node_id", back_populates="from_node")
     packages_to = relationship("Package", foreign_keys="Package.to_node_id", back_populates="to_node")
+    exception_events = relationship("ExceptionEvent", back_populates="trigger_node")

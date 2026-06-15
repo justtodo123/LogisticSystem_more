@@ -82,7 +82,8 @@ def sample_node():
 class TestNodeServiceCreateStorageCenter:
     """测试创建存储中心"""
 
-    def test_create_storage_center_success(self, mock_db, sample_storage_center_data):
+    @pytest.mark.asyncio
+    async def test_create_storage_center_success(self, mock_db, sample_storage_center_data):
         """测试成功创建存储中心"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.return_value = None  # node_code不存在
@@ -95,7 +96,8 @@ class TestNodeServiceCreateStorageCenter:
         assert result["message"] == "success"
         assert result["data"]["node_code"] == "SC001"
 
-    def test_create_storage_center_code_exists(self, mock_db, sample_storage_center_data, sample_node):
+    @pytest.mark.asyncio
+    async def test_create_storage_center_code_exists(self, mock_db, sample_storage_center_data, sample_node):
         """测试存储中心编号已存在"""
         # 模拟数据库查询返回已存在的节点
         mock_db.query.return_value.filter.return_value.first.return_value = sample_node
@@ -111,7 +113,8 @@ class TestNodeServiceCreateStorageCenter:
 class TestNodeServiceUpdateStorageCenter:
     """测试更新存储中心"""
 
-    def test_update_storage_center_success(self, mock_db, sample_node):
+    @pytest.mark.asyncio
+    async def test_update_storage_center_success(self, mock_db, sample_node):
         """测试成功更新存储中心"""
         # 模拟数据库查询
         storage_center = MagicMock(spec=StorageCenter)
@@ -130,7 +133,8 @@ class TestNodeServiceUpdateStorageCenter:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["name"] == "更新后的名称"
 
-    def test_update_storage_center_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_update_storage_center_not_found(self, mock_db):
         """测试存储中心不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -146,7 +150,8 @@ class TestNodeServiceUpdateStorageCenter:
 class TestNodeServiceDeleteStorageCenter:
     """测试删除存储中心"""
 
-    def test_delete_storage_center_success(self, mock_db, sample_node):
+    @pytest.mark.asyncio
+    async def test_delete_storage_center_success(self, mock_db, sample_node):
         """测试成功删除存储中心"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.return_value = sample_node
@@ -158,7 +163,8 @@ class TestNodeServiceDeleteStorageCenter:
         assert result["code"] == CODE_SUCCESS
         assert result["message"] == "success"
 
-    def test_delete_storage_center_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_delete_storage_center_not_found(self, mock_db):
         """测试存储中心不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -174,7 +180,8 @@ class TestNodeServiceDeleteStorageCenter:
 class TestNodeServiceCreateSortingCenter:
     """测试创建分拣中心"""
 
-    def test_create_sorting_center_success(self, mock_db, sample_sorting_center_data):
+    @pytest.mark.asyncio
+    async def test_create_sorting_center_success(self, mock_db, sample_sorting_center_data):
         """测试成功创建分拣中心"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.return_value = None  # node_code不存在
@@ -187,7 +194,8 @@ class TestNodeServiceCreateSortingCenter:
         assert result["message"] == "success"
         assert result["data"]["node_code"] == "SO001"
 
-    def test_create_sorting_center_code_exists(self, mock_db, sample_sorting_center_data):
+    @pytest.mark.asyncio
+    async def test_create_sorting_center_code_exists(self, mock_db, sample_sorting_center_data):
         """测试分拣中心编号已存在"""
         # 模拟数据库查询返回已存在的节点
         mock_db.query.return_value.filter.return_value.first.return_value = MagicMock()
@@ -203,7 +211,8 @@ class TestNodeServiceCreateSortingCenter:
 class TestNodeServiceUpdateSortingCenter:
     """测试更新分拣中心"""
 
-    def test_update_sorting_center_success(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_update_sorting_center_success(self, mock_db):
         """测试成功更新分拣中心"""
         # 模拟数据库查询
         node = MagicMock(spec=Node)
@@ -231,7 +240,8 @@ class TestNodeServiceUpdateSortingCenter:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["name"] == "更新后的名称"
 
-    def test_update_sorting_center_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_update_sorting_center_not_found(self, mock_db):
         """测试分拣中心不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -247,7 +257,8 @@ class TestNodeServiceUpdateSortingCenter:
 class TestNodeServiceDeleteSortingCenter:
     """测试删除分拣中心"""
 
-    def test_delete_sorting_center_success(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_delete_sorting_center_success(self, mock_db):
         """测试成功删除分拣中心"""
         # 模拟数据库查询
         node = MagicMock(spec=Node)
@@ -260,7 +271,8 @@ class TestNodeServiceDeleteSortingCenter:
         assert result["code"] == CODE_SUCCESS
         assert result["message"] == "success"
 
-    def test_delete_sorting_center_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_delete_sorting_center_not_found(self, mock_db):
         """测试分拣中心不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -276,7 +288,8 @@ class TestNodeServiceDeleteSortingCenter:
 class TestNodeServiceGetNodes:
     """测试获取节点列表"""
 
-    def test_get_nodes_success(self, mock_db, sample_node):
+    @pytest.mark.asyncio
+    async def test_get_nodes_success(self, mock_db, sample_node):
         """测试成功获取节点列表"""
         # 模拟数据库查询
         mock_query = MagicMock()
@@ -298,7 +311,8 @@ class TestNodeServiceGetNodes:
         assert "items" in result["data"]
         assert result["data"]["total"] == 1
 
-    def test_get_nodes_with_type_filter(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_get_nodes_with_type_filter(self, mock_db):
         """测试按节点类型筛选"""
         # 模拟数据库查询
         mock_query = MagicMock()
@@ -318,7 +332,8 @@ class TestNodeServiceGetNodes:
 class TestNodeServiceGetNode:
     """测试获取节点详情"""
 
-    def test_get_node_success(self, mock_db, sample_node):
+    @pytest.mark.asyncio
+    async def test_get_node_success(self, mock_db, sample_node):
         """测试成功获取节点详情"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.return_value = sample_node
@@ -336,7 +351,8 @@ class TestNodeServiceGetNode:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["node_code"] == "SC001"
 
-    def test_get_node_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_get_node_not_found(self, mock_db):
         """测试节点不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None

@@ -61,7 +61,8 @@ def sample_driver():
 class TestDriverServiceCreateDriver:
     """测试创建司机"""
 
-    def test_create_driver_success(self, mock_db, sample_node):
+    @pytest.mark.asyncio
+    async def test_create_driver_success(self, mock_db, sample_node):
         """测试成功创建司机"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -86,7 +87,8 @@ class TestDriverServiceCreateDriver:
         assert result["message"] == "success"
         assert result["data"]["driver_code"] == "D1700000000000"
 
-    def test_create_driver_code_exists(self, mock_db, sample_driver):
+    @pytest.mark.asyncio
+    async def test_create_driver_code_exists(self, mock_db, sample_driver):
         """测试司机编号已存在"""
         # 模拟数据库查询返回已存在的司机
         mock_db.query.return_value.filter.return_value.first.return_value = sample_driver
@@ -107,7 +109,8 @@ class TestDriverServiceCreateDriver:
         assert result["code"] == CODE_CONFLICT
         assert "司机编号已存在" in result["message"]
 
-    def test_create_driver_node_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_create_driver_node_not_found(self, mock_db):
         """测试节点不存在"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -135,7 +138,8 @@ class TestDriverServiceCreateDriver:
 class TestDriverServiceGetDrivers:
     """测试获取司机列表"""
 
-    def test_get_drivers_success(self, mock_db, sample_driver):
+    @pytest.mark.asyncio
+    async def test_get_drivers_success(self, mock_db, sample_driver):
         """测试成功获取司机列表"""
         # 模拟数据库查询
         mock_query = MagicMock()
@@ -161,7 +165,8 @@ class TestDriverServiceGetDrivers:
 class TestDriverServiceGetDriver:
     """测试获取司机详情"""
 
-    def test_get_driver_success(self, mock_db, sample_driver):
+    @pytest.mark.asyncio
+    async def test_get_driver_success(self, mock_db, sample_driver):
         """测试成功获取司机详情"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.return_value = sample_driver
@@ -178,7 +183,8 @@ class TestDriverServiceGetDriver:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["driver_code"] == "D1700000000000"
 
-    def test_get_driver_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_get_driver_not_found(self, mock_db):
         """测试司机不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -194,7 +200,8 @@ class TestDriverServiceGetDriver:
 class TestDriverServiceUpdateDriver:
     """测试更新司机"""
 
-    def test_update_driver_success(self, mock_db, sample_driver):
+    @pytest.mark.asyncio
+    async def test_update_driver_success(self, mock_db, sample_driver):
         """测试成功更新司机"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -212,7 +219,8 @@ class TestDriverServiceUpdateDriver:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["name"] == "更新后的司机"
 
-    def test_update_driver_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_update_driver_not_found(self, mock_db):
         """测试司机不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -231,7 +239,8 @@ class TestDriverServiceUpdateDriver:
 class TestDriverServiceDeleteDriver:
     """测试删除司机"""
 
-    def test_delete_driver_success(self, mock_db, sample_driver):
+    @pytest.mark.asyncio
+    async def test_delete_driver_success(self, mock_db, sample_driver):
         """测试成功删除司机"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.return_value = sample_driver
@@ -243,7 +252,8 @@ class TestDriverServiceDeleteDriver:
         assert result["code"] == CODE_SUCCESS
         assert result["message"] == "success"
 
-    def test_delete_driver_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_delete_driver_not_found(self, mock_db):
         """测试司机不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -255,7 +265,8 @@ class TestDriverServiceDeleteDriver:
         assert result["code"] == CODE_DRIVER_NOT_FOUND
         assert "司机不存在" in result["message"]
 
-    def test_delete_driver_status_not_allowed(self, mock_db, sample_driver):
+    @pytest.mark.asyncio
+    async def test_delete_driver_status_not_allowed(self, mock_db, sample_driver):
         """测试司机有未完成订单不可删除"""
         # 修改司机状态为busy
         sample_driver.status = "busy"

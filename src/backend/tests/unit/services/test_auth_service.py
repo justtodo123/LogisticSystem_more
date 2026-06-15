@@ -7,10 +7,9 @@
 """
 import pytest
 from datetime import datetime, timedelta, timezone
-from jose import JWTError
+from jwt.exceptions import PyJWTError
 
 from services.auth_service import (
-    AuthService,
     get_password_hash,
     verify_password,
     create_access_token,
@@ -114,7 +113,7 @@ class TestCreateAccessToken:
         )
         
         # 验证Token解码会失败
-        with pytest.raises(JWTError):
+        with pytest.raises(PyJWTError):
             decode_token(token)
 
 

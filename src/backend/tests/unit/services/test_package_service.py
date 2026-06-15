@@ -58,7 +58,8 @@ def sample_package():
 class TestPackageServiceGetPackages:
     """测试获取包裹列表"""
 
-    def test_get_packages_success(self, mock_db, sample_package):
+    @pytest.mark.asyncio
+    async def test_get_packages_success(self, mock_db, sample_package):
         """测试成功获取包裹列表"""
         # 模拟数据库查询
         mock_query = MagicMock()
@@ -81,7 +82,8 @@ class TestPackageServiceGetPackages:
         assert "items" in result["data"]
         assert result["data"]["total"] == 1
 
-    def test_get_packages_with_status_filter(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_get_packages_with_status_filter(self, mock_db):
         """测试按状态筛选包裹"""
         # 模拟数据库查询
         mock_query = MagicMock()
@@ -101,7 +103,8 @@ class TestPackageServiceGetPackages:
 class TestPackageServiceGetPackage:
     """测试获取包裹详情"""
 
-    def test_get_package_success(self, mock_db, sample_package):
+    @pytest.mark.asyncio
+    async def test_get_package_success(self, mock_db, sample_package):
         """测试成功获取包裹详情"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -117,7 +120,8 @@ class TestPackageServiceGetPackage:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["package_code"] == "PKG1700000000000"
 
-    def test_get_package_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_get_package_not_found(self, mock_db):
         """测试包裹不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -133,7 +137,8 @@ class TestPackageServiceGetPackage:
 class TestPackageServiceRepackPackage:
     """测试重新打包包裹"""
 
-    def test_repack_package_success(self, mock_db, sample_package):
+    @pytest.mark.asyncio
+    async def test_repack_package_success(self, mock_db, sample_package):
         """测试成功重新打包包裹"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -152,7 +157,8 @@ class TestPackageServiceRepackPackage:
         assert result["code"] == CODE_SUCCESS
         assert "package_code" in result["data"]
 
-    def test_repack_package_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_repack_package_not_found(self, mock_db):
         """测试包裹不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -167,7 +173,8 @@ class TestPackageServiceRepackPackage:
         assert result["code"] == CODE_PACKAGE_NOT_FOUND
         assert "包裹不存在" in result["message"]
 
-    def test_repack_package_status_not_allowed(self, mock_db, sample_package):
+    @pytest.mark.asyncio
+    async def test_repack_package_status_not_allowed(self, mock_db, sample_package):
         """测试包裹状态不允许repack"""
         # 修改包裹状态为packed
         sample_package.status = "packed"
@@ -183,7 +190,8 @@ class TestPackageServiceRepackPackage:
         assert result["code"] == CODE_PACKAGE_STATUS_NOT_ALLOWED
         assert "不允许repack" in result["message"]
 
-    def test_repack_package_goods_not_belong(self, mock_db, sample_package):
+    @pytest.mark.asyncio
+    async def test_repack_package_goods_not_belong(self, mock_db, sample_package):
         """测试货物不属于原包裹"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [

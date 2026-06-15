@@ -74,7 +74,8 @@ class TestOrderServiceCreateOrder:
 
     @patch('services.order_service.random')
     @patch('services.order_service.time')
-    def test_create_order_success(self, mock_time, mock_random, mock_db, sample_node, sample_storage_center):
+    @pytest.mark.asyncio
+    async def test_create_order_success(self, mock_time, mock_random, mock_db, sample_node, sample_storage_center):
         """测试成功创建订单"""
         # 配置mock
         mock_time.time.return_value = 1700000000.0
@@ -93,7 +94,7 @@ class TestOrderServiceCreateOrder:
             destination_node_code="SO001",
             time_window="2026-06-15 10:00-12:00",
             goods=[
-                MagicMock(goods_name="测试货物", goods_type=" electronics", weight=10.0, volume=0.5)
+                MagicMock(goods_name="测试货物", goods_type="electronics", weight=10.0, volume=0.5)
             ]
         )
         
@@ -107,7 +108,8 @@ class TestOrderServiceCreateOrder:
         assert result["data"]["destination_node_code"] == "SO001"
         assert result["data"]["status"] == "pending"
 
-    def test_create_order_destination_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_create_order_destination_not_found(self, mock_db):
         """测试目的地节点不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -126,7 +128,8 @@ class TestOrderServiceCreateOrder:
         assert result["code"] == CODE_NODE_NOT_FOUND
         assert "目的地节点不存在" in result["message"]
 
-    def test_create_order_not_sorting_center(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_create_order_not_sorting_center(self, mock_db):
         """测试目的地不是分拣中心"""
         # 创建非分拣中心节点
         node = MagicMock(spec=Node)
@@ -147,7 +150,8 @@ class TestOrderServiceCreateOrder:
         assert result["code"] == CODE_PARAM_ERROR
         assert "必须是分拣中心" in result["message"]
 
-    def test_create_order_not_level0(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_create_order_not_level0(self, mock_db):
         """测试目的地不是0级分拣中心"""
         # 创建1级分拣中心节点
         node = MagicMock(spec=Node)
@@ -175,7 +179,8 @@ class TestOrderServiceCreateOrder:
 class TestOrderServiceGetOrders:
     """测试获取订单列表"""
 
-    def test_get_orders_success(self, mock_db, sample_order):
+    @pytest.mark.asyncio
+    async def test_get_orders_success(self, mock_db, sample_order):
         """测试成功获取订单列表"""
         # 模拟数据库查询
         mock_query = MagicMock()
@@ -199,7 +204,8 @@ class TestOrderServiceGetOrders:
         assert "items" in result["data"]
         assert result["data"]["total"] == 1
 
-    def test_get_orders_with_status_filter(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_get_orders_with_status_filter(self, mock_db):
         """测试按状态筛选订单"""
         # 模拟数据库查询
         mock_query = MagicMock()
@@ -220,7 +226,8 @@ class TestOrderServiceGetOrders:
 class TestOrderServiceGetOrder:
     """测试获取订单详情"""
 
-    def test_get_order_success(self, mock_db, sample_order):
+    @pytest.mark.asyncio
+    async def test_get_order_success(self, mock_db, sample_order):
         """测试成功获取订单详情"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -236,7 +243,8 @@ class TestOrderServiceGetOrder:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["order_code"] == "O1700000000000"
 
-    def test_get_order_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_get_order_not_found(self, mock_db):
         """测试订单不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -252,7 +260,8 @@ class TestOrderServiceGetOrder:
 class TestOrderServiceUpdateOrder:
     """测试更新订单"""
 
-    def test_update_order_success(self, mock_db, sample_order):
+    @pytest.mark.asyncio
+    async def test_update_order_success(self, mock_db, sample_order):
         """测试成功更新订单"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -271,7 +280,8 @@ class TestOrderServiceUpdateOrder:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["destination_node_code"] == "SO002"
 
-    def test_update_order_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_update_order_not_found(self, mock_db):
         """测试订单不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -286,7 +296,8 @@ class TestOrderServiceUpdateOrder:
         assert result["code"] == CODE_ORDER_NOT_FOUND
         assert "订单不存在" in result["message"]
 
-    def test_update_order_status_not_allowed(self, mock_db, sample_order):
+    @pytest.mark.asyncio
+    async def test_update_order_status_not_allowed(self, mock_db, sample_order):
         """测试订单状态不允许修改"""
         # 设置订单状态为delivering
         sample_order.status = "delivering"
@@ -306,7 +317,8 @@ class TestOrderServiceUpdateOrder:
 class TestOrderServiceDeleteOrder:
     """测试删除订单"""
 
-    def test_delete_order_success(self, mock_db, sample_order):
+    @pytest.mark.asyncio
+    async def test_delete_order_success(self, mock_db, sample_order):
         """测试成功删除订单"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.return_value = sample_order
@@ -319,7 +331,8 @@ class TestOrderServiceDeleteOrder:
         assert result["code"] == CODE_SUCCESS
         assert result["message"] == "success"
 
-    def test_delete_order_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_delete_order_not_found(self, mock_db):
         """测试订单不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -331,7 +344,8 @@ class TestOrderServiceDeleteOrder:
         assert result["code"] == CODE_ORDER_NOT_FOUND
         assert "订单不存在" in result["message"]
 
-    def test_delete_order_status_not_allowed(self, mock_db, sample_order):
+    @pytest.mark.asyncio
+    async def test_delete_order_status_not_allowed(self, mock_db, sample_order):
         """测试订单状态不允许删除"""
         # 设置订单状态为delivering
         sample_order.status = "delivering"

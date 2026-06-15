@@ -20,8 +20,7 @@ from models.vehicle import Vehicle
 from models.driver import Driver
 
 
-# ── 数据库固件 ────────────────────────────────────────────────
-
+# ── 数据库固件 ─────────────────────────────────────────────
 
 @pytest.fixture(scope="function")
 def db_session():
@@ -45,7 +44,6 @@ def db_session():
 
 
 # ── 基础数据固件 ──────────────────────────────────────────────
-
 
 @pytest.fixture(scope="function")
 def test_nodes(db_session):
@@ -386,7 +384,6 @@ def test_users(db_session):
 
 
 # ── 认证辅助函数 ──────────────────────────────────────────────
-
 
 def create_jwt_token(username, role):
     """生成 JWT Token"""

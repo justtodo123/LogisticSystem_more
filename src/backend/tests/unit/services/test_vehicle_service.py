@@ -63,7 +63,8 @@ def sample_vehicle():
 class TestVehicleServiceCreateVehicle:
     """测试创建车辆"""
 
-    def test_create_vehicle_success(self, mock_db, sample_node):
+    @pytest.mark.asyncio
+    async def test_create_vehicle_success(self, mock_db, sample_node):
         """测试成功创建车辆"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -90,7 +91,8 @@ class TestVehicleServiceCreateVehicle:
         assert result["message"] == "success"
         assert result["data"]["vehicle_code"] == "V1700000000000"
 
-    def test_create_vehicle_code_exists(self, mock_db, sample_vehicle):
+    @pytest.mark.asyncio
+    async def test_create_vehicle_code_exists(self, mock_db, sample_vehicle):
         """测试车辆编号已存在"""
         # 模拟数据库查询返回已存在的车辆
         mock_db.query.return_value.filter.return_value.first.return_value = sample_vehicle
@@ -112,7 +114,8 @@ class TestVehicleServiceCreateVehicle:
         assert result["code"] == CODE_CONFLICT
         assert "车辆编号已存在" in result["message"]
 
-    def test_create_vehicle_node_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_create_vehicle_node_not_found(self, mock_db):
         """测试节点不存在"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -141,7 +144,8 @@ class TestVehicleServiceCreateVehicle:
 class TestVehicleServiceGetVehicles:
     """测试获取车辆列表"""
 
-    def test_get_vehicles_success(self, mock_db, sample_vehicle):
+    @pytest.mark.asyncio
+    async def test_get_vehicles_success(self, mock_db, sample_vehicle):
         """测试成功获取车辆列表"""
         # 模拟数据库查询
         mock_query = MagicMock()
@@ -168,7 +172,8 @@ class TestVehicleServiceGetVehicles:
 class TestVehicleServiceGetVehicle:
     """测试获取车辆详情"""
 
-    def test_get_vehicle_success(self, mock_db, sample_vehicle):
+    @pytest.mark.asyncio
+    async def test_get_vehicle_success(self, mock_db, sample_vehicle):
         """测试成功获取车辆详情"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.return_value = sample_vehicle
@@ -186,7 +191,8 @@ class TestVehicleServiceGetVehicle:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["vehicle_code"] == "V1700000000000"
 
-    def test_get_vehicle_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_get_vehicle_not_found(self, mock_db):
         """测试车辆不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -202,7 +208,8 @@ class TestVehicleServiceGetVehicle:
 class TestVehicleServiceUpdateVehicle:
     """测试更新车辆"""
 
-    def test_update_vehicle_success(self, mock_db, sample_vehicle):
+    @pytest.mark.asyncio
+    async def test_update_vehicle_success(self, mock_db, sample_vehicle):
         """测试成功更新车辆"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
@@ -221,7 +228,8 @@ class TestVehicleServiceUpdateVehicle:
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["status"] == "maintenance"
 
-    def test_update_vehicle_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_update_vehicle_not_found(self, mock_db):
         """测试车辆不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -240,7 +248,8 @@ class TestVehicleServiceUpdateVehicle:
 class TestVehicleServiceDeleteVehicle:
     """测试删除车辆"""
 
-    def test_delete_vehicle_success(self, mock_db, sample_vehicle):
+    @pytest.mark.asyncio
+    async def test_delete_vehicle_success(self, mock_db, sample_vehicle):
         """测试成功删除车辆"""
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.return_value = sample_vehicle
@@ -252,7 +261,8 @@ class TestVehicleServiceDeleteVehicle:
         assert result["code"] == CODE_SUCCESS
         assert result["message"] == "success"
 
-    def test_delete_vehicle_not_found(self, mock_db):
+    @pytest.mark.asyncio
+    async def test_delete_vehicle_not_found(self, mock_db):
         """测试车辆不存在"""
         # 模拟数据库查询返回None
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -264,7 +274,8 @@ class TestVehicleServiceDeleteVehicle:
         assert result["code"] == CODE_VEHICLE_NOT_FOUND
         assert "车辆不存在" in result["message"]
 
-    def test_delete_vehicle_status_not_allowed(self, mock_db, sample_vehicle):
+    @pytest.mark.asyncio
+    async def test_delete_vehicle_status_not_allowed(self, mock_db, sample_vehicle):
         """测试配送中车辆不可删除"""
         # 修改车辆状态为delivering
         sample_vehicle.status = "delivering"
