@@ -243,6 +243,7 @@ def test_vehicles(db_session, test_nodes):
     - VEH001: 归属于SC001，status='idle'
     - VEH002: 归属于SC001，status='idle'
     - VEH003: 归属于SO001，status='idle'
+    - VEH004: 归属于SC002，status='idle' (新增，修复SC002没有车辆的问题)
     """
     vehicles_data = [
         {
@@ -268,6 +269,14 @@ def test_vehicles(db_session, test_nodes):
             "energy_type": "fuel",
             "node_code": "SO001",
             "last_arrived_node_code": "SO001",
+        },
+        {
+            "vehicle_code": "VEH004",
+            "model": "测试车型D",
+            "capacity": 120.0,
+            "energy_type": "fuel",
+            "node_code": "SC002",
+            "last_arrived_node_code": "SC002",
         },
     ]
 

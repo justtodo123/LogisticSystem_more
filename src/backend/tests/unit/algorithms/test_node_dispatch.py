@@ -60,6 +60,12 @@ class TestNodeDispatchNormal:
             db=db_session,
         )
         
+        # 将包裹添加到数据库会话，并更新状态为 'packed'
+        for pkg in packages:
+            pkg.status = 'packed'  # 节点调度需要 status='packed' 的包裹
+            db_session.add(pkg)
+        db_session.commit()
+        
         # 调用节点调度
         result = run_node_dispatch(
             schedule_code=schedule_code,
@@ -87,7 +93,7 @@ class TestNodeDispatchNormal:
         测试没有包裹可调度：
         1. 创建一个调度方案（但没有包裹）
         2. 调用 node_dispatch
-        3. 验证返回空结果或业务错误
+        3. 验证抛出 ValueError 异常
         """
         # 创建一个空的调度方案
         from models.global_schedule import GlobalSchedule
@@ -108,16 +114,16 @@ class TestNodeDispatchNormal:
         db_session.add(gs)
         db_session.commit()
         
-        # 调用节点调度
-        result = run_node_dispatch(
-            schedule_code="GS001",
-            demo_mode=True,
-            db=db_session,
-        )
+        # 调用节点调度，应该抛出 ValueError 异常
+        with pytest.raises(ValueError) as exc_info:
+            result = run_node_dispatch(
+                schedule_code="GS001",
+                demo_mode=True,
+                db=db_session,
+            )
         
-        # 验证返回（可能是空结果）
-        assert "batch_code" in result
-        assert result["total_packages"] == 0
+        # 验证异常信息包含 "没有可调度的包裹"
+        assert "没有可调度的包裹" in str(exc_info.value)
 
 
 class TestNodeDispatchEdgeCases:
@@ -154,7 +160,7 @@ class TestNodeDispatchEdgeCases:
         1. 先执行全局调度，生成包裹
         2. 但不创建车辆（test_vehicles fixture不使用）
         3. 调用 node_dispatch
-        4. 验证返回空结果或业务错误
+        4. 验证抛出 ValueError 异常
         """
         # 先执行全局调度
         from algorithms.global_schedule import global_schedule
@@ -183,16 +189,13 @@ class TestNodeDispatchEdgeCases:
         db_session.add(gs)
         db_session.commit()
         
-        # 调用节点调度（应该失败，因为没有车辆）
-        result = run_node_dispatch(
-            schedule_code=schedule_code,
-            demo_mode=True,
-            db=db_session,
-        )
+        # 调用节点调度，应该抛出 ValueError 异常（没有可用的车辆）
+        with pytest.raises(ValueError) as exc_info:
+            result = run_node_dispatch(
+                schedule_code=schedule_code,
+                demo_mode=True,
+                db=db_session,
+            )
         
-        # 验证返回（可能是空结果或错误）
-        if isinstance(result, dict):
-            if "error" in result:
-                assert "车辆" in result["error"] or "vehicle" in result["error"].lower()
-            else:
-                assert result["total_packages"] == 0
+        # 验证异常信息包含 "没有可用的车辆"
+        assert "没有可用的车辆" in str(exc_info.value)
