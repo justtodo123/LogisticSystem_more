@@ -55,8 +55,8 @@ htmlcov/
 coverage.xml
 *.cover
 .hypothesis/
-tests/report.md
-tests/test_report.md
+src/backend/tests/report.md
+src/backend/tests/test_report.md
 
 
 # ==============================
