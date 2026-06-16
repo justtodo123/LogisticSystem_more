@@ -86,15 +86,39 @@ class TestGetRoutes:
         db_session.add(vehicle)
         db_session.commit()
 
+        # 创建测试批次
+        from models.dispatch_batch import DispatchBatch
+        batch = DispatchBatch(
+            batch_code="BATCH001",
+            global_schedule_id=1,
+            status="completed"
+        )
+        db_session.add(batch)
+        db_session.flush()
+
+        # 创建测试节点调度
+        from models.node_dispatch import NodeDispatch
+        node_dispatch = NodeDispatch(
+            dispatch_code="ND001",
+            dispatch_batch_id=batch.id,
+            vehicle_id=vehicle.id,
+            level_phase=0,
+            tasks=[],
+            total_distance=10.0,
+            total_time=30.0
+        )
+        db_session.add(node_dispatch)
+        db_session.flush()
+
         # 创建测试路线
         route = Route(
             route_code="RT001",
-            dispatch_id=1,
+            dispatch_id=node_dispatch.id,
             vehicle_id=vehicle.id,
             total_distance=15.5,
             total_time=45.0,
             total_emission=3.1,
-            route_segments=json.dumps([{"road_name": "测试路段", "start_lng": 114.28, "start_lat": 30.52, "end_lng": 114.29, "end_lat": 30.51}]),
+            route_segments=[{"road_name": "测试路段", "start_lng": 114.28, "start_lat": 30.52, "end_lng": 114.29, "end_lat": 30.51}],
         )
         db_session.add(route)
         db_session.commit()
@@ -158,7 +182,7 @@ class TestGetRouteDetail:
             total_distance=15.5,
             total_time=45.0,
             total_emission=3.1,
-            route_segments=json.dumps([{"road_name": "测试路段", "start_lng": 114.28, "start_lat": 30.52, "end_lng": 114.29, "end_lat": 30.51}]),
+            route_segments=[{"road_name": "测试路段", "start_lng": 114.28, "start_lat": 30.52, "end_lng": 114.29, "end_lat": 30.51}],
         )
         db_session.add(route)
         db_session.commit()
@@ -254,7 +278,7 @@ class TestGetRouteCoordinates:
             total_distance=15.5,
             total_time=45.0,
             total_emission=3.1,
-            route_segments=json.dumps([{"road_name": "测试路段", "start_lng": 114.28, "start_lat": 30.52, "end_lng": 114.29, "end_lat": 30.51}]),
+            route_segments=[{"road_name": "测试路段", "start_lng": 114.28, "start_lat": 30.52, "end_lng": 114.29, "end_lat": 30.51}],
         )
         db_session.add(route)
         db_session.commit()

@@ -165,6 +165,20 @@ class TestCreateOrder:
         db_session.flush()
         sc = SortingCenter(node_id=node.id, level=0)
         db_session.add(sc)
+        
+        # 创建测试存储中心（订单需要存储中心）
+        storage_node = Node(
+            node_code="SC001",
+            name="存储中心",
+            location="测试",
+            latitude=30.6,
+            longitude=114.4,
+            node_type="storage_center",
+        )
+        db_session.add(storage_node)
+        db_session.flush()
+        storage_center = StorageCenter(node_id=storage_node.id, capacity=1000.0)
+        db_session.add(storage_center)
         db_session.commit()
         
         # 登录获取token

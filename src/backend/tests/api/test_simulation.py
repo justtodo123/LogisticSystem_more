@@ -73,7 +73,7 @@ class TestDeliverPackages:
             weight=10.0,
             volume=0.5,
             status="in_transit",
-            goods_items=json.dumps([{"goods_code": "G001", "order_code": "O001"}]),
+            goods_items=[{"goods_code": "G001", "order_code": "O001"}],
         )
         db_session.add(package)
         
@@ -165,7 +165,7 @@ class TestDeliverPackages:
             weight=10.0,
             volume=0.5,
             status="in_transit",
-            goods_items=json.dumps([{"goods_code": "G001", "order_code": "O001"}]),
+            goods_items=[{"goods_code": "G001", "order_code": "O001"}],
         )
         db_session.add(package)
         
