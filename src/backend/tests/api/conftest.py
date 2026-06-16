@@ -16,19 +16,12 @@ from models.base import Base
 
 
 @pytest.fixture(scope="function")
-def client():
+def client(test_db):
     """创建 FastAPI TestClient，覆盖数据库依赖"""
     from main import app
     from config.database import get_db
     
-    # 创建内存数据库
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-    )
-    Base.metadata.create_all(bind=engine)
-    
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    engine, TestingSessionLocal = test_db
     
     def override_get_db():
         session = TestingSessionLocal()
@@ -43,25 +36,16 @@ def client():
         yield c
     
     app.dependency_overrides.clear()
-    Base.metadata.drop_all(bind=engine)
-    engine.dispose()
 
 
 @pytest.fixture(scope="function")
-def async_client():
+def async_client(test_db):
     """创建 httpx.AsyncClient（用于异步测试）"""
     from main import app
     from config.database import get_db
     from httpx import ASGITransport, AsyncClient
     
-    # 创建内存数据库
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-    )
-    Base.metadata.create_all(bind=engine)
-    
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    engine, TestingSessionLocal = test_db
     
     def override_get_db():
         session = TestingSessionLocal()
@@ -78,8 +62,6 @@ def async_client():
     yield async_client
     
     app.dependency_overrides.clear()
-    Base.metadata.drop_all(bind=engine)
-    engine.dispose()
 
 
 def create_jwt_token(username, role):

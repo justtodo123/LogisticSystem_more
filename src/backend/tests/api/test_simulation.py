@@ -73,7 +73,6 @@ class TestDeliverPackages:
             weight=10.0,
             volume=0.5,
             status="in_transit",
-            vehicle_id=1,  # 假设有一个车辆
             goods_items=json.dumps([{"goods_code": "G001", "order_code": "O001"}]),
         )
         db_session.add(package)
@@ -166,7 +165,6 @@ class TestDeliverPackages:
             weight=10.0,
             volume=0.5,
             status="in_transit",
-            vehicle_id=1,
             goods_items=json.dumps([{"goods_code": "G001", "order_code": "O001"}]),
         )
         db_session.add(package)

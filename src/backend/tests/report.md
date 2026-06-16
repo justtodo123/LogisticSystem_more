@@ -1,281 +1,21 @@
 # Test Report
 
-*Report generated on 15-Jun-2026 at 17:10:26 by [pytest-md]*
+*Report generated on 15-Jun-2026 at 17:18:46 by [pytest-md]*
 
 [pytest-md]: https://github.com/hackebrot/pytest-md
 
 ## Summary
 
-56 tests ran in 26.31 seconds
+56 tests ran in 25.59 seconds
 
-- 5 error
-- 49 failed
+- 54 failed
 - 2 passed
 
-## 5 error
-
-### tests\api\test_exceptions.py
-
-`error at setup of TestExceptionAPI.test_get_exceptions_success` 0.19s
-
-```
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
-    self.dialect.do_execute(
-.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
-    cursor.execute(statement, parameters)
-E   sqlite3.IntegrityError: NOT NULL constraint failed: routes.total_emission
-
-The above exception was the direct cause of the following exception:
-tests\api\test_exceptions.py:53: in setup_exception_data
-    db_session.flush()
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4352: in flush
-    self._flush(objects)
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4487: in _flush
-    with util.safe_reraise():
-         ^^^^^^^^^^^^^^^^^^^
-.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
-    raise exc_value.with_traceback(exc_tb)
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4448: in _flush
-    flush_context.execute()
-.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:465: in execute
-    rec.execute(self)
-.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:641: in execute
-    util.preloaded.orm_persistence.save_obj(
-.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:94: in save_obj
-    _emit_insert_statements(
-.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:1234: in _emit_insert_statements
-    result = connection.execute(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
-    return meth(
-.venv\Lib\site-packages\sqlalchemy\sql\elements.py:526: in _execute_on_connection
-    return connection._execute_clauseelement(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1643: in _execute_clauseelement
-    ret = self._execute_context(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
-    return self._exec_single_context(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
-    self._handle_dbapi_exception(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
-    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
-    self.dialect.do_execute(
-.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
-    cursor.execute(statement, parameters)
-E   sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) NOT NULL constraint failed: routes.total_emission
-E   [SQL: INSERT INTO routes (route_code, dispatch_id, vehicle_id, route_segments, total_distance, total_time, total_emission, version, parent_id, replan_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, algorithm_type, is_replan, created_at]
-E   [parameters: ('RT_TEST_001', 1, 1, '"[{\\"road_name\\":\\"\\u6d4b\\u8bd5\\u9053\\u8def\\"}]"', 100.0, 120.0, None, 1, None, None)]
-E   (Background on this error at: https://sqlalche.me/e/20/gkpj)
-```
-
-`error at setup of TestExceptionAPI.test_get_exception_detail_success` 0.18s
-
-```
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
-    self.dialect.do_execute(
-.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
-    cursor.execute(statement, parameters)
-E   sqlite3.IntegrityError: NOT NULL constraint failed: routes.total_emission
-
-The above exception was the direct cause of the following exception:
-tests\api\test_exceptions.py:53: in setup_exception_data
-    db_session.flush()
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4352: in flush
-    self._flush(objects)
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4487: in _flush
-    with util.safe_reraise():
-         ^^^^^^^^^^^^^^^^^^^
-.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
-    raise exc_value.with_traceback(exc_tb)
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4448: in _flush
-    flush_context.execute()
-.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:465: in execute
-    rec.execute(self)
-.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:641: in execute
-    util.preloaded.orm_persistence.save_obj(
-.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:94: in save_obj
-    _emit_insert_statements(
-.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:1234: in _emit_insert_statements
-    result = connection.execute(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
-    return meth(
-.venv\Lib\site-packages\sqlalchemy\sql\elements.py:526: in _execute_on_connection
-    return connection._execute_clauseelement(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1643: in _execute_clauseelement
-    ret = self._execute_context(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
-    return self._exec_single_context(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
-    self._handle_dbapi_exception(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
-    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
-    self.dialect.do_execute(
-.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
-    cursor.execute(statement, parameters)
-E   sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) NOT NULL constraint failed: routes.total_emission
-E   [SQL: INSERT INTO routes (route_code, dispatch_id, vehicle_id, route_segments, total_distance, total_time, total_emission, version, parent_id, replan_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, algorithm_type, is_replan, created_at]
-E   [parameters: ('RT_TEST_001', 1, 1, '"[{\\"road_name\\":\\"\\u6d4b\\u8bd5\\u9053\\u8def\\"}]"', 100.0, 120.0, None, 1, None, None)]
-E   (Background on this error at: https://sqlalche.me/e/20/gkpj)
-```
-
-`error at setup of TestExceptionAPI.test_update_exception_success` 0.19s
-
-```
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
-    self.dialect.do_execute(
-.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
-    cursor.execute(statement, parameters)
-E   sqlite3.IntegrityError: NOT NULL constraint failed: routes.total_emission
-
-The above exception was the direct cause of the following exception:
-tests\api\test_exceptions.py:53: in setup_exception_data
-    db_session.flush()
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4352: in flush
-    self._flush(objects)
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4487: in _flush
-    with util.safe_reraise():
-         ^^^^^^^^^^^^^^^^^^^
-.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
-    raise exc_value.with_traceback(exc_tb)
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4448: in _flush
-    flush_context.execute()
-.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:465: in execute
-    rec.execute(self)
-.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:641: in execute
-    util.preloaded.orm_persistence.save_obj(
-.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:94: in save_obj
-    _emit_insert_statements(
-.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:1234: in _emit_insert_statements
-    result = connection.execute(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
-    return meth(
-.venv\Lib\site-packages\sqlalchemy\sql\elements.py:526: in _execute_on_connection
-    return connection._execute_clauseelement(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1643: in _execute_clauseelement
-    ret = self._execute_context(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
-    return self._exec_single_context(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
-    self._handle_dbapi_exception(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
-    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
-    self.dialect.do_execute(
-.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
-    cursor.execute(statement, parameters)
-E   sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) NOT NULL constraint failed: routes.total_emission
-E   [SQL: INSERT INTO routes (route_code, dispatch_id, vehicle_id, route_segments, total_distance, total_time, total_emission, version, parent_id, replan_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, algorithm_type, is_replan, created_at]
-E   [parameters: ('RT_TEST_001', 1, 1, '"[{\\"road_name\\":\\"\\u6d4b\\u8bd5\\u9053\\u8def\\"}]"', 100.0, 120.0, None, 1, None, None)]
-E   (Background on this error at: https://sqlalche.me/e/20/gkpj)
-```
-
-`error at setup of TestExceptionAPI.test_replan_success` 0.19s
-
-```
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
-    self.dialect.do_execute(
-.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
-    cursor.execute(statement, parameters)
-E   sqlite3.IntegrityError: NOT NULL constraint failed: routes.total_emission
-
-The above exception was the direct cause of the following exception:
-tests\api\test_exceptions.py:53: in setup_exception_data
-    db_session.flush()
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4352: in flush
-    self._flush(objects)
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4487: in _flush
-    with util.safe_reraise():
-         ^^^^^^^^^^^^^^^^^^^
-.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
-    raise exc_value.with_traceback(exc_tb)
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4448: in _flush
-    flush_context.execute()
-.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:465: in execute
-    rec.execute(self)
-.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:641: in execute
-    util.preloaded.orm_persistence.save_obj(
-.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:94: in save_obj
-    _emit_insert_statements(
-.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:1234: in _emit_insert_statements
-    result = connection.execute(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
-    return meth(
-.venv\Lib\site-packages\sqlalchemy\sql\elements.py:526: in _execute_on_connection
-    return connection._execute_clauseelement(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1643: in _execute_clauseelement
-    ret = self._execute_context(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
-    return self._exec_single_context(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
-    self._handle_dbapi_exception(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
-    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
-    self.dialect.do_execute(
-.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
-    cursor.execute(statement, parameters)
-E   sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) NOT NULL constraint failed: routes.total_emission
-E   [SQL: INSERT INTO routes (route_code, dispatch_id, vehicle_id, route_segments, total_distance, total_time, total_emission, version, parent_id, replan_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, algorithm_type, is_replan, created_at]
-E   [parameters: ('RT_TEST_001', 1, 1, '"[{\\"road_name\\":\\"\\u6d4b\\u8bd5\\u9053\\u8def\\"}]"', 100.0, 120.0, None, 1, None, None)]
-E   (Background on this error at: https://sqlalche.me/e/20/gkpj)
-```
-
-`error at setup of TestExceptionAPI.test_replan_invalid_action` 0.19s
-
-```
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
-    self.dialect.do_execute(
-.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
-    cursor.execute(statement, parameters)
-E   sqlite3.IntegrityError: NOT NULL constraint failed: routes.total_emission
-
-The above exception was the direct cause of the following exception:
-tests\api\test_exceptions.py:53: in setup_exception_data
-    db_session.flush()
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4352: in flush
-    self._flush(objects)
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4487: in _flush
-    with util.safe_reraise():
-         ^^^^^^^^^^^^^^^^^^^
-.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:122: in __exit__
-    raise exc_value.with_traceback(exc_tb)
-.venv\Lib\site-packages\sqlalchemy\orm\session.py:4448: in _flush
-    flush_context.execute()
-.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:465: in execute
-    rec.execute(self)
-.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:641: in execute
-    util.preloaded.orm_persistence.save_obj(
-.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:94: in save_obj
-    _emit_insert_statements(
-.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:1234: in _emit_insert_statements
-    result = connection.execute(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
-    return meth(
-.venv\Lib\site-packages\sqlalchemy\sql\elements.py:526: in _execute_on_connection
-    return connection._execute_clauseelement(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1643: in _execute_clauseelement
-    ret = self._execute_context(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
-    return self._exec_single_context(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
-    self._handle_dbapi_exception(
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
-    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
-.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
-    self.dialect.do_execute(
-.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: in do_execute
-    cursor.execute(statement, parameters)
-E   sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) NOT NULL constraint failed: routes.total_emission
-E   [SQL: INSERT INTO routes (route_code, dispatch_id, vehicle_id, route_segments, total_distance, total_time, total_emission, version, parent_id, replan_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, algorithm_type, is_replan, created_at]
-E   [parameters: ('RT_TEST_001', 1, 1, '"[{\\"road_name\\":\\"\\u6d4b\\u8bd5\\u9053\\u8def\\"}]"', 100.0, 120.0, None, 1, None, None)]
-E   (Background on this error at: https://sqlalche.me/e/20/gkpj)
-```
-
-## 49 failed
+## 54 failed
 
 ### tests\api\test_auth.py
 
-`TestLogin.test_login_success` 0.28s
+`TestLogin.test_login_success` 0.20s
 
 ```
 .venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
@@ -671,7 +411,7 @@ E   [parameters: ('nonexist', 1, 0)]
 E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
 ```
 
-`TestGetMe.test_get_me_success` 0.19s
+`TestGetMe.test_get_me_success` 0.18s
 
 ```
 .venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
@@ -1740,10 +1480,19 @@ E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
 
 ### tests\api\test_exceptions.py
 
-`TestExceptionAPI.test_get_exceptions_with_filters` 0.03s
+`TestExceptionAPI.test_get_exceptions_success` 0.03s
 
 ```
-tests\api\test_exceptions.py:107: in test_get_exceptions_with_filters
+tests\api\test_exceptions.py:90: in test_get_exceptions_success
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+```
+
+`TestExceptionAPI.test_get_exceptions_with_filters` 0.00s
+
+```
+tests\api\test_exceptions.py:108: in test_get_exceptions_with_filters
     assert response.status_code == 200
 E   assert 404 == 200
 E    +  where 404 = <Response [404 Not Found]>.status_code
@@ -1752,7 +1501,7 @@ E    +  where 404 = <Response [404 Not Found]>.status_code
 `TestExceptionAPI.test_create_exception_success` 0.00s
 
 ```
-tests\api\test_exceptions.py:129: in test_create_exception_success
+tests\api\test_exceptions.py:130: in test_create_exception_success
     assert response.status_code == 200
 E   assert 404 == 200
 E    +  where 404 = <Response [404 Not Found]>.status_code
@@ -1761,16 +1510,43 @@ E    +  where 404 = <Response [404 Not Found]>.status_code
 `TestExceptionAPI.test_create_exception_invalid_type` 0.00s
 
 ```
-tests\api\test_exceptions.py:152: in test_create_exception_invalid_type
+tests\api\test_exceptions.py:153: in test_create_exception_invalid_type
     assert response.status_code == 400
 E   assert 404 == 400
+E    +  where 404 = <Response [404 Not Found]>.status_code
+```
+
+`TestExceptionAPI.test_get_exception_detail_success` 0.00s
+
+```
+tests\api\test_exceptions.py:169: in test_get_exception_detail_success
+    assert response.status_code == 200
+E   assert 404 == 200
 E    +  where 404 = <Response [404 Not Found]>.status_code
 ```
 
 `TestExceptionAPI.test_get_exception_detail_not_found` 0.00s
 
 ```
-tests\api\test_exceptions.py:182: in test_get_exception_detail_not_found
+tests\api\test_exceptions.py:183: in test_get_exception_detail_not_found
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+```
+
+`TestExceptionAPI.test_update_exception_success` 0.00s
+
+```
+tests\api\test_exceptions.py:203: in test_update_exception_success
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+```
+
+`TestExceptionAPI.test_replan_success` 0.00s
+
+```
+tests\api\test_exceptions.py:223: in test_replan_success
     assert response.status_code == 200
 E   assert 404 == 200
 E    +  where 404 = <Response [404 Not Found]>.status_code
@@ -1779,9 +1555,18 @@ E    +  where 404 = <Response [404 Not Found]>.status_code
 `TestExceptionAPI.test_replan_exception_not_found` 0.00s
 
 ```
-tests\api\test_exceptions.py:243: in test_replan_exception_not_found
+tests\api\test_exceptions.py:244: in test_replan_exception_not_found
     assert response.status_code == 200
 E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+```
+
+`TestExceptionAPI.test_replan_invalid_action` 0.00s
+
+```
+tests\api\test_exceptions.py:264: in test_replan_invalid_action
+    assert response.status_code == 400
+E   assert 404 == 400
 E    +  where 404 = <Response [404 Not Found]>.status_code
 ```
 
@@ -3526,7 +3311,7 @@ tests\api\test_routes.py:90: in test_get_routes_with_data
 E   TypeError: 'node_dispatch_id' is an invalid keyword argument for Route
 ```
 
-`TestGetRouteDetail.test_get_route_detail_success` 0.17s
+`TestGetRouteDetail.test_get_route_detail_success` 0.18s
 
 ```
 tests\api\test_routes.py:154: in test_get_route_detail_success
@@ -4094,7 +3879,7 @@ E   [parameters: ('testuser', 1, 0)]
 E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
 ```
 
-`TestCreateGlobalSchedule.test_create_global_schedule_manager_forbidden` 0.17s
+`TestCreateGlobalSchedule.test_create_global_schedule_manager_forbidden` 0.18s
 
 ```
 .venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
@@ -4492,7 +4277,7 @@ E   (Background on this error at: https://sqlalche.me/e/20/e3q8)
 
 ### tests\api\test_simulation.py
 
-`TestDeliverPackages.test_deliver_success` 0.17s
+`TestDeliverPackages.test_deliver_success` 0.18s
 
 ```
 tests\api\test_simulation.py:69: in test_deliver_success

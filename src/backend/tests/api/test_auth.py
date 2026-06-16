@@ -149,8 +149,8 @@ class TestGetMe:
         """测试未提供Token"""
         response = client.get("/api/auth/me")
 
-        # 验证响应（FastAPI HTTPBearer返回403）
-        assert response.status_code == 403
+        # 验证响应（FastAPI HTTPBearer返回401）
+        assert response.status_code == 401
         body = response.json()
         assert body["code"] == 40100  # 未登录或Token无效
 

@@ -23,24 +23,43 @@ from models.driver import Driver
 # ── 数据库固件 ─────────────────────────────────────────────
 
 @pytest.fixture(scope="function")
-def db_session():
-    """创建独立的内存 SQLite 数据库会话，每个测试函数结束后销毁"""
+def test_db():
+    """创建测试数据库引擎和会话工厂，供所有fixture共享"""
+    from sqlalchemy.pool import StaticPool
+    
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,  # 使用StaticPool确保所有连接共享同一个数据库连接
     )
-    # 创建所有表
+    
+    # 导入所有模型以确保它们被注册到Base.metadata
+    from models import (  # noqa: F401
+        User, LogEvent, Node, StorageCenter, SortingCenter,
+        Order, Goods, Package, Vehicle, Driver, GlobalSchedule,
+        DispatchBatch, NodeDispatch, Route
+    )
+    
     Base.metadata.create_all(bind=engine)
-
+    
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    
+    yield engine, TestingSessionLocal
+    
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+
+
+@pytest.fixture(scope="function")
+def db_session(test_db):
+    """创建独立的内存 SQLite 数据库会话，每个测试函数结束后销毁"""
+    engine, TestingSessionLocal = test_db
     session = TestingSessionLocal()
 
     try:
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine)
-        engine.dispose()
 
 
 # ── 基础数据固件 ──────────────────────────────────────────────

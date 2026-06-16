@@ -19,19 +19,14 @@ from models.route import Route
 
 
 @pytest.fixture
-def client():
-    """测试客户端"""
-    return TestClient(app)
-
-
-@pytest.fixture
-def auth_headers(client, db_session):
+def auth_headers(client, test_users):
     """认证头（调度员）"""
     # 登录获取token
     response = client.post("/api/auth/login", json={
         "username": "dispatcher",
         "password": "123456"
     })
+    assert response.status_code == 200, f"登录失败: {response.json()}"
     token = response.json()["data"]["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -46,6 +41,7 @@ def setup_exception_data(db_session):
         vehicle_id=1,
         total_distance=100.0,
         total_time=120.0,
+        total_emission=50.0,  # 添加缺失的字段
         route_segments='[{"road_name":"测试道路"}]',
         version=1
     )

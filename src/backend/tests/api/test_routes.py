@@ -89,7 +89,7 @@ class TestGetRoutes:
         # 创建测试路线
         route = Route(
             route_code="RT001",
-            node_dispatch_id=1,
+            dispatch_id=1,
             vehicle_id=vehicle.id,
             total_distance=15.5,
             total_time=45.0,
@@ -153,7 +153,7 @@ class TestGetRouteDetail:
         # 创建测试路线
         route = Route(
             route_code="RT001",
-            node_dispatch_id=1,
+            dispatch_id=1,
             vehicle_id=vehicle.id,
             total_distance=15.5,
             total_time=45.0,
@@ -249,7 +249,7 @@ class TestGetRouteCoordinates:
         # 创建测试路线
         route = Route(
             route_code="RT001",
-            node_dispatch_id=1,
+            dispatch_id=1,
             vehicle_id=vehicle.id,
             total_distance=15.5,
             total_time=45.0,
