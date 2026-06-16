@@ -66,25 +66,40 @@ class TestVehicleServiceCreateVehicle:
     @pytest.mark.asyncio
     async def test_create_vehicle_success(self, mock_db, sample_node):
         """测试成功创建车辆"""
-        # 模拟数据库查询
-        mock_db.query.return_value.filter.return_value.first.side_effect = [
-            None,  # 车辆编号不存在
-            sample_node,  # 节点存在
-            sample_node,  # 最后到达节点存在
-        ]
+        from unittest.mock import patch, MagicMock
         
-        # 创建请求数据
-        vehicle_create = VehicleCreate(
-            vehicle_code="V1700000000000",
-            model="测试车型",
-            capacity=1000.0,
-            energy_type="electric",
-            node_code="SC001",
-            last_arrived_node_code="SC001"
-        )
+        # Mock Vehicle构造函数，使其返回具有正确属性的对象
+        mock_vehicle = MagicMock()
+        mock_vehicle.vehicle_code = "V1700000000000"
+        mock_vehicle.model = "测试车型"
+        mock_vehicle.capacity = 1000.0
+        mock_vehicle.energy_type = "electric"
+        mock_vehicle.vehicle_type = "normal"
+        mock_vehicle.capability_tags = ["cold_chain"]
+        mock_vehicle.status = "idle"
+        mock_vehicle.created_at = MagicMock(isoformat=lambda: "2026-06-15T10:00:00")
+        mock_vehicle.updated_at = MagicMock(isoformat=lambda: "2026-06-15T10:00:00")
         
-        # 执行
-        result = await VehicleService.create_vehicle(vehicle_create, mock_db)
+        with patch('services.vehicle_service.Vehicle', return_value=mock_vehicle):
+            # 模拟数据库查询
+            mock_db.query.return_value.filter.return_value.first.side_effect = [
+                None,  # 车辆编号不存在
+                sample_node,  # 节点存在
+                sample_node,  # 最后到达节点存在
+            ]
+        
+            # 创建请求数据
+            vehicle_create = VehicleCreate(
+                vehicle_code="V1700000000000",
+                model="测试车型",
+                capacity=1000.0,
+                energy_type="electric",
+                node_code="SC001",
+                last_arrived_node_code="SC001"
+            )
+        
+            # 执行
+            result = await VehicleService.create_vehicle(vehicle_create, mock_db)
         
         # 验证
         assert result["code"] == CODE_SUCCESS
@@ -175,13 +190,11 @@ class TestVehicleServiceGetVehicle:
     @pytest.mark.asyncio
     async def test_get_vehicle_success(self, mock_db, sample_vehicle):
         """测试成功获取车辆详情"""
-        # 模拟数据库查询
-        mock_db.query.return_value.filter.return_value.first.return_value = sample_vehicle
-        
-        # 模拟节点查询
+        # 模拟数据库查询 - 第一次查询车辆，第二次查询node，第三次查询last_arrived_node
         mock_db.query.return_value.filter.return_value.first.side_effect = [
-            MagicMock(node_code="SC001", name="存储中心1"),
-            MagicMock(node_code="SC001", name="存储中心1"),
+            sample_vehicle,  # 查询车辆
+            MagicMock(node_code="SC001", name="存储中心1"),  # 查询车辆所属节点
+            MagicMock(node_code="SC001", name="存储中心1"),  # 查询最后到达节点
         ]
         
         # 执行

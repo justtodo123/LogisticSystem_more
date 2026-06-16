@@ -19,7 +19,7 @@ from models.order import Order
 from models.goods import Goods
 from models.node import Node
 from models.sorting_center import SortingCenter
-from schemas.order import OrderCreate, OrderUpdate
+from schemas.order import OrderCreate, OrderUpdate, GoodsCreate
 from core.error_codes import (
     CODE_SUCCESS, CODE_PARAM_ERROR, CODE_INTERNAL_ERROR,
     CODE_ORDER_NOT_FOUND, CODE_ORDER_STATUS_NOT_ALLOWED, CODE_NODE_NOT_FOUND
@@ -72,21 +72,31 @@ def sample_order():
 class TestOrderServiceCreateOrder:
     """测试创建订单"""
 
+    @patch('services.order_service.Order')
     @patch('services.order_service.random')
-    @patch('services.order_service.time')
+    @patch('time.time')
     @pytest.mark.asyncio
-    async def test_create_order_success(self, mock_time, mock_random, mock_db, sample_node, sample_storage_center):
+    async def test_create_order_success(self, mock_time, mock_random, mock_order_class, mock_db, sample_node, sample_storage_center):
         """测试成功创建订单"""
         # 配置mock
         mock_time.time.return_value = 1700000000.0
         mock_random.choice.return_value = sample_storage_center
         
+        # 配置mock Order类
+        mock_order = MagicMock()
+        mock_order.order_code = "O1700000000000"
+        mock_order.destination_node_id = sample_node.id
+        mock_order.status = "pending"
+        mock_order.created_at = datetime(2026, 6, 15, 10, 0, 0)
+        mock_order.updated_at = datetime(2026, 6, 15, 10, 0, 0)
+        mock_order.id = 1
+        mock_order_class.return_value = mock_order
+        
         # 模拟数据库查询
         mock_db.query.return_value.filter.return_value.first.side_effect = [
             sample_node,  # 查询目的地节点
-            None,  # 查询sorting_center（第一次）
-            MagicMock(spec=SortingCenter, level=0),  # 查询sorting_center（第二次）
-            sample_storage_center,  # 查询存储中心
+            MagicMock(spec=SortingCenter, level=0),  # 查询sorting_center（第一次，校验level=0）
+            sample_storage_center,  # 查询存储中心（未指定storage_center_code时随机分配）
         ]
         
         # 创建请求数据
@@ -94,7 +104,7 @@ class TestOrderServiceCreateOrder:
             destination_node_code="SO001",
             time_window="2026-06-15 10:00-12:00",
             goods=[
-                MagicMock(goods_name="测试货物", goods_type="electronics", weight=10.0, volume=0.5)
+                GoodsCreate(goods_name="测试货物", goods_type="electronics", weight=10.0, volume=0.5)
             ]
         )
         

@@ -140,22 +140,41 @@ class TestPackageServiceRepackPackage:
     @pytest.mark.asyncio
     async def test_repack_package_success(self, mock_db, sample_package):
         """测试成功重新打包包裹"""
-        # 模拟数据库查询
-        mock_db.query.return_value.filter.return_value.first.side_effect = [
-            sample_package,  # 查询原包裹
-            MagicMock(id=1, status="pending_pack", node_id=1, order_id=1),  # 查询货物1
-            MagicMock(id=1, order_id=1),  # 查询订单
-        ]
+        from unittest.mock import patch, MagicMock
+        from datetime import datetime
         
-        # 创建重新打包请求
-        repack = PackageRepack(goods_codes=["G1700000000000_0"])
+        # Mock Package构造函数，避免created_at为None
+        mock_new_pkg = MagicMock()
+        mock_new_pkg.package_code = "PKG_NEW_001"
+        mock_new_pkg.weight = 10.0
+        mock_new_pkg.volume = 0.5
+        mock_new_pkg.status = "pending_pack"
+        mock_new_pkg.from_node_id = 1
+        mock_new_pkg.to_node_id = 2
+        mock_new_pkg.created_at = datetime(2026, 6, 15, 10, 0, 0)
+        mock_new_pkg.updated_at = datetime(2026, 6, 15, 10, 0, 0)
         
-        # 执行
-        result = await PackageService.repack_package("PKG1700000000000", repack, mock_db)
+        with patch('services.package_service.Package', return_value=mock_new_pkg):
+            # 模拟数据库查询 - 需要7次first()调用
+            mock_db.query.return_value.filter.return_value.first.side_effect = [
+                sample_package,  # 1. 查询原包裹
+                MagicMock(goods_code="G1700000000000_0", order_id=1, node_id=1, status="pending_pack"),  # 2. 查询货物1
+                MagicMock(order_code="O1700000000000"),  # 3. 查询订单(第一次，if判断)
+                MagicMock(order_code="O1700000000000"),  # 4. 查询订单(第二次，获取order_code)
+                MagicMock(goods_code="G1700000000000_0", weight=10.0, volume=0.5),  # 5. 查询货物(第二次for循环，第164行)
+                MagicMock(node_code="SC001", name="存储中心1"),  # 6. 查询from节点(commit后)
+                MagicMock(node_code="SO001", name="分拣中心1"),  # 7. 查询to节点(commit后)
+            ]
         
-        # 验证
-        assert result["code"] == CODE_SUCCESS
-        assert "package_code" in result["data"]
+            # 创建重新打包请求
+            repack = PackageRepack(goods_codes=["G1700000000000_0"])
+            
+            # 执行
+            result = await PackageService.repack_package("PKG1700000000000", repack, mock_db)
+            
+            # 验证
+            assert result["code"] == CODE_SUCCESS
+            assert "package_code" in result["data"]
 
     @pytest.mark.asyncio
     async def test_repack_package_not_found(self, mock_db):

@@ -76,11 +76,26 @@ class TestDriverServiceCreateDriver:
             name="测试司机",
             phone="13800138000",
             license_type="C1",
+            shift="day",
             node_code="SC001"
         )
         
-        # 执行
-        result = await DriverService.create_driver(driver_create, mock_db)
+        # Mock Driver构造函数，避免created_at为None
+        from unittest.mock import patch, MagicMock
+        from datetime import datetime
+        mock_driver = MagicMock()
+        mock_driver.driver_code = "D1700000000000"
+        mock_driver.name = "测试司机"
+        mock_driver.phone = "13800138000"
+        mock_driver.license_type = "C1"
+        mock_driver.shift = "day"
+        mock_driver.status = "idle"
+        mock_driver.created_at = datetime(2026, 6, 15, 10, 0, 0)
+        mock_driver.updated_at = datetime(2026, 6, 15, 10, 0, 0)
+        
+        with patch('services.driver_service.Driver', return_value=mock_driver):
+            # 执行
+            result = await DriverService.create_driver(driver_create, mock_db)
         
         # 验证
         assert result["code"] == CODE_SUCCESS
@@ -99,6 +114,7 @@ class TestDriverServiceCreateDriver:
             name="测试司机",
             phone="13800138000",
             license_type="C1",
+            shift="day",
             node_code="SC001"
         )
         
@@ -124,6 +140,7 @@ class TestDriverServiceCreateDriver:
             name="测试司机",
             phone="13800138000",
             license_type="C1",
+            shift="day",
             node_code="INVALID"
         )
         
@@ -133,6 +150,8 @@ class TestDriverServiceCreateDriver:
         # 验证
         assert result["code"] == CODE_NODE_NOT_FOUND
         assert "节点不存在" in result["message"]
+
+
 
 
 class TestDriverServiceGetDrivers:
@@ -168,13 +187,11 @@ class TestDriverServiceGetDriver:
     @pytest.mark.asyncio
     async def test_get_driver_success(self, mock_db, sample_driver):
         """测试成功获取司机详情"""
-        # 模拟数据库查询
-        mock_db.query.return_value.filter.return_value.first.return_value = sample_driver
-        
-        # 模拟节点查询
-        mock_db.query.return_value.filter.return_value.first.return_value = MagicMock(
-            node_code="SC001", name="存储中心1"
-        )
+        # 模拟数据库查询 - 第一次查询司机，第二次查询节点
+        mock_db.query.return_value.filter.return_value.first.side_effect = [
+            sample_driver,  # 查询司机
+            MagicMock(node_code="SC001", name="存储中心1"),  # 查询节点
+        ]
         
         # 执行
         result = await DriverService.get_driver("D1700000000000", mock_db)

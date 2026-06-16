@@ -128,21 +128,21 @@ def setup_simulation_data(db_session):
     # 5. 创建调度批次和节点调度
     dispatch_batch = DispatchBatch(
         batch_code="BATCH_TEST_001",
-        schedule_id=1,
-        level_phase=0,
+        global_schedule_id=1,
         status="pending"
     )
     db_session.add(dispatch_batch)
     db_session.flush()
     
     node_dispatch = NodeDispatch(
-        batch_id=dispatch_batch.id,
+        dispatch_code="ND_TEST_001",
+        dispatch_batch_id=dispatch_batch.id,
         vehicle_id=vehicle.id,
         driver_id=driver.id,
-        from_node_id=storage_node.id,
-        to_node_id=sorting_node_l1.id,
-        depart_time=datetime.now(),
-        status="departed"
+        level_phase=0,
+        tasks='[]',
+        total_distance=10.0,
+        total_time=30.0
     )
     db_session.add(node_dispatch)
     db_session.flush()

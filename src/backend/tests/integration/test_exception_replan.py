@@ -24,8 +24,12 @@ def setup_exception_data(db_session):
     # 1. 创建全局调度记录
     global_schedule = GlobalSchedule(
         schedule_code="GS_TEST_001",
+        order_codes='["O_TEST_001"]',
         goods_schedules='[{"goods_code":"G_TEST_001","order_code":"O_TEST_001","path":["SC001","SO001","SO002"]}]',
-        total_cost=1000.0,
+        total_distance=100.0,
+        total_time=10.0,
+        total_goods=1,
+        score=100.0,
         version=1,
         parent_id=None,
         is_replan=False,
@@ -37,8 +41,7 @@ def setup_exception_data(db_session):
     # 2. 创建调度批次
     dispatch_batch = DispatchBatch(
         batch_code="BATCH_TEST_001",
-        schedule_id=global_schedule.id,
-        level_phase=0,
+        global_schedule_id=global_schedule.id,
         status="completed"
     )
     db_session.add(dispatch_batch)
@@ -46,13 +49,14 @@ def setup_exception_data(db_session):
     
     # 3. 创建节点调度
     node_dispatch = NodeDispatch(
-        batch_id=dispatch_batch.id,
+        dispatch_code="ND_TEST_001",
+        dispatch_batch_id=dispatch_batch.id,
         vehicle_id=1,
         driver_id=1,
-        from_node_id=1,
-        to_node_id=2,
-        depart_time=datetime.now(),
-        status="completed"
+        level_phase=0,
+        tasks='[]',
+        total_distance=10.0,
+        total_time=30.0
     )
     db_session.add(node_dispatch)
     db_session.flush()
@@ -64,7 +68,8 @@ def setup_exception_data(db_session):
         vehicle_id=1,
         total_distance=100.0,
         total_time=120.0,
-        route_segments='[{"road_name":"测试道路","start_lng":114.3,"start_lat":30.5,"end_lng":114.4,"end_lat":30.6}]',
+        total_emission=20.0,
+        route_segments=[{"road_name": "测试道路", "start_lng": 114.3, "start_lat": 30.5, "end_lng": 114.4, "end_lat": 30.6}],
         version=1,
         parent_id=None,
         is_replan=False

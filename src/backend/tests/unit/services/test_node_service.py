@@ -66,7 +66,7 @@ def sample_sorting_center_data():
 @pytest.fixture
 def sample_node():
     """示例节点"""
-    node = MagicMock(spec=Node)
+    node = MagicMock()
     node.id = 1
     node.node_code = "SC001"
     node.name = "测试存储中心"
@@ -85,11 +85,30 @@ class TestNodeServiceCreateStorageCenter:
     @pytest.mark.asyncio
     async def test_create_storage_center_success(self, mock_db, sample_storage_center_data):
         """测试成功创建存储中心"""
-        # 模拟数据库查询
-        mock_db.query.return_value.filter.return_value.first.return_value = None  # node_code不存在
+        from unittest.mock import patch, MagicMock
         
-        # 执行
-        result = await NodeService.create_storage_center(sample_storage_center_data, mock_db)
+        # Mock Node和StorageCenter的构造函数，避免真实创建对象时created_at为None
+        mock_node = MagicMock()
+        mock_node.node_code = "SC001"
+        mock_node.name = "测试存储中心"
+        mock_node.location = "测试位置"
+        mock_node.latitude = 30.5
+        mock_node.longitude = 114.3
+        mock_node.node_type = "storage_center"
+        mock_node.created_at = datetime(2026, 6, 15, 10, 0, 0)
+        mock_node.updated_at = datetime(2026, 6, 15, 10, 0, 0)
+        
+        mock_storage_center = MagicMock()
+        mock_storage_center.capacity = 10000.0
+        mock_storage_center.inventory = 0
+        
+        with patch('services.node_service.Node', return_value=mock_node), \
+             patch('services.node_service.StorageCenter', return_value=mock_storage_center):
+            # 模拟数据库查询 - node_code不存在
+            mock_db.query.return_value.filter.return_value.first.return_value = None
+            
+            # 执行
+            result = await NodeService.create_storage_center(sample_storage_center_data, mock_db)
         
         # 验证
         assert result["code"] == CODE_SUCCESS
@@ -183,11 +202,32 @@ class TestNodeServiceCreateSortingCenter:
     @pytest.mark.asyncio
     async def test_create_sorting_center_success(self, mock_db, sample_sorting_center_data):
         """测试成功创建分拣中心"""
-        # 模拟数据库查询
-        mock_db.query.return_value.filter.return_value.first.return_value = None  # node_code不存在
+        from unittest.mock import patch, MagicMock
+        from datetime import datetime
         
-        # 执行
-        result = await NodeService.create_sorting_center(sample_sorting_center_data, mock_db)
+        # Mock Node和SortingCenter的构造函数，避免真实创建对象时created_at为None
+        mock_node = MagicMock()
+        mock_node.node_code = "SO001"
+        mock_node.name = "测试0级分拣中心"
+        mock_node.location = "测试位置"
+        mock_node.latitude = 30.6
+        mock_node.longitude = 114.4
+        mock_node.node_type = "sorting_center"
+        mock_node.created_at = datetime(2026, 6, 15, 10, 0, 0)
+        mock_node.updated_at = datetime(2026, 6, 15, 10, 0, 0)
+        
+        mock_sorting_center = MagicMock()
+        mock_sorting_center.level = 0
+        mock_sorting_center.capacity = 5000.0
+        mock_sorting_center.max_storage_time = 24
+        
+        with patch('services.node_service.Node', return_value=mock_node), \
+             patch('services.node_service.SortingCenter', return_value=mock_sorting_center):
+            # 模拟数据库查询 - node_code不存在
+            mock_db.query.return_value.filter.return_value.first.return_value = None
+            
+            # 执行
+            result = await NodeService.create_sorting_center(sample_sorting_center_data, mock_db)
         
         # 验证
         assert result["code"] == CODE_SUCCESS
@@ -333,21 +373,38 @@ class TestNodeServiceGetNode:
     """测试获取节点详情"""
 
     @pytest.mark.asyncio
-    async def test_get_node_success(self, mock_db, sample_node):
+    async def test_get_node_success(self, mock_db):
         """测试成功获取节点详情"""
-        # 模拟数据库查询
-        mock_db.query.return_value.filter.return_value.first.return_value = sample_node
+        from unittest.mock import MagicMock
+        from datetime import datetime
         
-        # 模拟storage_center查询
+        # 直接创建sample_node，不依赖fixture
+        sample_node = MagicMock()
+        sample_node.id = 1
+        sample_node.node_code = "SC001"
+        sample_node.name = "测试存储中心"
+        sample_node.location = "测试位置"
+        sample_node.latitude = 30.5
+        sample_node.longitude = 114.3
+        sample_node.node_type = "storage_center"
+        sample_node.created_at = datetime.now()
+        sample_node.updated_at = datetime.now()
+        
+        # 模拟数据库查询 - get_node方法中有3次first()调用
+        # 第1次：查询节点 (Node)
+        # 第2次：查询storage_center (StorageCenter)
+        # 第3次：查询sorting_center (SortingCenter)
         mock_db.query.return_value.filter.return_value.first.side_effect = [
-            MagicMock(capacity=10000.0, inventory=0),  # storage_center
-            None,  # sorting_center
+            sample_node,  # 第1次：查询节点
+            MagicMock(capacity=10000.0, inventory=0),  # 第2次：查询storage_center
+            None,  # 第3次：查询sorting_center
         ]
         
         # 执行
         result = await NodeService.get_node("SC001", mock_db)
         
         # 验证
+        print(f"DEBUG result: {result}")
         assert result["code"] == CODE_SUCCESS
         assert result["data"]["node_code"] == "SC001"
 

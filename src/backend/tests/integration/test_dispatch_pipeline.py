@@ -119,7 +119,7 @@ class TestDispatchPipeline:
         # Mock 节点调度服务抛出异常
         from unittest.mock import patch
         
-        with patch("services.dispatch_service.create_node_dispatch") as mock_create:
+        with patch("services.dispatch_service.DispatchService.create_node_dispatch") as mock_create:
             mock_create.side_effect = RuntimeError("模拟节点调度异常")
             
             # 执行节点调度（应该失败）
