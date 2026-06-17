@@ -30,6 +30,16 @@ from models.node_dispatch import NodeDispatch
 from models.global_schedule import GlobalSchedule
 from models.sorting_center import SortingCenter
 from models.storage_center import StorageCenter
+from models.goods import Goods
+from models.order import Order
+
+from services.state_machine import (
+    update_state_after_f005,
+    simulate_delivery_l0_to_l1,
+    repack_at_l1,
+    simulate_delivery_l1_to_l2,
+    check_and_update_order_status
+)
 
 
 def _load_config() -> dict:
@@ -353,6 +363,10 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
     """
     F005 节点间调度主函数
     
+    自动检测是首次调用还是第二次调用：
+    - 如果不存在 status=l0_l1_done 的批次 → 首次调用
+    - 如果已存在 status=l0_l1_done 的批次 → 第二次调用
+    
     Args:
         db: 数据库会话
         schedule_code: 全局调度方案编码
@@ -369,88 +383,244 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
     if not schedule:
         raise ValueError(f"全局调度方案不存在：{schedule_code}")
     
-    # 加载算法配置
+    # 2. 检测是否已有 l0_l1_done 的批次（用于判断是首次调用还是第二次调用）
+    existing_batch = db.query(DispatchBatch).filter(
+        DispatchBatch.global_schedule_id == schedule.id,
+        DispatchBatch.status == 'l0_l1_done'
+    ).first()
+    
+    # 3. 加载算法配置
     config = _load_config()
     
-    # 2. 第一次调用（L0→L1）
+    # 4. 根据 demo_mode 和 existing_batch 决定执行逻辑
+    if demo_mode:
+        # demo_mode=true：一次完成两次调度（L0→L1 + L1→L2）
+        return _run_dispatch_both_levels(db, schedule, config)
+    
+    else:
+        # demo_mode=false：分阶段调度
+        if existing_batch:
+            # 第二次调用：只执行 L1→L2
+            return _run_dispatch_l1_to_l2(db, schedule, existing_batch, config)
+        else:
+            # 首次调用：只执行 L0→L1
+            return _run_dispatch_l0_to_l1(db, schedule, config)
+
+
+def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, Any]:
+    """
+    demo_mode=true 时的一次性调度（L0→L1 + L1→L2）
+    
+    Args:
+        db: 数据库会话
+        schedule: 全局调度方案对象
+        config: 算法配置
+    
+    Returns:
+        调度结果字典
+    """
+    # 1. 执行 L0→L1 调度
     try:
-        l0_l1_dispatches, l0_l1_packages = _dispatch_level(
-            db, schedule.id, 0, config
-        )
+        l0_l1_dispatches, _ = _dispatch_level(db, schedule.id, 0, config)
     except Exception as e:
         raise ValueError(f"L0→L1调度失败：{str(e)}")
     
     if not l0_l1_dispatches:
         raise ValueError("L0→L1没有可调度的包裹")
     
-    # 3. 创建调度批次
+    # 2. 创建调度批次
     batch_code = _generate_batch_code(db)
     batch = DispatchBatch(
         batch_code=batch_code,
         global_schedule_id=schedule.id,
         status='pending',
-        demo_mode=demo_mode,
+        demo_mode=True,
         l0_l1_dispatch_count=len(l0_l1_dispatches),
         l1_l2_dispatch_count=0,
     )
     db.add(batch)
-    db.flush()  # 获取batch.id
+    db.flush()
     
-    # 4. 写入第一次调用的调度明细
+    # 3. 写入 L0→L1 调度明细
+    _write_dispatches(db, batch.id, l0_l1_dispatches, level_phase=0)
+    
+    # 4. 模拟 L0→L1 送达（demo_mode=true 自动推进）
+    # 获取 L0→L1 的调度明细对象
+    l0_l1_dispatch_objs = db.query(NodeDispatch).filter(
+        NodeDispatch.dispatch_batch_id == batch.id,
+        NodeDispatch.level_phase == 0
+    ).all()
+    
+    for dispatch_obj in l0_l1_dispatch_objs:
+        simulate_delivery_l0_to_l1(db, batch, dispatch_obj)
+    
+    # 5. 在 L1 重新打包
+    # 获取所有相关的订单编码
+    order_codes = set()
     for dispatch_data in l0_l1_dispatches:
-        dispatch_code = _generate_dispatch_code(db)
-        dispatch = NodeDispatch(
-            dispatch_code=dispatch_code,
-            dispatch_batch_id=batch.id,
-            level_phase=0,
-            vehicle_id=dispatch_data["vehicle_id"],
-            driver_id=dispatch_data["driver_id"],
-            tasks=dispatch_data["tasks"],
-            total_distance=dispatch_data["total_distance"],
-            total_time=dispatch_data["total_time"],
-        )
-        db.add(dispatch)
-        db.flush()  # 获取dispatch.id
-        
-        # 更新包裹的dispatch_id
         for task in dispatch_data["tasks"]:
             if not task["is_return"]:
                 for pkg_code in task["package_codes"]:
                     pkg = db.query(Package).filter(Package.package_code == pkg_code).first()
                     if pkg:
-                        pkg.dispatch_id = dispatch.id
-                        pkg.status = 'in_transit'
+                        # 从包裹的goods_items中获取order_code
+                        if pkg.goods_items:
+                            for item in pkg.goods_items:
+                                order_code = item.get('order_code')
+                                if order_code:
+                                    order_codes.add(order_code)
     
-    # 5. 更新批次状态为 l0_l1_done
-    batch.status = 'l0_l1_done'
+    # 为每个订单在L1重新打包
+    for order_code in order_codes:
+        # 获取该订单的L1和L2节点编码
+        order = db.query(Order).filter(Order.order_code == order_code).first()
+        if order:
+            # 从global_schedules中获取L1和L2节点编码
+            goods_schedules = schedule.goods_schedules if isinstance(schedule.goods_schedules, list) else json.loads(schedule.goods_schedules)
+            for gs in goods_schedules:
+                if gs.get('order_code') == order_code:
+                    path = gs.get('path', [])
+                    if len(path) >= 3:
+                        l1_node_code = path[1]  # 第二个节点是L1
+                        l2_node_code = path[2]  # 第三个节点是L2
+                        repack_at_l1(db, order_code, l1_node_code, l2_node_code, schedule.id)
+                        break
     
-    # 6. 第二次调用（L1→L2）
-    # 检查前置条件
-    if demo_mode:
-        # demo_mode=true：检查L0→L1是否已完成
-        if batch.status != 'l0_l1_done':
-            raise ValueError("L0→L1未完成，不能执行L1→L2")
-    else:
-        # demo_mode=false：检查所有L0→L1的包裹已送达
-        # 暂时简化：直接执行第二次调用
-        pass
-    
+    # 6. 执行 L1→L2 调度
     try:
-        l1_l2_dispatches, l1_l2_packages = _dispatch_level(
-            db, schedule.id, 1, config
-        )
+        l1_l2_dispatches, _ = _dispatch_level(db, schedule.id, 1, config)
     except Exception as e:
-        # 第二次调用失败，批次状态保持 l0_l1_done
-        # 不提交事务，让服务层回滚
         raise ValueError(f"L1→L2调度失败：{str(e)}")
     
-    # 7. 写入第二次调用的调度明细
-    for dispatch_data in l1_l2_dispatches:
+    # 7. 写入 L1→L2 调度明细
+    _write_dispatches(db, batch.id, l1_l2_dispatches, level_phase=1)
+    
+    # 8. 模拟 L1→L2 送达（demo_mode=true 自动推进）
+    l1_l2_dispatch_objs = db.query(NodeDispatch).filter(
+        NodeDispatch.dispatch_batch_id == batch.id,
+        NodeDispatch.level_phase == 1
+    ).all()
+    
+    for dispatch_obj in l1_l2_dispatch_objs:
+        simulate_delivery_l1_to_l2(db, batch, dispatch_obj, list(order_codes))
+    
+    # 9. 更新批次状态为 completed
+    batch.status = 'completed'
+    batch.l1_l2_dispatch_count = len(l1_l2_dispatches)
+    
+    # 10. 返回结果
+    return {
+        "batch_code": batch.batch_code,
+        "status": batch.status,
+        "dispatches": l0_l1_dispatches + l1_l2_dispatches
+    }
+
+
+def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any]:
+    """
+    demo_mode=false 时的首次调用（只执行 L0→L1）
+    
+    Args:
+        db: 数据库会话
+        schedule: 全局调度方案对象
+        config: 算法配置
+    
+    Returns:
+        调度结果字典
+    """
+    # 1. 执行 L0→L1 调度
+    try:
+        l0_l1_dispatches, _ = _dispatch_level(db, schedule.id, 0, config)
+    except Exception as e:
+        raise ValueError(f"L0→L1调度失败：{str(e)}")
+    
+    if not l0_l1_dispatches:
+        raise ValueError("L0→L1没有可调度的包裹")
+    
+    # 2. 创建调度批次
+    batch_code = _generate_batch_code(db)
+    batch = DispatchBatch(
+        batch_code=batch_code,
+        global_schedule_id=schedule.id,
+        status='pending',
+        demo_mode=False,
+        l0_l1_dispatch_count=len(l0_l1_dispatches),
+        l1_l2_dispatch_count=0,
+    )
+    db.add(batch)
+    db.flush()
+    
+    # 3. 写入 L0→L1 调度明细
+    _write_dispatches(db, batch.id, l0_l1_dispatches, level_phase=0)
+    
+    # 4. 更新批次状态为 l0_l1_done（等待模拟送达）
+    batch.status = 'l0_l1_done'
+    db.flush()  # 刷新到数据库，确保后续查询能看到更新后的状态
+    
+    # 5. 返回结果（只包含 L0→L1 的调度明细）
+    return {
+        "batch_code": batch.batch_code,
+        "status": batch.status,
+        "dispatches": l0_l1_dispatches,
+        "message": "L0→L1调度完成，请等待模拟送达后再次调用以执行L1→L2"
+    }
+
+
+def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict) -> Dict[str, Any]:
+    """
+    demo_mode=false 时的第二次调用（只执行 L1→L2）
+    
+    Args:
+        db: 数据库会话
+        schedule: 全局调度方案对象
+        existing_batch: 已存在的调度批次（status=l0_l1_done）
+        config: 算法配置
+    
+    Returns:
+        调度结果字典
+    """
+    # 1. 执行 L1→L2 调度
+    try:
+        l1_l2_dispatches, _ = _dispatch_level(db, schedule.id, 1, config)
+    except Exception as e:
+        raise ValueError(f"L1→L2调度失败：{str(e)}")
+    
+    if not l1_l2_dispatches:
+        raise ValueError("L1→L2没有可调度的包裹")
+    
+    # 2. 写入 L1→L2 调度明细
+    _write_dispatches(db, existing_batch.id, l1_l2_dispatches, level_phase=1)
+    
+    # 3. 更新批次状态为 completed
+    existing_batch.status = 'completed'
+    existing_batch.l1_l2_dispatch_count = len(l1_l2_dispatches)
+    db.flush()  # 刷新到数据库，确保状态更新被正确保存
+    
+    # 4. 返回结果（只包含 L1→L2 的调度明细）
+    return {
+        "batch_code": existing_batch.batch_code,
+        "status": existing_batch.status,
+        "dispatches": l1_l2_dispatches,
+        "message": "L1→L2调度完成，整个节点调度流程结束"
+    }
+
+
+def _write_dispatches(db: Session, batch_id: int, dispatches: list, level_phase: int):
+    """
+    写入调度明细并更新状态
+    
+    Args:
+        db: 数据库会话
+        batch_id: 调度批次ID
+        dispatches: 调度明细列表
+        level_phase: 层级阶段（0: L0→L1, 1: L1→L2）
+    """
+    for dispatch_data in dispatches:
         dispatch_code = _generate_dispatch_code(db)
         dispatch = NodeDispatch(
             dispatch_code=dispatch_code,
-            dispatch_batch_id=batch.id,
-            level_phase=1,
+            dispatch_batch_id=batch_id,
+            level_phase=level_phase,
             vehicle_id=dispatch_data["vehicle_id"],
             driver_id=dispatch_data["driver_id"],
             tasks=dispatch_data["tasks"],
@@ -460,25 +630,18 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
         db.add(dispatch)
         db.flush()
         
-        # 更新包裹的dispatch_id
+        # 收集所有包裹编码
+        package_codes = []
         for task in dispatch_data["tasks"]:
             if not task["is_return"]:
                 for pkg_code in task["package_codes"]:
                     pkg = db.query(Package).filter(Package.package_code == pkg_code).first()
                     if pkg:
                         pkg.dispatch_id = dispatch.id
-                        pkg.status = 'in_transit'
-    
-    # 8. 更新批次状态为 completed
-    batch.status = 'completed'
-    batch.l1_l2_dispatch_count = len(l1_l2_dispatches)
-    
-    # 9. 返回结果
-    return {
-        "batch_code": batch.batch_code,
-        "status": batch.status,
-        "dispatches": l0_l1_dispatches + l1_l2_dispatches
-    }
+                        package_codes.append(pkg_code)
+        
+        # 调用状态机更新状态（货物、车辆、司机）
+        update_state_after_f005(db, dispatch, package_codes)
 
 
 # 内存计数器
