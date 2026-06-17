@@ -177,6 +177,8 @@ src/backend/
 │
 ├── tests/                      # 测试
 │   ├── conftest.py             # 测试夹具与配置
+│   ├── test_routes_api.py      # 路径规划 API 测试 (6个测试)
+│   ├── test_routes_integration.py  # 路径规划集成测试
 │   ├── test_algorithms/        # 算法层测试
 │   │   ├── test_global_schedule.py   # F007 全局调度算法测试
 │   │   ├── test_packaging.py         # F021 打包算法测试
@@ -186,8 +188,7 @@ src/backend/
 │   │   ├── test_schedule_service.py  # 调度编排服务测试
 │   │   └── test_route_service.py     # 路径规划服务测试 (13个测试)
 │   ├── test_api/               # API 层测试
-│   │   ├── test_schedule.py    # 调度接口测试
-│   │   └── test_routes.py     # 路径规划接口测试
+│   │   └── test_schedule.py    # 调度接口测试
 │   └── test_integration/       # 集成测试
 │       └── test_full_dispatch_flow.py  # 完整调度链路测试 F007→F021→F005→F006 (2个测试)
 │
