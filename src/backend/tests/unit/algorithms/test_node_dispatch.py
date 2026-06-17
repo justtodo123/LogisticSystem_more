@@ -206,6 +206,12 @@ class TestNodeDispatchEdgeCases:
             db_session.add(pkg)
         db_session.commit()
         
+        # 将所有车辆状态设置为 maintenance（不可用），以测试"没有可用车辆"的情况
+        vehicles = db_session.query(Vehicle).all()
+        for v in vehicles:
+            v.status = 'maintenance'
+        db_session.commit()
+        
         # 调用节点调度，应该返回空结果（没有可用的车辆）
         result = run_node_dispatch(
             schedule_code=schedule_code,

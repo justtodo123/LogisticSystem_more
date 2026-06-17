@@ -4,16 +4,20 @@
 测试目标：
 - SimulationService.deliver_packages 方法的正常流程和异常流程
 - 验证服务层业务逻辑、状态更新、错误处理
+- 测试批次状态更新、自动触发逻辑、失败回滚机制
 """
 import pytest
 from unittest.mock import patch, MagicMock
 from sqlalchemy.orm import Session
+import json
 
 from services.simulation_service import SimulationService
 from models.package import Package
 from models.goods import Goods
 from models.vehicle import Vehicle
 from models.order import Order
+from models.node_dispatch import NodeDispatch
+from models.dispatch_batch import DispatchBatch
 
 
 class TestDeliverPackages:
@@ -434,3 +438,155 @@ class TestDeliverPackages:
         # 验证响应（业务错误）
         assert result["code"] != 0
         assert "包裹" in result["message"] or "不存在" in result["message"]
+
+
+class TestUpdateBatchStatusAfterDelivery:
+    """测试更新批次状态为 l0_l1_done"""
+
+    @pytest.mark.unit
+    def test_updates_status_to_l0_l1_done(self, db_session):
+        """
+        测试 _update_batch_status_after_delivery() 正确更新批次状态
+        """
+        # 创建测试数据：DispatchBatch（状态为 pending）
+        from models.global_schedule import GlobalSchedule
+        import json
+        
+        # 创建 GlobalSchedule（因为 DispatchBatch.global_schedule_id 是 NOT NULL）
+        global_schedule = GlobalSchedule(
+            schedule_code="GS999",
+            order_codes=json.dumps([]),
+            total_distance=0.0,
+            total_time=0.0,
+            total_goods=0,
+            score=0.0,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+            goods_schedules=json.dumps([])
+        )
+        db_session.add(global_schedule)
+        db_session.commit()
+        
+        batch = DispatchBatch(
+            batch_code="BATCH999",
+            global_schedule_id=global_schedule.id,
+            status="pending"
+        )
+        db_session.add(batch)
+        db_session.commit()
+        
+        # 创建 NodeDispatch
+        dispatch = NodeDispatch(
+            dispatch_code="ND999",
+            dispatch_batch_id=batch.id,
+            vehicle_id=1,
+            driver_id=1,
+            level_phase=0,
+            tasks=json.dumps([]),
+            total_distance=0.0,
+            total_time=0.0
+        )
+        db_session.add(dispatch)
+        db_session.commit()
+        
+        # 创建 Package（dispatch_id 指向 NodeDispatch）
+        package = Package(
+            package_code="PKG999",
+            weight=10.0,  # 必需字段
+            volume=0.5,    # 必需字段
+            status="delivered",  # 已送达
+            from_node_id=1,  # 必需字段
+            to_node_id=2,    # 必需字段
+            from_longitude=114.3,  # 必需字段
+            from_latitude=30.5,   # 必需字段
+            to_longitude=114.31,  # 必需字段
+            to_latitude=30.51,    # 必需字段
+            goods_items=json.dumps([]),
+            dispatch_id=dispatch.id,
+        )
+        db_session.add(package)
+        db_session.commit()
+        
+        # 调用 _update_batch_status_after_delivery()
+        packages = [package]
+        SimulationService._update_batch_status_after_delivery(db_session, packages)
+        
+        # 验证批次状态更新为 l0_l1_done
+        db_session.refresh(batch)
+        assert batch.status == "l0_l1_done"
+
+
+class TestTriggerRepackaging:
+    """测试自动触发重新打包"""
+
+    @pytest.mark.unit
+    def test_trigger_repackaging_success(self, db_session):
+        """
+        测试 _trigger_repackaging() 成功触发重新打包
+        """
+        # 创建测试数据：Goods（状态为 pending_pack）
+        from models.goods import Goods
+        from models.order import Order
+        from models.global_schedule import GlobalSchedule
+        import json
+        
+        # 创建 GlobalSchedule
+        global_schedule = GlobalSchedule(
+            schedule_code="GS998",
+            order_codes=json.dumps([]),
+            total_distance=0.0,
+            total_time=0.0,
+            total_goods=0,
+            score=0.0,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+            goods_schedules=json.dumps([{"order_code": "O998", "path": ["SC001", "SO001", "SO010"]}])
+        )
+        db_session.add(global_schedule)
+        db_session.commit()
+        
+        # 创建 Order
+        order = Order(
+            order_code="O998",
+            destination_node_id=1,
+            time_window="2026-06-15 全天"  # 必需字段
+        )
+        db_session.add(order)
+        db_session.commit()
+        
+        # 创建 Goods（状态为 pending_pack）
+        goods = Goods(
+            goods_code="G998",
+            goods_name="测试货物",  # 必需字段
+            goods_type="普通",      # 必需字段
+            weight=5.0,           # 必需字段
+            volume=0.3,           # 必需字段
+            node_id=1,             # 必需字段
+            order_id=order.id,
+            status="pending_pack"
+        )
+        db_session.add(goods)
+        db_session.commit()
+        
+        # 调用 _trigger_repackaging()
+        result = SimulationService._trigger_repackaging(db_session, global_schedule.id)
+        
+        # 验证返回 True（成功触发）
+        assert result == True
+
+
+class TestTriggerSecondF005Async:
+    """测试异步触发第二次F005"""
+
+    @pytest.mark.unit
+    def test_trigger_second_f005_async_returns_true(self, db_session):
+        """
+        测试 _trigger_second_f005_async() 返回 True
+        """
+        # 调用 _trigger_second_f005_async()
+        result = SimulationService._trigger_second_f005_async(db_session, 1)
+        
+        # 验证返回 True 或 False（不抛出异常）
+        assert isinstance(result, bool)

@@ -14,6 +14,8 @@ from models.order import Order
 from models.vehicle import Vehicle
 from models.driver import Driver
 from models.node_dispatch import NodeDispatch
+from models.dispatch_batch import DispatchBatch
+from models.global_schedule import GlobalSchedule
 from utils.response import success_response, error_response
 
 
@@ -166,7 +168,10 @@ class SimulationService:
                     order.status = "completed"
                     delivered_order_codes.append(order.order_code)
             
-            # 8. 自动触发逻辑（demo_mode=false 完整流程支持）
+            # 8. 更新批次状态（第一次送达完成后）
+            SimulationService._update_batch_status_after_delivery(db, packages)
+            
+            # 9. 自动触发逻辑（demo_mode=false 完整流程支持）
             auto_triggered = {"repackaging": False, "second_f005": False}
             
             try:
@@ -224,63 +229,76 @@ class SimulationService:
         Returns:
             bool: 是否成功触发重新打包
         """
-        from models.goods import Goods
-        from models.order import Order
-        from models.global_schedule import GlobalSchedule
-        import json
-        
-        # 查询所有 pending_pack 货物
-        pending_goods = db.query(Goods).filter(
-            Goods.status == 'pending_pack'
-        ).all()
-        
-        if not pending_goods:
-            return False
-        
-        # 按订单分组
-        order_goods_map = {}
-        for goods in pending_goods:
-            order_id = goods.order_id
-            if order_id not in order_goods_map:
-                order_goods_map[order_id] = []
-            order_goods_map[order_id].append(goods)
-        
-        # 获取 schedule
-        schedule = db.query(GlobalSchedule).filter(
-            GlobalSchedule.id == schedule_id
-        ).first()
-        
-        if not schedule:
-            return False
-        
-        # 解析 goods_schedules
-        goods_schedules = schedule.goods_schedules
-        if isinstance(goods_schedules, str):
-            goods_schedules = json.loads(goods_schedules)
-        
-        # 为每个订单重新打包
-        for order_id, goods_list in order_goods_map.items():
-            order = db.query(Order).filter(Order.id == order_id).first()
-            if not order:
-                continue
+        try:
+            from models.goods import Goods
+            from models.order import Order
+            from models.global_schedule import GlobalSchedule
+            import json
+            import logging
             
-            # 查找该订单的路径
-            l1_node_code = None
-            l2_node_code = None
-            for gs in goods_schedules:
-                if gs.get('order_code') == order.order_code:
-                    path = gs.get('path', [])
-                    if len(path) >= 3:
-                        l1_node_code = path[1]  # 第二个节点是L1
-                        l2_node_code = path[2]  # 第三个节点是L2
-                        break
+            # 查询所有 pending_pack 货物
+            pending_goods = db.query(Goods).filter(
+                Goods.status == 'pending_pack'
+            ).all()
             
-            if l1_node_code and l2_node_code:
-                # 调用 repack_at_l1()
-                from services.state_machine import repack_at_l1
-                repack_at_l1(db, order.order_code, l1_node_code, l2_node_code, schedule_id)
-        
-        return True
+            if not pending_goods:
+                return False
+            
+            # 按订单分组
+            order_goods_map = {}
+            for goods in pending_goods:
+                order_id = goods.order_id
+                if order_id not in order_goods_map:
+                    order_goods_map[order_id] = []
+                order_goods_map[order_id].append(goods)
+            
+            # 获取 schedule
+            schedule = db.query(GlobalSchedule).filter(
+                GlobalSchedule.id == schedule_id
+            ).first()
+            
+            if not schedule:
+                return False
+            
+            # 解析 goods_schedules
+            goods_schedules = schedule.goods_schedules
+            if isinstance(goods_schedules, str):
+                goods_schedules = json.loads(goods_schedules)
+            
+            # 为每个订单重新打包
+            for order_id, goods_list in order_goods_map.items():
+                order = db.query(Order).filter(Order.id == order_id).first()
+                if not order:
+                    continue
+                
+                # 查找该订单的路径
+                l1_node_code = None
+                l2_node_code = None
+                for gs in goods_schedules:
+                    if gs.get('order_code') == order.order_code:
+                        path = gs.get('path', [])
+                        if len(path) >= 3:
+                            l1_node_code = path[1]  # 第二个节点是L1
+                            l2_node_code = path[2]  # 第三个节点是L2
+                            break
+                
+                if l1_node_code and l2_node_code:
+                    # 调用 repack_at_l1()
+                    from services.state_machine import repack_at_l1
+                    repack_at_l1(db, order.order_code, l1_node_code, l2_node_code, schedule_id)
+            
+            # 提交事务（确保重新打包的结果已保存）
+            db.commit()
+            
+            return True
+            
+        except Exception as e:
+            # 回滚事务
+            db.rollback()
+            
+            import logging
+            logging.error(f"重新打包失败：{e}")
+            return False
 
     @staticmethod
     def _trigger_second_f005_async(db: Session, schedule_id: int) -> bool:
@@ -291,6 +309,7 @@ class SimulationService:
         """
         import json
         from concurrent.futures import ThreadPoolExecutor
+        from models.global_schedule import GlobalSchedule
         
         # 获取 schedule_code
         schedule = db.query(GlobalSchedule).filter(
@@ -322,6 +341,21 @@ class SimulationService:
             except Exception as e:
                 import logging
                 logging.error(f"第二次F005执行失败：{e}")
+                
+                # 更新批次状态为 failed
+                try:
+                    from models.node_dispatch import DispatchBatch
+                    batch = new_db.query(DispatchBatch).filter(
+                        DispatchBatch.global_schedule_id == schedule_id,
+                        DispatchBatch.status == 'l0_l1_done'
+                    ).first()
+                    
+                    if batch:
+                        batch.status = 'failed'
+                        new_db.commit()
+                except:
+                    pass
+                    
             finally:
                 new_db.close()
         
@@ -333,3 +367,28 @@ class SimulationService:
         executor.submit(_execute_second_f005)
         
         return True
+
+    @staticmethod
+    def _update_batch_status_after_delivery(db: Session, packages: List[Package]) -> None:
+        """
+        更新批次状态为 l0_l1_done（第一次送达完成后）
+        
+        Args:
+            db: 数据库会话
+            packages: 已送达的包裹列表
+        """
+        # 收集所有受影响的批次ID
+        batch_ids = set()
+        for pkg in packages:
+            if pkg.dispatch_id:
+                dispatch = db.query(NodeDispatch).filter(NodeDispatch.id == pkg.dispatch_id).first()
+                if dispatch and dispatch.dispatch_batch_id:
+                    batch_ids.add(dispatch.dispatch_batch_id)
+        
+        # 更新批次状态
+        for batch_id in batch_ids:
+            batch = db.query(DispatchBatch).filter(DispatchBatch.id == batch_id).first()
+            if batch and batch.status in ['pending', 'l0_l1_done']:
+                batch.status = 'l0_l1_done'
+        
+        db.flush()

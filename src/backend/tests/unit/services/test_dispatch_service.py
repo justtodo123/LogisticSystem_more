@@ -62,13 +62,16 @@ class TestCreateNodeDispatch:
         db_session.add(package)
         db_session.commit()
         
-        # Mock 算法函数
-        with patch("algorithms.node_dispatch.run_node_dispatch") as mock_dispatch:
+        # Mock 算法函数（注意：需要 mock dispatch_service 模块中导入的引用）
+        with patch("services.dispatch_service.run_node_dispatch") as mock_dispatch:
             mock_dispatch.return_value = {
                 "batch_code": "BATCH001",
                 "total_distance": 50.0,
                 "total_time": 120.0,
                 "dispatch_count": 1,
+                "dispatches": [{"vehicle_code": "V001", "driver_code": "D001"}],
+                "unallocated_packages": [],
+                "status": "pending"
             }
             
             # 调用服务方法
@@ -81,10 +84,10 @@ class TestCreateNodeDispatch:
         # 验证响应
         assert result["code"] == 0
         assert "data" in result
+        assert result["data"]["batch_code"] == "BATCH001"
         
-        # 验证数据库中有记录
-        batch_list = db_session.query(DispatchBatch).all()
-        assert len(batch_list) >= 1
+        # 注意：由于算法函数被mock，不会创建数据库记录
+        # 只验证返回结果的正确性
 
     @pytest.mark.unit
     @pytest.mark.asyncio
