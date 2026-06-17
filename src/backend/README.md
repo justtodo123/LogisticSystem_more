@@ -7,6 +7,14 @@
 **当前阶段**：阶段 5（路径规划与可视化 F006）已完成  
 **下一阶段**：阶段 6（模拟送达 F013-1）
 
+**阶段4最新更新**：
+- 修复 `demo_mode` 逻辑，使其符合项目宪章设计
+- `demo_mode=true`：一次调用完成 L0→L1 和 L1→L2 两次调度
+- `demo_mode=false`：首次调用仅执行 L0→L1，第二次调用才执行 L1→L2
+- 自动检测调用阶段（通过检查是否已有 `l0_l1_done` 状态的批次）
+- ✅ **状态机实现完成** (2026-06-17)：实现所有状态流转逻辑，包括 F005 调用后、模拟送达、重新打包等场景
+- ✅ **单元测试通过** (2026-06-17)：5/5 测试通过，验证状态流转正确性
+
 ## 技术栈
 
 | 层 | 技术 | 用途 |
@@ -52,7 +60,7 @@ copy .env.example .env
 python -c "from config.database import engine, Base; from models import *; Base.metadata.create_all(bind=engine)"
 
 # 6. 初始化演示数据（创建用户、节点、车辆、司机、订单等）
-python scripts/init_demo_data.py
+python -m  scripts.init_demo_data
 
 # 7. 启动后端服务
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -155,8 +163,7 @@ src/backend/
 │   ├── __init__.py
 │   ├── global_schedule.py      # F007 全局调度 (贪心算法, L0→L1→L2 路径规划)
 │   ├── packaging.py            # F021 打包 (L0→L1 按节点对, L1→L2 按订单)
-│   ├── node_dispatch.py       # F005 节点调度 (L0→L1, L1→L2 两次串行调用)
-│   └── route_planning.py     # F006 路径规划 (Haversine + 2-opt 优化)
+│   └── node_dispatch.py       # F005 节点调度 (L0→L1, L1→L2 两次串行调用, 支持demo_mode)
 │
 ├── tests/                      # 测试
 │   ├── conftest.py             # 测试夹具与配置
@@ -413,12 +420,20 @@ alembic downgrade -1
 
 ### 阶段 4 自测（节点间调度 F005）
 
-测试时间：2026-06-14，结果：**全部通过**
+测试时间：2026-06-14，更新：2026-06-17，结果：**全部通过**
 
 | 类别 | 测试项 | 结果 |
 |------|--------|------|
 | F005 算法 | L0→L1 调度、L1→L2 调度、车辆匹配（载重/节点优先级）、返回任务添加 | ✅ |
 | F005 算法 | 车辆不足错误、包裹状态错误、L0→L1 未完成错误 | ✅ |
+| F005 算法 | demo_mode=true 一次完成两次调度 | ✅ |
+| F005 算法 | demo_mode=false 分阶段调度（首次L0→L1，第二次L1→L2） | ✅ |
+| F005 算法 | 自动检测调用阶段（通过检查是否已有 l0_l1_done 状态的批次） | ✅ |
+| ✅ 状态机 | F005调用后状态更新（货物、包裹、车辆、司机）| ✅ (2026-06-17) |
+| ✅ 状态机 | L0→L1模拟送达后状态更新（包裹、货物、批次、车辆、司机）| ✅ (2026-06-17) |
+| ✅ 状态机 | L1重新打包后状态更新（货物、新包裹）| ✅ (2026-06-17) |
+| ✅ 状态机 | L1→L2模拟送达后状态更新（包裹、货物、订单、批次、车辆、司机）| ✅ (2026-06-17) |
+| ✅ 单元测试 | 5/5 测试通过，验证状态流转正确性 | ✅ (2026-06-17) |
 | API 集成 | POST /api/schedule/node-dispatch 触发调度、GET /api/schedule/batches 列表、GET /api/schedule/batches/{code} 详情 | ✅ |
 | 事务原子性 | dispatch_batches + node_dispatches + packages/goods/vehicles/drivers 状态更新单事务 | ✅ |
 | 权限 | dispatcher 可触发调度、manager 返回 403 | ✅ |
