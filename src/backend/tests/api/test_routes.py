@@ -336,3 +336,128 @@ class TestGetRouteCoordinates:
         body = response.json()
         assert body["code"] != 0
         assert "车辆" in body["message"] or "不存在" in body["message"]
+
+
+class TestRouteBoundaries:
+    """测试路线管理的边界情况"""
+
+    @pytest.mark.api
+    def test_get_route_coordinates_no_routes(self, client, db_session):
+        """测试车辆没有路线时的坐标查询"""
+        # 创建测试用户、车辆（但没有路线）
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+
+        # 创建测试车辆
+        vehicle = Vehicle(
+            vehicle_code="VEH002",
+            model="测试车型2",
+            capacity=100.0,
+            energy_type="fuel",
+            node_id=1,
+            last_arrived_node_id=1,
+            status="idle",
+        )
+        db_session.add(vehicle)
+        db_session.commit()
+
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+
+        # 获取车辆路线坐标（没有路线）
+        response = client.get(
+            f"/api/routes/by-vehicle/VEH002/coordinates",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 验证响应（应该返回空列表或业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        # 可能返回空列表，或者业务错误
+        if body["code"] == 0:
+            # 返回空列表
+            assert "data" in body
+            assert "routes" in body["data"]
+            assert body["data"]["routes"] == []
+        else:
+            # 业务错误
+            assert body["code"] != 0
+
+    @pytest.mark.api
+    def test_get_route_detail_invalid_code(self, client, db_session):
+        """测试路线编号格式错误"""
+        # 创建测试用户
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+
+        # 获取路线详情（编号格式错误）
+        response = client.get(
+            "/api/routes/INVALID_CODE",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        assert "路线" in body["message"] or "不存在" in body["message"]
+
+    @pytest.mark.api
+    def test_get_routes_with_filters(self, client, db_session):
+        """测试路线列表的筛选参数"""
+        # 创建测试用户
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+
+        # 测试筛选参数（batch_code不存在）
+        response = client.get(
+            "/api/routes",
+            params={"batch_code": "BATCH_NONEXIST"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 验证响应（应该返回空列表）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0
+        assert body["data"]["items"] == []
+        assert body["data"]["total"] == 0
+

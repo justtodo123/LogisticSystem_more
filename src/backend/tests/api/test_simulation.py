@@ -239,3 +239,165 @@ class TestDeliverPackages:
         body = response.json()
         assert body["code"] != 0
         assert "包裹" in body["message"] or "不存在" in body["message"]
+
+
+class TestDeliverPackagesBoundaries:
+    """测试模拟送达的边界情况"""
+
+    @pytest.mark.api
+    def test_deliver_package_status_not_in_transit(self, client, db_session):
+        """测试包裹状态不是in_transit（应该失败）"""
+        # 创建测试用户、节点、包裹
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        
+        # 创建测试节点
+        node_sc = Node(
+            node_code="SC001",
+            name="存储中心",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="storage_center",
+        )
+        db_session.add(node_sc)
+        db_session.flush()
+        sc = StorageCenter(node_id=node_sc.id, capacity=1000.0, inventory=0)
+        db_session.add(sc)
+        db_session.commit()
+        
+        # 创建测试包裹（状态为packed，不是in_transit）
+        package = Package(
+            package_code="PKG001",
+            from_node_id=node_sc.id,
+            to_node_id=node_sc.id,
+            weight=10.0,
+            volume=0.5,
+            status="packed",  # 不是in_transit
+            goods_items=[{"goods_code": "G001", "order_code": "O001"}],
+        )
+        db_session.add(package)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 模拟送达（包裹状态不是in_transit）
+        response = client.post(
+            "/api/simulation/deliver",
+            json={"package_code": "PKG001"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        # API实际返回的消息：没有找到可送达的包裹
+        assert "没有找到" in body["message"] or "包裹" in body["message"]
+
+    @pytest.mark.api
+    def test_deliver_vehicle_not_found(self, client, db_session):
+        """测试车辆不存在"""
+        # 创建测试用户
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 模拟送达（车辆不存在）
+        response = client.post(
+            "/api/simulation/deliver",
+            json={"vehicle_code": "VEH_NONEXIST"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        # API实际返回的消息：没有找到可送达的包裹
+        assert "没有找到" in body["message"] or "包裹" in body["message"]
+
+    @pytest.mark.api
+    def test_deliver_vehicle_no_packages(self, client, db_session):
+        """测试车辆没有in_transit包裹"""
+        # 创建测试用户、节点、车辆（但没有in_transit包裹）
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        
+        # 创建测试节点
+        node_sc = Node(
+            node_code="SC001",
+            name="存储中心",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="storage_center",
+        )
+        db_session.add(node_sc)
+        db_session.flush()
+        sc = StorageCenter(node_id=node_sc.id, capacity=1000.0, inventory=0)
+        db_session.add(sc)
+        
+        # 创建测试车辆（状态为idle，没有in_transit包裹）
+        vehicle = Vehicle(
+            vehicle_code="VEH001",
+            model="测试车型",
+            capacity=100.0,
+            energy_type="fuel",
+            node_id=node_sc.id,
+            last_arrived_node_id=node_sc.id,
+            status="idle",  # 没有in_transit包裹
+        )
+        db_session.add(vehicle)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 模拟送达（车辆没有in_transit包裹）
+        response = client.post(
+            "/api/simulation/deliver",
+            json={"vehicle_code": "VEH001"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        assert "包裹" in body["message"] or "in_transit" in body["message"]
+

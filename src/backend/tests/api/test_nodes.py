@@ -296,3 +296,205 @@ class TestDeleteStorageCenter:
         body = response.json()
         assert body["code"] != 0
         assert "节点" in body["message"] or "不存在" in body["message"]
+
+
+class TestUpdateStorageCenter:
+    """测试更新存储中心"""
+
+    @pytest.mark.api
+    def test_update_storage_center_success(self, client, db_session):
+        """测试成功更新存储中心"""
+        # 创建测试用户、节点
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+
+        # 创建测试节点
+        node = Node(
+            node_code="SC001",
+            name="存储中心",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="storage_center",
+        )
+        db_session.add(node)
+        db_session.flush()
+        sc = StorageCenter(node_id=node.id, capacity=1000.0, inventory=0)
+        db_session.add(sc)
+        db_session.commit()
+
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+
+        # 更新存储中心
+        response = client.put(
+            "/api/nodes/storage-centers/SC001",
+            json={
+                "name": "更新存储中心",
+                "location": "更新位置",
+                "latitude": 30.6,
+                "longitude": 114.4,
+                "capacity": 2000.0,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 验证响应
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0
+
+        # 验证数据库已更新
+        db_session.refresh(sc)
+        assert sc.capacity == 2000.0
+
+    @pytest.mark.api
+    def test_update_storage_center_not_found(self, client, db_session):
+        """测试更新不存在的存储中心"""
+        # 创建测试用户
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+
+        # 更新存储中心（不存在）
+        response = client.put(
+            "/api/nodes/storage-centers/SC_NONEXIST",
+            json={
+                "name": "更新存储中心",
+                "location": "更新位置",
+                "capacity": 2000.0,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        assert "节点" in body["message"] or "不存在" in body["message"]
+
+
+class TestUpdateSortingCenter:
+    """测试更新分拣中心"""
+
+    @pytest.mark.api
+    def test_update_sorting_center_success(self, client, db_session):
+        """测试成功更新分拣中心"""
+        # 创建测试用户、节点
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+
+        # 创建测试节点
+        node = Node(
+            node_code="L1001",
+            name="一级分拣中心",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="sorting_center",
+        )
+        db_session.add(node)
+        db_session.flush()
+        sc = SortingCenter(node_id=node.id, level=1, capacity=500, max_storage_time=24)
+        db_session.add(sc)
+        db_session.commit()
+
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+
+        # 更新分拣中心
+        response = client.put(
+            "/api/nodes/sorting-centers/L1001",
+            json={
+                "name": "更新分拣中心",
+                "location": "更新位置",
+                "latitude": 30.6,
+                "longitude": 114.4,
+                "level": 1,
+                "capacity": 1000,
+                "max_storage_time": 48,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 验证响应
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0
+
+        # 验证数据库已更新
+        db_session.refresh(sc)
+        assert sc.capacity == 1000
+        assert sc.max_storage_time == 48
+
+    @pytest.mark.api
+    def test_update_sorting_center_not_found(self, client, db_session):
+        """测试更新不存在的分拣中心"""
+        # 创建测试用户
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+
+        # 更新分拣中心（不存在）
+        response = client.put(
+            "/api/nodes/sorting-centers/L1_NONEXIST",
+            json={
+                "name": "更新分拣中心",
+                "location": "更新位置",
+                "level": 1,
+                "max_storage": 1000,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        assert "节点" in body["message"] or "不存在" in body["message"]

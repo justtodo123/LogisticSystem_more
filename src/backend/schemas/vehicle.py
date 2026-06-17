@@ -23,6 +23,7 @@ class VehicleUpdate(BaseModel):
     energy_type: Optional[str] = None
     vehicle_type: Optional[str] = None
     capability_tags: Optional[list[str]] = None
+    node_code: Optional[str] = None
     last_arrived_node_code: Optional[str] = None
     status: Optional[str] = None
 

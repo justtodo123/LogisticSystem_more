@@ -15,6 +15,8 @@ from datetime import datetime
 from models.order import Order
 from models.goods import Goods
 from models.node import Node
+from models.storage_center import StorageCenter
+from models.sorting_center import SortingCenter
 from models.package import Package
 from models.vehicle import Vehicle
 from models.driver import Driver
@@ -22,11 +24,12 @@ from models.global_schedule import GlobalSchedule
 from models.dispatch_batch import DispatchBatch
 from models.node_dispatch import NodeDispatch
 from models.route import Route
+from services.simulation_service import SimulationService
 
 
 @pytest.fixture
 def setup_simulation_data(db_session):
-    """设置模拟送达测试数据"""
+    """设置模拟送达测试数据（完整调度流水线）"""
     # 1. 创建节点
     storage_node = Node(
         node_code="SC001",
@@ -37,7 +40,7 @@ def setup_simulation_data(db_session):
         node_type="storage_center"
     )
     db_session.add(storage_node)
-    
+
     sorting_node_l1 = Node(
         node_code="SO001",
         name="1级分拣中心1",
@@ -47,7 +50,7 @@ def setup_simulation_data(db_session):
         node_type="sorting_center"
     )
     db_session.add(sorting_node_l1)
-    
+
     sorting_node_l2 = Node(
         node_code="SO002",
         name="0级分拣中心1",
@@ -58,17 +61,42 @@ def setup_simulation_data(db_session):
     )
     db_session.add(sorting_node_l2)
     db_session.flush()
-    
-    # 2. 创建订单和货物
+
+    # 2. 创建存储中心和分拣中心记录
+    storage_center = StorageCenter(
+        node_id=storage_node.id,
+        capacity=1000.0,
+        inventory=0
+    )
+    db_session.add(storage_center)
+
+    sorting_center_l1 = SortingCenter(
+        node_id=sorting_node_l1.id,
+        level=1,
+        capacity=500,
+        max_storage_time=24
+    )
+    db_session.add(sorting_center_l1)
+
+    sorting_center_l2 = SortingCenter(
+        node_id=sorting_node_l2.id,
+        level=0,
+        capacity=500,
+        max_storage_time=24
+    )
+    db_session.add(sorting_center_l2)
+    db_session.flush()
+
+    # 3. 创建订单和货物
     order = Order(
         order_code="O_TEST_001",
         destination_node_id=sorting_node_l2.id,
         time_window="2026-06-15 10:00-12:00",
-        status="pending"
+        status="delivering"  # 模拟已调度的订单
     )
     db_session.add(order)
     db_session.flush()
-    
+
     goods = Goods(
         goods_code="G_TEST_001",
         order_id=order.id,
@@ -81,8 +109,21 @@ def setup_simulation_data(db_session):
     )
     db_session.add(goods)
     db_session.flush()
-    
-    # 3. 创建包裹（L0→L1）
+
+    # 4. 创建全局调度记录
+    global_schedule = GlobalSchedule(
+        schedule_code="GS_TEST_001",
+        order_codes='["O_TEST_001"]',
+        goods_schedules='[{"goods_code":"G_TEST_001","order_code":"O_TEST_001","path":["SC001","SO001","SO002"]}]',
+        total_distance=50.0,
+        total_time=2.0,
+        total_goods=1,
+        score=100.0
+    )
+    db_session.add(global_schedule)
+    db_session.flush()
+
+    # 5. 创建包裹（L0→L1）
     package_l0_l1 = Package(
         package_code="PKG_TEST_L0L1",
         weight=10.0,
@@ -94,12 +135,13 @@ def setup_simulation_data(db_session):
         from_longitude=114.3,
         from_latitude=30.5,
         to_longitude=114.4,
-        to_latitude=30.6
+        to_latitude=30.6,
+        schedule_id=global_schedule.id
     )
     db_session.add(package_l0_l1)
     db_session.flush()
-    
-    # 4. 创建车辆和司机
+
+    # 6. 创建车辆和司机
     vehicle = Vehicle(
         vehicle_code="V_TEST_001",
         model="测试车型",
@@ -112,7 +154,7 @@ def setup_simulation_data(db_session):
         node_id=storage_node.id
     )
     db_session.add(vehicle)
-    
+
     driver = Driver(
         driver_code="D_TEST_001",
         name="测试司机",
@@ -124,16 +166,16 @@ def setup_simulation_data(db_session):
     )
     db_session.add(driver)
     db_session.flush()
-    
-    # 5. 创建调度批次和节点调度
+
+    # 7. 创建调度批次和节点调度
     dispatch_batch = DispatchBatch(
         batch_code="BATCH_TEST_001",
-        global_schedule_id=1,
+        global_schedule_id=global_schedule.id,
         status="pending"
     )
     db_session.add(dispatch_batch)
     db_session.flush()
-    
+
     node_dispatch = NodeDispatch(
         dispatch_code="ND_TEST_001",
         dispatch_batch_id=dispatch_batch.id,
@@ -146,17 +188,18 @@ def setup_simulation_data(db_session):
     )
     db_session.add(node_dispatch)
     db_session.flush()
-    
-    # 6. 更新包裹的dispatch_id
+
+    # 8. 更新包裹的dispatch_id
     package_l0_l1.dispatch_id = node_dispatch.id
     db_session.commit()
-    
+
     return {
         "storage_node": storage_node,
         "sorting_node_l1": sorting_node_l1,
         "sorting_node_l2": sorting_node_l2,
         "order": order,
         "goods": goods,
+        "global_schedule": global_schedule,
         "package_l0_l1": package_l0_l1,
         "vehicle": vehicle,
         "driver": driver,
@@ -168,44 +211,57 @@ def setup_simulation_data(db_session):
 @pytest.mark.integration
 class TestSimulationPipeline:
     """测试模拟送达流水线"""
-    
-    def test_simulate_l0_l1_delivery(self, db_session, setup_simulation_data):
+
+    @pytest.mark.asyncio
+    async def test_simulate_l0_l1_delivery(self, db_session, setup_simulation_data):
         """
         测试L0→L1送达流程
-        
+
         验证：
-        1. 调用模拟送达API
+        1. 调用模拟送达服务
         2. 包裹状态变为delivered
         3. 货物状态变为pending_pack（需要重新打包）
         4. 车辆状态变为idle
         5. 司机状态变为idle
         """
         data = setup_simulation_data
-        
-        # TODO: 调用模拟送达API
-        # response = client.post("/api/simulation/deliver", json={"package_code": "PKG_TEST_L0L1"})
-        
-        # 暂时直接验证数据库状态
-        # 模拟送达后的状态验证
-        assert data["package_l0_l1"].status == "in_transit"  # 还未送达
-        
-        # 这里应该调用API，但API可能还未实现
-        # 我们暂时跳过这个测试，或标记为skip
-        pytest.skip("模拟送达API可能还未实现，跳过测试")
-    
-    def test_simulate_l1_l2_delivery(self, db_session, setup_simulation_data):
+
+        # 验证包裹当前状态是 in_transit
+        db_session.refresh(data["package_l0_l1"])
+        assert data["package_l0_l1"].status == "in_transit"
+
+        # 调用模拟送达服务（L0→L1）
+        result = await SimulationService.deliver_packages(
+            vehicle_code=None,
+            package_code="PKG_TEST_L0L1",
+            db=db_session,
+        )
+
+        # 验证响应
+        assert result["code"] == 0
+
+        # 验证数据库状态
+        db_session.refresh(data["package_l0_l1"])
+        assert data["package_l0_l1"].status == "delivered"
+
+        # 验证货物状态变为 packed（自动触发了L1重新打包）
+        db_session.refresh(data["goods"])
+        assert data["goods"].status == "packed"
+
+    @pytest.mark.asyncio
+    async def test_simulate_l1_l2_delivery(self, db_session, setup_simulation_data):
         """
         测试L1→L2送达流程
-        
+
         验证：
-        1. 调用模拟送达API
+        1. 调用模拟送达服务
         2. 包裹状态变为delivered
         3. 货物状态变为delivered（已送达目的地）
         4. 订单状态变为completed（所有货物已送达）
         """
         data = setup_simulation_data
-        
-        # TODO: 创建L1→L2的包裹
+
+        # 创建L1→L2的包裹
         package_l1_l2 = Package(
             package_code="PKG_TEST_L1L2",
             weight=10.0,
@@ -217,24 +273,81 @@ class TestSimulationPipeline:
             from_longitude=114.4,
             from_latitude=30.6,
             to_longitude=114.5,
-            to_latitude=30.7
+            to_latitude=30.7,
+            schedule_id=data["global_schedule"].id,
+            dispatch_id=data["node_dispatch"].id
         )
         db_session.add(package_l1_l2)
-        db_session.flush()
-        
-        # TODO: 调用模拟送达API
-        # response = client.post("/api/simulation/deliver", json={"package_code": "PKG_TEST_L1L2"})
-        
-        pytest.skip("模拟送达API可能还未实现，跳过测试")
-    
-    def test_simulation_pipeline_complete(self, db_session, setup_simulation_data):
+        db_session.commit()
+
+        # 调用模拟送达服务（L1→L2）
+        result = await SimulationService.deliver_packages(
+            vehicle_code=None,
+            package_code="PKG_TEST_L1L2",
+            db=db_session,
+        )
+
+        # 验证响应
+        assert result["code"] == 0
+
+        # 验证数据库状态
+        db_session.refresh(package_l1_l2)
+        assert package_l1_l2.status == "delivered"
+
+    @pytest.mark.asyncio
+    async def test_simulation_pipeline_complete(self, db_session, setup_simulation_data):
         """
         测试完整模拟送达流水线
-        
+
         验证：
         1. L0→L1送达
-        2. 重新打包（F021）
-        3. L1→L2送达
-        4. 订单完成
+        2. 货物状态变为pending_pack（需要重新打包）
+        3. L1→L2送达（需要重新打包后的包裹）
+        4. 订单状态变为completed
         """
-        pytest.skip("完整流水线测试需要所有API实现，跳过测试")
+        data = setup_simulation_data
+
+        # 1. L0→L1送达
+        result = await SimulationService.deliver_packages(
+            vehicle_code=None,
+            package_code="PKG_TEST_L0L1",
+            db=db_session,
+        )
+
+        assert result["code"] == 0
+
+        # 2. 验证货物状态变为 packed（自动触发了L1重新打包）
+        db_session.refresh(data["goods"])
+        assert data["goods"].status == "packed"
+
+        # 3. L1→L2送达（需要重新打包后的包裹）
+        # 创建L1→L2的包裹（模拟重新打包后的结果）
+        package_l1_l2 = Package(
+            package_code="PKG_TEST_L1L2",
+            weight=10.0,
+            volume=0.5,
+            status="in_transit",
+            from_node_id=data["sorting_node_l1"].id,
+            to_node_id=data["sorting_node_l2"].id,
+            goods_items='[{"goods_code":"G_TEST_001","order_code":"O_TEST_001"}]',
+            from_longitude=114.4,
+            from_latitude=30.6,
+            to_longitude=114.5,
+            to_latitude=30.7,
+            schedule_id=data["global_schedule"].id,
+            dispatch_id=data["node_dispatch"].id
+        )
+        db_session.add(package_l1_l2)
+        db_session.commit()
+
+        result2 = await SimulationService.deliver_packages(
+            vehicle_code=None,
+            package_code="PKG_TEST_L1L2",
+            db=db_session,
+        )
+
+        assert result2["code"] == 0
+
+        # 4. 验证订单状态变为completed
+        db_session.refresh(data["order"])
+        assert data["order"].status == "completed"

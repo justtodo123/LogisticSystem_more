@@ -88,6 +88,10 @@ class SimulationService:
                 
                 # 4. 更新货物状态（根据是否送达目的地）
                 goods_items = package.goods_items  # JSON: [{"goods_code": "G001", "order_code": "O001"}]
+                # 解析 JSON（如果是字符串）
+                if isinstance(goods_items, str):
+                    import json
+                    goods_items = json.loads(goods_items)
                 for item in goods_items:
                     goods_code = item["goods_code"]
                     order_code = item["order_code"]

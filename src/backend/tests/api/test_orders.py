@@ -386,3 +386,186 @@ class TestDeleteOrder:
         body = response.json()
         assert body["code"] != 0  # 业务错误
         assert "不允许删除" in body["message"] or "状态" in body["message"]
+
+
+class TestUpdateOrder:
+    """测试更新订单"""
+
+    @pytest.mark.api
+    def test_update_order_success(self, client, db_session):
+        """测试成功更新订单"""
+        # 创建测试用户、节点、订单
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        
+        # 创建测试节点
+        node = Node(
+            node_code="SO001",
+            name="测试节点",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="sorting_center",
+        )
+        db_session.add(node)
+        db_session.flush()
+        sc = SortingCenter(node_id=node.id, level=0)
+        db_session.add(sc)
+        
+        # 创建另一个节点（用于更新目的地）
+        node2 = Node(
+            node_code="SO002",
+            name="测试节点2",
+            location="测试2",
+            latitude=30.6,
+            longitude=114.4,
+            node_type="sorting_center",
+        )
+        db_session.add(node2)
+        db_session.flush()
+        sc2 = SortingCenter(node_id=node2.id, level=0)
+        db_session.add(sc2)
+        db_session.commit()
+        
+        # 创建测试订单
+        from models.order import Order
+        order = Order(
+            order_code="O001",
+            destination_node_id=node.id,
+            time_window="全天",
+            status="pending",
+        )
+        db_session.add(order)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 更新订单
+        response = client.put(
+            "/api/orders/O001",
+            json={
+                "destination_node_code": "SO002",
+                "time_window": "2026-06-20 9:00-18:00",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0
+        
+        # 验证数据库已更新
+        db_session.refresh(order)
+        assert order.destination_node_id == node2.id
+        assert order.time_window == "2026-06-20 9:00-18:00"
+
+    @pytest.mark.api
+    def test_update_order_not_found(self, client, db_session):
+        """测试更新不存在的订单"""
+        # 创建测试用户
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 更新订单（不存在）
+        response = client.put(
+            "/api/orders/O_NONEXIST",
+            json={
+                "destination_node_code": "SO001",
+                "time_window": "全天",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        assert "订单" in body["message"] or "不存在" in body["message"]
+
+    @pytest.mark.api
+    def test_update_order_delivering_status(self, client, db_session):
+        """测试更新配送中的订单（应该失败）"""
+        # 创建测试用户、节点、订单
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        
+        # 创建测试节点
+        node = Node(
+            node_code="SO001",
+            name="测试节点",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="sorting_center",
+        )
+        db_session.add(node)
+        db_session.flush()
+        sc = SortingCenter(node_id=node.id, level=0)
+        db_session.add(sc)
+        db_session.commit()
+        
+        # 创建测试订单（delivering状态）
+        from models.order import Order
+        order = Order(
+            order_code="O001",
+            destination_node_id=node.id,
+            time_window="全天",
+            status="delivering",  # delivering状态不可更新
+        )
+        db_session.add(order)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 更新订单
+        response = client.put(
+            "/api/orders/O001",
+            json={
+                "destination_node_code": "SO001",
+                "time_window": "2026-06-20 9:00-18:00",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        assert "不允许更新" in body["message"] or "状态" in body["message"]

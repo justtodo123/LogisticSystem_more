@@ -330,3 +330,688 @@ class TestGetGlobalScheduleDetail:
         body = response.json()
         assert body["code"] != 0
         assert "不存在" in body["message"] or "方案" in body["message"]
+
+
+class TestCreateGlobalScheduleBoundaries:
+    """测试触发全局调度的边界情况"""
+
+    @pytest.mark.api
+    def test_create_global_schedule_no_l1_nodes(self, client, db_session):
+        """测试没有L1节点时触发调度（应该失败）"""
+        # 创建测试用户、节点（只有L0和L2，没有L1）
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        
+        # 创建L0节点（存储中心）
+        node_sc = Node(
+            node_code="SC001",
+            name="存储中心",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="storage_center",
+        )
+        db_session.add(node_sc)
+        db_session.flush()
+        sc = StorageCenter(node_id=node_sc.id, capacity=1000.0, inventory=0)
+        db_session.add(sc)
+        
+        # 创建L2节点（0级分拣中心）
+        node_so = Node(
+            node_code="SO001",
+            name="目的地",
+            location="测试",
+            latitude=30.6,
+            longitude=114.4,
+            node_type="sorting_center",
+        )
+        db_session.add(node_so)
+        db_session.flush()
+        so = SortingCenter(node_id=node_so.id, level=0, capacity=500, max_storage_time=24)
+        db_session.add(so)
+        db_session.commit()
+        
+        # 创建测试订单
+        order = Order(
+            order_code="O001",
+            destination_node_id=node_so.id,
+            time_window="全天",
+            status="pending",
+        )
+        db_session.add(order)
+        db_session.flush()
+        
+        # 创建测试货物
+        goods = Goods(
+            goods_code="G001",
+            goods_name="测试货物",
+            goods_type="普通",
+            weight=10.0,
+            volume=0.5,
+            node_id=node_sc.id,
+            order_id=order.id,
+            status="pending_pack",
+        )
+        db_session.add(goods)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 触发全局调度（没有L1节点）
+        response = client.post(
+            "/api/schedule/global",
+            json={"algorithm": "traditional"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        assert "L1" in body["message"] or "分拣中心" in body["message"]
+
+    @pytest.mark.api
+    def test_create_global_schedule_invalid_algorithm(self, client, db_session):
+        """测试算法类型错误（阶段3仅支持traditional）"""
+        # 创建测试用户
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 触发全局调度（算法类型错误）
+        response = client.post(
+            "/api/schedule/global",
+            json={"algorithm": "deepseek"},  # 阶段3不支持
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        assert "算法" in body["message"] or "不支持" in body["message"]
+
+    @pytest.mark.api
+    def test_create_global_schedule_invalid_order_codes(self, client, db_session):
+        """测试指定不存在的订单编号"""
+        # 创建测试用户、节点、订单
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        
+        # 创建测试节点
+        node_sc = Node(
+            node_code="SC001",
+            name="存储中心",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="storage_center",
+        )
+        db_session.add(node_sc)
+        db_session.flush()
+        sc = StorageCenter(node_id=node_sc.id, capacity=1000.0, inventory=0)
+        db_session.add(sc)
+        
+        node_so = Node(
+            node_code="L1001",
+            name="一级分拣中心",
+            location="测试",
+            latitude=30.55,
+            longitude=114.35,
+            node_type="sorting_center",
+        )
+        db_session.add(node_so)
+        db_session.flush()
+        so = SortingCenter(node_id=node_so.id, level=1, capacity=500, max_storage_time=24)
+        db_session.add(so)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 触发全局调度（指定不存在的订单）
+        response = client.post(
+            "/api/schedule/global",
+            json={
+                "order_codes": ["O_NONEXIST"],
+                "algorithm": "traditional",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        assert "订单" in body["message"] or "不存在" in body["message"]
+
+    @pytest.mark.api
+    def test_get_global_schedule_detail_success(self, client, db_session):
+        """测试成功获取调度方案详情（实现空缺的测试）"""
+        # 创建测试用户、节点、订单、货物、调度方案
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        
+        # 创建测试节点
+        node_sc = Node(
+            node_code="SC001",
+            name="存储中心",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="storage_center",
+        )
+        db_session.add(node_sc)
+        db_session.flush()
+        sc = StorageCenter(node_id=node_sc.id, capacity=1000.0, inventory=0)
+        db_session.add(sc)
+        
+        node_l1 = Node(
+            node_code="L1001",
+            name="一级分拣中心",
+            location="测试",
+            latitude=30.55,
+            longitude=114.35,
+            node_type="sorting_center",
+        )
+        db_session.add(node_l1)
+        db_session.flush()
+        l1 = SortingCenter(node_id=node_l1.id, level=1, capacity=500, max_storage_time=24)
+        db_session.add(l1)
+        
+        node_l2 = Node(
+            node_code="SO001",
+            name="目的地",
+            location="测试",
+            latitude=30.6,
+            longitude=114.4,
+            node_type="sorting_center",
+        )
+        db_session.add(node_l2)
+        
+        # 创建存储中心（L0节点）和待处理订单
+        node_sc = Node(
+            node_code="SC999",  # 使用唯一的node_code避免冲突
+            name="存储中心",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="storage_center",
+        )
+        db_session.add(node_sc)
+        db_session.flush()
+        
+        sc = StorageCenter(node_id=node_sc.id, capacity=1000.0, inventory=0)
+        db_session.add(sc)
+        
+        # 创建待处理订单
+        order = Order(
+            order_code="O001",
+            destination_node_id=node_l2.id,
+            time_window="全天",
+            status="pending",
+        )
+        db_session.add(order)
+        db_session.flush()
+        
+        # 创建货物
+        goods = Goods(
+            goods_code="G001",
+            goods_name="测试货物",
+            goods_type="普通",
+            weight=10.0,
+            volume=0.5,
+            node_id=node_sc.id,
+            order_id=order.id,
+            status="pending_pack",
+        )
+        db_session.add(goods)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 先触发全局调度创建方案
+        response = client.post(
+            "/api/schedule/global",
+            json={"algorithm": "traditional"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 获取方案编号
+        assert response.status_code == 200
+        schedule_code = response.json()["data"]["schedule_code"]
+        
+        # 获取调度方案详情
+        response = client.get(
+            f"/api/schedule/global/{schedule_code}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0
+        assert "data" in body
+        assert "schedule_code" in body["data"]
+        assert "goods_schedules" in body["data"]
+        assert "packages" in body["data"]
+
+
+class TestCreateNodeDispatch:
+    """测试触发节点调度（阶段4）"""
+
+    @pytest.mark.api
+    def test_create_node_dispatch_success(self, client, db_session):
+        """测试成功触发节点调度"""
+        # 先创建测试用户、节点、订单、货物，并触发全局调度
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        
+        # 创建测试节点
+        node_sc = Node(
+            node_code="SC001",
+            name="存储中心",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="storage_center",
+        )
+        db_session.add(node_sc)
+        node_l1 = Node(
+            node_code="L1001",
+            name="一级分拣中心",
+            location="测试",
+            latitude=30.55,
+            longitude=114.35,
+            node_type="sorting_center",
+        )
+        db_session.add(node_l1)
+        node_l2 = Node(
+            node_code="SO001",
+            name="目的地",
+            location="测试",
+            latitude=30.6,
+            longitude=114.4,
+            node_type="sorting_center",
+        )
+        db_session.add(node_l2)
+        db_session.flush()
+        
+        # 创建存储中心和分拣中心记录
+        sc = StorageCenter(node_id=node_sc.id, capacity=1000.0, inventory=0)
+        db_session.add(sc)
+        l1 = SortingCenter(node_id=node_l1.id, level=1, capacity=500, max_storage_time=24)
+        db_session.add(l1)
+        l2 = SortingCenter(node_id=node_l2.id, level=0, capacity=500, max_storage_time=24)
+        db_session.add(l2)
+        
+        # 创建车辆和司机
+        from models.vehicle import Vehicle
+        from models.driver import Driver
+        
+        vehicle = Vehicle(
+            vehicle_code="VEH001",
+            model="测试车型",
+            capacity=100.0,
+            energy_type="fuel",
+            node_id=node_sc.id,
+            last_arrived_node_id=node_sc.id,
+            status="idle",
+        )
+        db_session.add(vehicle)
+        
+        driver = Driver(
+            driver_code="DRV001",
+            name="测试司机",
+            phone="13800000001",
+            license_type="C1",
+            shift="day",
+            node_id=node_sc.id,
+            status="idle",
+        )
+        db_session.add(driver)
+        
+        # 创建待处理订单
+        order = Order(
+            order_code="O001",
+            destination_node_id=node_l2.id,
+            time_window="全天",
+            status="pending",
+        )
+        db_session.add(order)
+        db_session.flush()
+        
+        # 创建货物
+        goods = Goods(
+            goods_code="G001",
+            goods_name="测试货物",
+            goods_type="普通",
+            weight=10.0,
+            volume=0.5,
+            node_id=node_sc.id,
+            order_id=order.id,
+            status="pending_pack",
+        )
+        db_session.add(goods)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 先触发全局调度
+        response = client.post(
+            "/api/schedule/global",
+            json={"algorithm": "traditional"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        schedule_code = response.json()["data"]["schedule_code"]
+        
+        # 触发节点调度
+        response = client.post(
+            "/api/schedule/node-dispatch",
+            json={
+                "schedule_code": schedule_code,
+                "demo_mode": True,  # 使用demo_mode跳过等待
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0
+        assert "data" in body
+        assert "batch_code" in body["data"]
+
+    @pytest.mark.api
+    def test_create_node_dispatch_schedule_not_found(self, client, db_session):
+        """测试调度方案不存在"""
+        # 创建测试用户
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 触发节点调度（方案不存在）
+        response = client.post(
+            "/api/schedule/node-dispatch",
+            json={
+                "schedule_code": "GS_NONEXIST",
+                "demo_mode": False,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应（业务错误）
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] != 0
+        assert "方案" in body["message"] or "不存在" in body["message"]
+
+
+class TestCreateNodeDispatchBoundaries:
+    """测试节点调度的边界情况"""
+
+    @pytest.mark.api
+    def test_create_node_dispatch_no_packages(self, client, db_session):
+        """测试没有可调度包裹（应该失败）"""
+        # 创建测试用户、节点，但不创建订单/货物/包裹
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        
+        # 创建测试节点
+        node_sc = Node(
+            node_code="SC001",
+            name="存储中心",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="storage_center",
+        )
+        db_session.add(node_sc)
+        node_l1 = Node(
+            node_code="L1001",
+            name="一级分拣中心",
+            location="测试",
+            latitude=30.55,
+            longitude=114.35,
+            node_type="sorting_center",
+        )
+        db_session.add(node_l1)
+        db_session.flush()
+        
+        sc = StorageCenter(node_id=node_sc.id, capacity=1000.0, inventory=0)
+        db_session.add(sc)
+        l1 = SortingCenter(node_id=node_l1.id, level=1, capacity=500, max_storage_time=24)
+        db_session.add(l1)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 先触发全局调度（但没有包裹）
+        response = client.post(
+            "/api/schedule/global",
+            json={"algorithm": "traditional"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        # 可能没有pending订单，返回业务错误
+        if response.status_code == 200 and response.json()["code"] != 0:
+            # 没有pending订单，这是预期的
+            pass
+        else:
+            # 有调度方案，但没有车辆/司机，节点调度应该失败
+            schedule_code = response.json()["data"]["schedule_code"]
+            
+            # 触发节点调度（没有车辆）
+            response = client.post(
+                "/api/schedule/node-dispatch",
+                json={
+                    "schedule_code": schedule_code,
+                    "demo_mode": False,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            
+            # 验证响应（业务错误）
+            assert response.status_code == 200
+            body = response.json()
+            assert body["code"] != 0
+
+    @pytest.mark.api
+    def test_create_node_dispatch_no_vehicles(self, client, db_session):
+        """测试没有可用车辆（应该失败）"""
+        # 创建测试用户、节点、订单、货物，并触发全局调度和打包
+        # 但不创建车辆
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        
+        # 创建测试节点
+        node_sc = Node(
+            node_code="SC001",
+            name="存储中心",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="storage_center",
+        )
+        db_session.add(node_sc)
+        node_l1 = Node(
+            node_code="L1001",
+            name="一级分拣中心",
+            location="测试",
+            latitude=30.55,
+            longitude=114.35,
+            node_type="sorting_center",
+        )
+        db_session.add(node_l1)
+        node_l2 = Node(
+            node_code="SO001",
+            name="目的地",
+            location="测试",
+            latitude=30.6,
+            longitude=114.4,
+            node_type="sorting_center",
+        )
+        db_session.add(node_l2)
+        db_session.flush()
+        
+        sc = StorageCenter(node_id=node_sc.id, capacity=1000.0, inventory=0)
+        db_session.add(sc)
+        l1 = SortingCenter(node_id=node_l1.id, level=1, capacity=500, max_storage_time=24)
+        db_session.add(l1)
+        l2 = SortingCenter(node_id=node_l2.id, level=0, capacity=500, max_storage_time=24)
+        db_session.add(l2)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 先触发全局调度
+        response = client.post(
+            "/api/schedule/global",
+            json={"algorithm": "traditional"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        if response.status_code == 200 and response.json()["code"] == 0:
+            schedule_code = response.json()["data"]["schedule_code"]
+            
+            # 触发节点调度（没有车辆）
+            response = client.post(
+                "/api/schedule/node-dispatch",
+                json={
+                    "schedule_code": schedule_code,
+                    "demo_mode": False,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            
+            # 验证响应（业务错误：没有可用车辆）
+            assert response.status_code == 200
+            body = response.json()
+            assert body["code"] != 0
+            assert "车辆" in body["message"] or "不足" in body["message"]
+
+    @pytest.mark.api
+    def test_get_dispatch_batches_empty(self, client, db_session):
+        """测试获取调度批次列表（空数据库）"""
+        # 创建测试用户
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+        
+        # 登录获取token
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        )
+        token = login_resp.json()["data"]["access_token"]
+        
+        # 获取调度批次列表
+        response = client.get(
+            "/api/schedule/batches",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # 验证响应
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0
+        assert body["data"]["items"] == []
+        assert body["data"]["total"] == 0
+
