@@ -52,7 +52,7 @@ copy .env.example .env
 python -c "from config.database import engine, Base; from models import *; Base.metadata.create_all(bind=engine)"
 
 # 6. 初始化演示数据（创建用户、节点、车辆、司机、订单等）
-python scripts/init_demo_data.py
+python -m  scripts.init_demo_data
 
 # 7. 启动后端服务
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
