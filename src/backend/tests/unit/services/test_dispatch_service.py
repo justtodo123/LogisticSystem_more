@@ -113,9 +113,8 @@ class TestGetDispatchBatches:
     async def test_get_empty(self, db_session):
         """测试空数据库返回空列表"""
         result = await DispatchService.get_dispatch_batches(
+            schedule_code=None,
             status=None,
-            page=1,
-            page_size=20,
             db=db_session
         )
         
@@ -156,9 +155,8 @@ class TestGetDispatchBatches:
         
         # 查询批次列表
         result = await DispatchService.get_dispatch_batches(
+            schedule_code=None,
             status=None,
-            page=1,
-            page_size=20,
             db=db_session
         )
         

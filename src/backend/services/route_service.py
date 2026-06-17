@@ -88,7 +88,8 @@ class RouteService:
                 db.add(route)
                 routes.append(route_data)
             
-            # 注意：不在这里调用 db.commit()，由调用者（dispatch_service）统一提交
+            # 提交事务（手动触发路径规划时需要）
+            db.commit()
             
             # 5. 返回成功响应
             return success_response(data={

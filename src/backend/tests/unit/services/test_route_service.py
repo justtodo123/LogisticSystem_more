@@ -173,8 +173,8 @@ class TestCreateRoutePlanning:
         db_session.add(node_dispatch)
         db_session.commit()
         
-        # Mock 路径规划算法抛出异常 - 修复mock路径
-        with patch("algorithms.route_planning.run_route_planning") as mock_route:
+        # Mock 路径规划算法抛出异常 - 修复mock路径（应该mock导入后的函数）
+        with patch("services.route_service.run_route_planning") as mock_route:
             mock_route.side_effect = Exception("模拟路径规划算法失败")
             
             result = await RouteService.create_route_planning(
