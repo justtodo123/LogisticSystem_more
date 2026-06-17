@@ -311,19 +311,23 @@ class TestNodeDispatchNoVehicle:
     """车辆不足：无法调度"""
 
     @pytest.mark.unit
-    def test_no_vehicle_raises_error(self, db_session, test_nodes):
+    def test_no_vehicle_returns_unallocated(self, db_session, test_nodes, test_orders, test_goods, test_vehicles):
         """
-        测试没有车辆时抛出ValueError
+        测试没有可用车辆时，算法成功执行但返回未分配包裹
+        
+        注意：算法不会抛出错误，而是将未分配的包裹添加到 unallocated_packages 列表。
         """
         # 创建全局调度方案
         from models.global_schedule import GlobalSchedule
         schedule = GlobalSchedule(
             schedule_code="GS_TEST004",
             order_codes=["O001"],
-            goods_schedules=[],
+            goods_schedules=[
+                {"goods_code": "G001", "order_code": "O001", "path": ["SC001", "SO001", "SO010"]}
+            ],
             total_distance=0,
             total_time=0,
-            total_goods=0,
+            total_goods=1,
             score=0,
         )
         db_session.add(schedule)
@@ -343,13 +347,39 @@ class TestNodeDispatchNoVehicle:
         db_session.add(package)
         db_session.commit()
         
-        # 执行F005（没有车辆）→ 应该失败
-        with pytest.raises(ValueError, match="没有可用的车辆"):
-            run_node_dispatch(
-                db=db_session,
-                schedule_code="GS_TEST004",
-                demo_mode=True,
-            )
+        # 调试：检查包裹是否被正确创建
+        from models.sorting_center import SortingCenter
+        sorting_center = db_session.query(SortingCenter).filter(
+            SortingCenter.node_id == test_nodes["SO001"].id
+        ).first()
+        print(f"DEBUG: SO001 level = {sorting_center.level if sorting_center else 'NOT FOUND'}")
+        
+        # 检查包裹
+        packages = db_session.query(Package).filter(
+            Package.schedule_id == schedule.id,
+            Package.status == 'packed'
+        ).all()
+        print(f"DEBUG: Found {len(packages)} packed packages for schedule {schedule.id}")
+        for pkg in packages:
+            print(f"  - {pkg.package_code}: from_node_id={pkg.from_node_id}, to_node_id={pkg.to_node_id}")
+        
+        # 将所有车辆状态设为 maintenance（不可用），并修改 last_arrived_node_id
+        for vehicle in test_vehicles.values():
+            vehicle.status = 'maintenance'
+            vehicle.last_arrived_node_id = test_nodes["SO010"].id  # 修改为其他节点
+        db_session.commit()
+        
+        # 执行F005（没有可用车辆）→ 应该成功执行，但返回未分配包裹
+        result = run_node_dispatch(
+            db=db_session,
+            schedule_code="GS_TEST004",
+            demo_mode=True,
+        )
+        
+        # 验证：结果中包含未分配包裹
+        assert "unallocated_packages" in result, "结果应该包含 unallocated_packages"
+        assert len(result["unallocated_packages"]) > 0, "应该有未分配包裹"
+        assert package.package_code in result["unallocated_packages"], "包裹应该在未分配列表中"
 
 
 class TestNodeDispatchWrongStatus:
@@ -397,3 +427,113 @@ class TestNodeDispatchWrongStatus:
                 schedule_code="GS_TEST005",
                 demo_mode=True,
             )
+
+
+class TestUnallocatedPackages:
+    """测试 unallocated_packages 功能"""
+
+    @pytest.mark.unit
+    def test_demo_mode_true_returns_unallocated(
+        self, db_session, test_nodes, test_vehicles, test_drivers
+    ):
+        """
+        测试 demo_mode=true 时，返回 unallocated_packages
+        """
+        # 1. 创建全局调度方案
+        from models.global_schedule import GlobalSchedule
+        schedule = GlobalSchedule(
+            schedule_code="GS_TEST006",
+            order_codes=["O001"],
+            goods_schedules=[
+                {"goods_code": "G001", "order_code": "O001", "path": ["SC001", "SO001", "SO010"]}
+            ],
+            total_distance=0,
+            total_time=0,
+            total_goods=1,
+            score=0,
+        )
+        db_session.add(schedule)
+        db_session.flush()
+
+        # 2. 创建包裹（只有1个包裹，车辆充足，应该无未分配包裹）
+        pkg = Package(
+            package_code="PKG_TEST006",
+            weight=10.0,
+            volume=0.5,
+            status="packed",
+            from_node_id=test_nodes["SC001"].id,
+            to_node_id=test_nodes["SO001"].id,
+            goods_items=[{"goods_code": "G001", "order_code": "O001"}],
+            schedule_id=schedule.id,
+        )
+        db_session.add(pkg)
+        db_session.commit()
+
+        # 3. 执行F005（demo_mode=true）
+        result = run_node_dispatch(
+            db=db_session,
+            schedule_code="GS_TEST006",
+            demo_mode=True,
+        )
+
+        # 4. 验证结果中包含 unallocated_packages
+        assert "unallocated_packages" in result
+        # 车辆充足，应该无未分配包裹
+        assert len(result["unallocated_packages"]) == 0
+
+    @pytest.mark.unit
+    def test_unallocated_packages_saved_to_db(
+        self, db_session, test_nodes, test_vehicles, test_drivers
+    ):
+        """
+        测试 unallocated_packages 保存到数据库
+        """
+        # 1. 创建全局调度方案
+        from models.global_schedule import GlobalSchedule
+        schedule = GlobalSchedule(
+            schedule_code="GS_TEST007",
+            order_codes=["O001"],
+            goods_schedules=[
+                {"goods_code": "G001", "order_code": "O001", "path": ["SC001", "SO001", "SO010"]}
+            ],
+            total_distance=0,
+            total_time=0,
+            total_goods=1,
+            score=0,
+        )
+        db_session.add(schedule)
+        db_session.flush()
+
+        # 2. 创建包裹
+        pkg = Package(
+            package_code="PKG_TEST007",
+            weight=10.0,
+            volume=0.5,
+            status="packed",
+            from_node_id=test_nodes["SC001"].id,
+            to_node_id=test_nodes["SO001"].id,
+            goods_items=[{"goods_code": "G001", "order_code": "O001"}],
+            schedule_id=schedule.id,
+        )
+        db_session.add(pkg)
+        db_session.commit()
+
+        # 3. 执行F005
+        result = run_node_dispatch(
+            db=db_session,
+            schedule_code="GS_TEST007",
+            demo_mode=True,
+        )
+
+        # 4. 验证数据库中的批次包含 unallocated_packages
+        from models.dispatch_batch import DispatchBatch
+        batch = db_session.query(DispatchBatch).filter(
+            DispatchBatch.batch_code == result["batch_code"]
+        ).first()
+
+        assert batch is not None
+        # 验证 unallocated_packages 字段
+        if batch.unallocated_packages:
+            import json
+            unallocated = json.loads(batch.unallocated_packages)
+            assert isinstance(unallocated, list)

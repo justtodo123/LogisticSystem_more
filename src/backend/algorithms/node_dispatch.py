@@ -178,9 +178,11 @@ def _dispatch_level(
     schedule_id: int,
     level_phase: int,
     config: dict
-) -> Tuple[List[Dict[str, Any]], List[Package]]:
+) -> Tuple[List[Dict[str, Any]], List[Package], List[Package]]:
     """
     执行一次节点调度（L0→L1 或 L1→L2）
+    
+    支持部分分配：如果车辆不足，只分配部分包裹，剩余包裹保持未分配状态
     
     Args:
         db: 数据库会话
@@ -189,9 +191,10 @@ def _dispatch_level(
         config: 算法配置
     
     Returns:
-        (dispatch_list, updated_packages)
+        (dispatch_list, updated_packages, unallocated_packages)
         - dispatch_list: 调度明细列表
-        - updated_packages: 已更新的包裹列表
+        - updated_packages: 已分配并更新状态的包裹列表
+        - unallocated_packages: 未分配的包裹列表（保持status=packed, dispatch_id=NULL）
     """
     # 创建别名
     NodeAlias1 = aliased(Node)
@@ -203,20 +206,41 @@ def _dispatch_level(
     if level_phase == 0:
         # L0→L1: from_node.node_type='storage_center' AND to_node.node_type='sorting_center' 
         # AND to_node.sorting_center.level=1 AND packages.status='packed'
-        packages = (
-            db.query(Package)
-            .join(Node, Package.from_node_id == Node.id)
-            .join(NodeAlias1, Package.to_node_id == NodeAlias1.id)
-            .join(SortingCenter, NodeAlias1.id == SortingCenter.node_id)
-            .filter(
-                Node.node_type == 'storage_center',
-                NodeAlias1.node_type == 'sorting_center',
-                SortingCenter.level == 1,
-                Package.status == 'packed',
-                Package.schedule_id == schedule_id
-            )
-            .all()
-        )
+        
+        # 简化查询：使用 relationships
+        packages = db.query(Package).filter(
+            Package.status == 'packed',
+            Package.schedule_id == schedule_id
+        ).all()
+        
+        # 在 Python 中过滤（更可靠）
+        filtered_packages = []
+        for pkg in packages:
+            # 直接使用 from_node_id 和 to_node_id 查询节点，避免关系属性延迟加载问题
+            from_node = db.query(Node).filter(Node.id == pkg.from_node_id).first()
+            to_node = db.query(Node).filter(Node.id == pkg.to_node_id).first()
+            
+            print(f"DEBUG filter: {pkg.package_code}, from_node={from_node.node_code if from_node else 'None'}, to_node={to_node.node_code if to_node else 'None'}")
+            
+            if not from_node or not to_node:
+                print(f"  -> skipped: from_node or to_node is None")
+                continue
+            if from_node.node_type != 'storage_center':
+                print(f"  -> skipped: from_node.node_type={from_node.node_type}")
+                continue
+            if to_node.node_type != 'sorting_center':
+                print(f"  -> skipped: to_node.node_type={to_node.node_type}")
+                continue
+            # 检查 to_node 是否是 1 级分拣中心
+            sorting_center = db.query(SortingCenter).filter(SortingCenter.node_id == to_node.id).first()
+            if not sorting_center or sorting_center.level != 1:
+                print(f"  -> skipped: to_node is not level 1 sorting center")
+                continue
+            print(f"  -> PASSED filter")
+            filtered_packages.append(pkg)
+        
+        print(f"DEBUG: After filtering, found {len(filtered_packages)} packages")
+        packages = filtered_packages
     else:
         # L1→L2: from_node.node_type='sorting_center' AND from_node.sorting_center.level=1 
         # AND to_node.node_type='sorting_center' AND to_node.sorting_center.level=0 
@@ -239,22 +263,26 @@ def _dispatch_level(
         )
     
     if not packages:
-        return [], []
+        return [], [], []  # dispatch_list, updated_packages, unallocated_packages
     
-    # 2. 按 from_node_code 分组包裹
+    # 2. 按 from_node_code 分组包裹（使用 node_id 查询，避免延迟加载问题）
     packages_by_from_node = defaultdict(list)
     for pkg in packages:
-        from_node_code = pkg.from_node.node_code
-        packages_by_from_node[from_node_code].append(pkg)
+        from_node = db.query(Node).filter(Node.id == pkg.from_node_id).first()
+        if from_node:
+            packages_by_from_node[from_node.node_code].append(pkg)
     
     # 3. 对每个分组进行调度
     dispatch_list = []
     updated_packages = []
+    unallocated_packages = []  # 未分配的包裹
     
     for from_node_code, node_packages in packages_by_from_node.items():
         # 获取起始节点
         from_node = db.query(Node).filter(Node.node_code == from_node_code).first()
         if not from_node:
+            # 节点不存在，所有包裹都未分配
+            unallocated_packages.extend(node_packages)
             continue
         
         # 按 to_node_code 分组包裹（同一目的节点的包裹可以一起运输）
@@ -264,10 +292,19 @@ def _dispatch_level(
             packages_by_to_node[to_node_code].append(pkg)
         
         # 对每个目的节点分组进行车辆分配
-        for to_node_code, to_packages in packages_by_to_node.items():
+        # 按分组总重量排序（重量大的优先，减少剩余包裹总重量）
+        sorted_to_nodes = sorted(
+            packages_by_to_node.items(),
+            key=lambda x: sum(float(pkg.weight) for pkg in x[1]),
+            reverse=True
+        )
+        
+        for to_node_code, to_packages in sorted_to_nodes:
             # 获取目的节点
             to_node = db.query(Node).filter(Node.node_code == to_node_code).first()
             if not to_node:
+                # 节点不存在，该分组所有包裹都未分配
+                unallocated_packages.extend(to_packages)
                 continue
             
             # 计算包裹总重量
@@ -288,7 +325,9 @@ def _dispatch_level(
             ]
             
             if not candidate_vehicles:
-                raise ValueError(f"节点 {from_node_code} 没有可用的车辆（载重不足或无不空闲车辆）")
+                # 车辆不足，该分组所有包裹都未分配
+                unallocated_packages.extend(to_packages)
+                continue  # 跳过该分组，继续处理其他分组
             
             # 计算每辆车的评分，选择评分最低的车辆
             vehicle_scores = []
@@ -356,7 +395,7 @@ def _dispatch_level(
                 pkg.dispatch_id = 0  # 临时值，后续会更新为实际的dispatch_id
                 updated_packages.append(pkg)
     
-    return dispatch_list, updated_packages
+    return dispatch_list, updated_packages, unallocated_packages
 
 
 def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) -> Dict[str, Any]:
@@ -420,15 +459,25 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
         调度结果字典
     """
     # 1. 执行 L0→L1 调度
+    # 先检查是否有状态为packed的包裹
+    packed_packages_count = db.query(Package).filter(
+        Package.status == 'packed',
+        Package.schedule_id == schedule.id
+    ).count()
+    
+    if packed_packages_count == 0:
+        raise ValueError("L0→L1没有可调度的包裹")
+    
     try:
-        l0_l1_dispatches, _ = _dispatch_level(db, schedule.id, 0, config)
+        l0_l1_dispatches, _, unallocated_l0_l1 = _dispatch_level(db, schedule.id, 0, config)
     except Exception as e:
         raise ValueError(f"L0→L1调度失败：{str(e)}")
     
-    if not l0_l1_dispatches:
-        raise ValueError("L0→L1没有可调度的包裹")
+    # 调试：打印 l0_l1_dispatches 和 unallocated_l0_l1
+    print(f"DEBUG _run_dispatch_both_levels: l0_l1_dispatches={l0_l1_dispatches}")
+    print(f"DEBUG _run_dispatch_both_levels: unallocated_l0_l1={unallocated_l0_l1}")
     
-    # 2. 创建调度批次
+    # 2. 创建调度批次（此时还没有 unallocated_l1_l2，先不保存 unallocated_packages）
     batch_code = _generate_batch_code(db)
     batch = DispatchBatch(
         batch_code=batch_code,
@@ -437,6 +486,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
         demo_mode=True,
         l0_l1_dispatch_count=len(l0_l1_dispatches),
         l1_l2_dispatch_count=0,
+        unallocated_packages=json.dumps([pkg.package_code for pkg in unallocated_l0_l1], ensure_ascii=False) if unallocated_l0_l1 else None,
     )
     db.add(batch)
     db.flush()
@@ -488,7 +538,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
     
     # 6. 执行 L1→L2 调度
     try:
-        l1_l2_dispatches, _ = _dispatch_level(db, schedule.id, 1, config)
+        l1_l2_dispatches, _, unallocated_l1_l2 = _dispatch_level(db, schedule.id, 1, config)
     except Exception as e:
         raise ValueError(f"L1→L2调度失败：{str(e)}")
     
@@ -507,12 +557,16 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
     # 9. 更新批次状态为 completed
     batch.status = 'completed'
     batch.l1_l2_dispatch_count = len(l1_l2_dispatches)
+    # 保存完整的 unallocated_packages
+    all_unallocated = unallocated_l0_l1 + unallocated_l1_l2 if (unallocated_l0_l1 or unallocated_l1_l2) else []
+    batch.unallocated_packages = json.dumps([pkg.package_code for pkg in all_unallocated], ensure_ascii=False) if all_unallocated else None
     
     # 10. 返回结果
     return {
         "batch_code": batch.batch_code,
         "status": batch.status,
-        "dispatches": l0_l1_dispatches + l1_l2_dispatches
+        "dispatches": l0_l1_dispatches + l1_l2_dispatches,
+        "unallocated_packages": [pkg.package_code for pkg in unallocated_l0_l1 + unallocated_l1_l2]
     }
 
 
@@ -530,7 +584,7 @@ def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any
     """
     # 1. 执行 L0→L1 调度
     try:
-        l0_l1_dispatches, _ = _dispatch_level(db, schedule.id, 0, config)
+        l0_l1_dispatches, _, unallocated_l0_l1 = _dispatch_level(db, schedule.id, 0, config)
     except Exception as e:
         raise ValueError(f"L0→L1调度失败：{str(e)}")
     
@@ -546,6 +600,7 @@ def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any
         demo_mode=False,
         l0_l1_dispatch_count=len(l0_l1_dispatches),
         l1_l2_dispatch_count=0,
+        unallocated_packages=json.dumps([pkg.package_code for pkg in unallocated_l0_l1], ensure_ascii=False) if unallocated_l0_l1 else None,
     )
     db.add(batch)
     db.flush()
@@ -562,6 +617,7 @@ def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any
         "batch_code": batch.batch_code,
         "status": batch.status,
         "dispatches": l0_l1_dispatches,
+        "unallocated_packages": [pkg.package_code for pkg in unallocated_l0_l1],
         "message": "L0→L1调度完成，请等待模拟送达后再次调用以执行L1→L2"
     }
 
@@ -581,7 +637,7 @@ def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict) 
     """
     # 1. 执行 L1→L2 调度
     try:
-        l1_l2_dispatches, _ = _dispatch_level(db, schedule.id, 1, config)
+        l1_l2_dispatches, _, unallocated_l1_l2 = _dispatch_level(db, schedule.id, 1, config)
     except Exception as e:
         raise ValueError(f"L1→L2调度失败：{str(e)}")
     
@@ -594,6 +650,7 @@ def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict) 
     # 3. 更新批次状态为 completed
     existing_batch.status = 'completed'
     existing_batch.l1_l2_dispatch_count = len(l1_l2_dispatches)
+    existing_batch.unallocated_packages = json.dumps([pkg.package_code for pkg in unallocated_l1_l2], ensure_ascii=False) if unallocated_l1_l2 else None
     db.flush()  # 刷新到数据库，确保状态更新被正确保存
     
     # 4. 返回结果（只包含 L1→L2 的调度明细）
@@ -601,6 +658,7 @@ def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict) 
         "batch_code": existing_batch.batch_code,
         "status": existing_batch.status,
         "dispatches": l1_l2_dispatches,
+        "unallocated_packages": [pkg.package_code for pkg in unallocated_l1_l2],
         "message": "L1→L2调度完成，整个节点调度流程结束"
     }
 
