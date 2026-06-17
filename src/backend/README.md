@@ -15,6 +15,13 @@
 - ✅ **状态机实现完成** (2026-06-17)：实现所有状态流转逻辑，包括 F005 调用后、模拟送达、重新打包等场景
 - ✅ **单元测试通过** (2026-06-17)：5/5 测试通过，验证状态流转正确性
 
+**阶段5最新更新** (2026-06-17)：
+- ✅ **单元测试完成**：创建算法层、服务层和集成测试，共 39 个测试全部通过
+- ✅ **算法层测试** (`tests/test_algorithms/test_route_planning.py`)：12/12 通过，测试 Haversine 距离计算、路线编码生成、路径规划算法
+- ✅ **服务层测试** (`tests/test_services/test_route_service.py`)：13/13 通过，测试 RouteService 的所有方法
+- ✅ **集成测试** (`tests/test_integration/test_full_dispatch_flow.py`)：2/2 通过，测试完整调度链路 F007→F021→F005→F006
+- ✅ **测试覆盖完整**：从算法层到服务层再到集成测试，确保阶段5功能正确性
+
 ## 技术栈
 
 | 层 | 技术 | 用途 |
@@ -60,7 +67,7 @@ copy .env.example .env
 python -c "from config.database import engine, Base; from models import *; Base.metadata.create_all(bind=engine)"
 
 # 6. 初始化演示数据（创建用户、节点、车辆、司机、订单等）
-python -m  scripts.init_demo_data
+python -m scripts.init_demo_data
 
 # 7. 启动后端服务
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -110,7 +117,8 @@ src/backend/
 │   ├── node_service.py        # 节点服务 (存储中心/分拣中心 CRUD)
 │   ├── schedule_service.py    # 调度编排服务 (F007→F021→写库, 单事务)
 │   ├── dispatch_service.py    # 节点调度服务 (F005→写库, 单事务)
-│   └── route_service.py      # 路径规划服务 (F006→写库, 单事务)
+│   ├── route_service.py       # 路径规划服务 (F006→写库, 单事务)
+│   └── state_machine.py       # 状态机服务 (状态流转逻辑)
 │
 ├── models/                     # SQLAlchemy ORM 模型
 │   ├── __init__.py
@@ -140,8 +148,7 @@ src/backend/
 │   ├── driver.py              # DriverCreate, DriverUpdate
 │   ├── node.py                # StorageCenterCreate/Update, SortingCenterCreate/Update
 │   ├── dispatch.py             # NodeDispatchRequest, DispatchBatchResponse, NodeDispatchResponse
-│   ├── route.py               # RoutePlanRequest, RouteListResponse, RouteDetailResponse, RouteCoordinatesResponse
-│   └── log_event.py           # LogEventResponse
+│   └── route.py               # RoutePlanRequest, RouteListResponse, RouteDetailResponse, RouteCoordinatesResponse
 │
 ├── core/                       # 核心模块
 │   ├── error_codes.py          # 错误码定义
@@ -157,31 +164,32 @@ src/backend/
 │
 ├── scripts/                    # 工具脚本
 │   ├── __init__.py
-│   └── init_demo_data.py      # 演示数据初始化 (用户、节点、车辆、司机、订单、货物)
+│   ├── init_users.py          # 用户初始化
+│   ├── init_demo_data.py      # 演示数据初始化 (用户、节点、车辆、司机、订单、货物)
+│   └── init_log_events.py     # 日志事件初始化
 │
 ├── algorithms/                 # 算法引擎 (F005/F006/F007/F021)
 │   ├── __init__.py
 │   ├── global_schedule.py      # F007 全局调度 (贪心算法, L0→L1→L2 路径规划)
 │   ├── packaging.py            # F021 打包 (L0→L1 按节点对, L1→L2 按订单)
-│   └── node_dispatch.py       # F005 节点调度 (L0→L1, L1→L2 两次串行调用, 支持demo_mode)
+│   ├── node_dispatch.py       # F005 节点调度 (L0→L1, L1→L2 两次串行调用, 支持demo_mode)
+│   └── route_planning.py      # F006 路径规划 (Haversine + 2-opt)
 │
 ├── tests/                      # 测试
 │   ├── conftest.py             # 测试夹具与配置
-│   ├── phase3_api_verification.py  # 阶段3 API 集成验证脚本
-│   ├── test_api/               # API 层测试
-│   │   ├── test_schedule.py    # 调度接口测试
-│   │   └── test_routes.py     # 路径规划接口测试
-│   ├── test_services/          # 服务层测试
-│   │   ├── test_schedule_service.py  # 调度编排服务测试
-│   │   ├── test_dispatch_service.py # 节点调度服务测试
-│   │   └── test_route_service.py    # 路径规划服务测试
 │   ├── test_algorithms/        # 算法层测试
 │   │   ├── test_global_schedule.py   # F007 全局调度算法测试
 │   │   ├── test_packaging.py         # F021 打包算法测试
 │   │   ├── test_node_dispatch.py    # F005 节点调度算法测试
-│   │   └── test_route_planning.py  # F006 路径规划算法测试
+│   │   └── test_route_planning.py   # F006 路径规划算法测试 (12个测试)
+│   ├── test_services/          # 服务层测试
+│   │   ├── test_schedule_service.py  # 调度编排服务测试
+│   │   └── test_route_service.py     # 路径规划服务测试 (13个测试)
+│   ├── test_api/               # API 层测试
+│   │   ├── test_schedule.py    # 调度接口测试
+│   │   └── test_routes.py     # 路径规划接口测试
 │   └── test_integration/       # 集成测试
-│       └── test_routes_integration.py  # 路径规划集成测试
+│       └── test_full_dispatch_flow.py  # 完整调度链路测试 F007→F021→F005→F006 (2个测试)
 │
 ├── data/                       # 数据文件
 │   └── logistics.db            # SQLite 数据库
@@ -194,7 +202,7 @@ src/backend/
 
 ## API 接口
 
-### 已实现（阶段 1-3）
+### 已实现（阶段 1-5）
 
 #### 认证与权限（阶段 1）
 
@@ -442,7 +450,35 @@ alembic downgrade -1
 
 ### 阶段 5 自测（路径规划 F006）
 
-测试时间：2026-06-14，结果：**25/25 通过（100%）**
+测试时间：2026-06-14，更新：2026-06-17，结果：**39/39 通过（100%）**
+
+#### 算法层测试 (12/12)
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| Haversine 距离 | 同一坐标距离为0、不同坐标距离正确、长距离计算 | ✅ |
+| 路线编码生成 | 第一个编码格式正确、多个编码序号递增 | ✅ |
+| 路径规划算法 | L0→L1 路径规划成功、L1→L2 路径规划成功 | ✅ |
+| 路径规划算法 | 返程路径生成、空任务列表错误、节点不存在错误 | ✅ |
+| 路径规划算法 | 车辆不存在错误、距离和时间计算正确 | ✅ |
+
+#### 服务层测试 (13/13)
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| 创建路径规划 | 成功创建、批次不存在错误、无调度明细错误 | ✅ |
+| 查询路线 | 查询路线列表、分页、筛选（车辆编码/调度编码） | ✅ |
+| 查询详情 | 查询路线详情、路线不存在错误 | ✅ |
+| 查询坐标 | 查询车辆路线坐标、路线不存在错误、车辆不存在错误 | ✅ |
+
+#### 集成测试 (2/2)
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| 完整调度链路 | demo_mode=true 完整流程 F007→F021→F005→F006 | ✅ |
+| 完整调度链路 | 分步执行完整流程 F007→F021→F005→F006 | ✅ |
+
+#### API 集成测试 (12/12)
 
 | 类别 | 测试项 | 结果 |
 |------|--------|------|
