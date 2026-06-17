@@ -113,9 +113,10 @@ class TestDeliverPackages:
         db_session.refresh(package)
         assert package.status == "delivered"
         
-        # 验证车辆状态更新
+        # 验证车辆状态更新（需要刷新会话以确保能看到最新状态）
+        db_session.flush()
         db_session.refresh(vehicle)
-        assert vehicle.status == "idle"
+        assert vehicle.status == "idle", f"车辆状态应为 idle，实际为 {vehicle.status}"
 
     @pytest.mark.unit
     @pytest.mark.asyncio

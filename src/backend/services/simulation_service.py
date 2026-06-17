@@ -166,14 +166,170 @@ class SimulationService:
                     order.status = "completed"
                     delivered_order_codes.append(order.order_code)
             
-            # 8. 返回结果
+            # 8. 自动触发逻辑（demo_mode=false 完整流程支持）
+            auto_triggered = {"repackaging": False, "second_f005": False}
+            
+            try:
+                # 检查是否有 pending_pack 货物（需要L1重新打包）
+                pending_pack_goods = db.query(Goods).filter(
+                    Goods.status == 'pending_pack'
+                ).first()
+                
+                if pending_pack_goods:
+                    # 获取 schedule_id（从任意一个已送达的包裹中获取）
+                    schedule_id = None
+                    for pkg in packages:
+                        if pkg.schedule_id:
+                            schedule_id = pkg.schedule_id
+                            break
+                    
+                    if schedule_id:
+                        # 自动触发L1重新打包
+                        repack_result = SimulationService._trigger_repackaging(db, schedule_id)
+                        auto_triggered["repackaging"] = repack_result
+                        
+                        if repack_result:
+                            # 自动触发第二次F005（异步）
+                            second_f005_result = SimulationService._trigger_second_f005_async(db, schedule_id)
+                            auto_triggered["second_f005"] = second_f005_result
+            except Exception as e:
+                # 记录错误日志，但不影响第一次送达的结果
+                import logging
+                logging.error(f"自动触发失败：{e}")
+            
+            # 9. 返回结果
             return success_response(data={
                 "delivered_package_codes": delivered_package_codes,
                 "status_changed_goods_count": status_changed_goods_count,
                 "updated_order_count": len(delivered_order_codes),
-                "delivered_order_codes": delivered_order_codes
+                "delivered_order_codes": delivered_order_codes,
+                "auto_triggered": auto_triggered
             })
             
         except Exception as e:
             db.rollback()
             return error_response(code=40001, message=f"模拟送达失败：{str(e)}")
+
+    @staticmethod
+    def _trigger_repackaging(db: Session, schedule_id: int) -> bool:
+        """
+        触发L1重新打包
+        
+        查询所有 pending_pack 状态的货物，按订单分组，调用 repack_at_l1()
+        
+        Args:
+            db: 数据库会话
+            schedule_id: 全局调度方案ID
+            
+        Returns:
+            bool: 是否成功触发重新打包
+        """
+        from models.goods import Goods
+        from models.order import Order
+        from models.global_schedule import GlobalSchedule
+        import json
+        
+        # 查询所有 pending_pack 货物
+        pending_goods = db.query(Goods).filter(
+            Goods.status == 'pending_pack'
+        ).all()
+        
+        if not pending_goods:
+            return False
+        
+        # 按订单分组
+        order_goods_map = {}
+        for goods in pending_goods:
+            order_id = goods.order_id
+            if order_id not in order_goods_map:
+                order_goods_map[order_id] = []
+            order_goods_map[order_id].append(goods)
+        
+        # 获取 schedule
+        schedule = db.query(GlobalSchedule).filter(
+            GlobalSchedule.id == schedule_id
+        ).first()
+        
+        if not schedule:
+            return False
+        
+        # 解析 goods_schedules
+        goods_schedules = schedule.goods_schedules
+        if isinstance(goods_schedules, str):
+            goods_schedules = json.loads(goods_schedules)
+        
+        # 为每个订单重新打包
+        for order_id, goods_list in order_goods_map.items():
+            order = db.query(Order).filter(Order.id == order_id).first()
+            if not order:
+                continue
+            
+            # 查找该订单的路径
+            l1_node_code = None
+            l2_node_code = None
+            for gs in goods_schedules:
+                if gs.get('order_code') == order.order_code:
+                    path = gs.get('path', [])
+                    if len(path) >= 3:
+                        l1_node_code = path[1]  # 第二个节点是L1
+                        l2_node_code = path[2]  # 第三个节点是L2
+                        break
+            
+            if l1_node_code and l2_node_code:
+                # 调用 repack_at_l1()
+                from services.state_machine import repack_at_l1
+                repack_at_l1(db, order.order_code, l1_node_code, l2_node_code, schedule_id)
+        
+        return True
+
+    @staticmethod
+    def _trigger_second_f005_async(db: Session, schedule_id: int) -> bool:
+        """
+        异步触发第二次F005
+        
+        使用 ThreadPoolExecutor 在新线程中执行，避免阻塞API响应
+        """
+        import json
+        from concurrent.futures import ThreadPoolExecutor
+        
+        # 获取 schedule_code
+        schedule = db.query(GlobalSchedule).filter(
+            GlobalSchedule.id == schedule_id
+        ).first()
+        
+        if not schedule:
+            return False
+        
+        schedule_code = schedule.schedule_code
+        
+        # 在新线程中执行第二次F005
+        def _execute_second_f005():
+            try:
+                # 创建新的数据库会话
+                from config.database import SessionLocal
+                new_db = SessionLocal()
+                
+                # 调用 run_node_dispatch（demo_mode=False，会自动检测并执行第二次调用）
+                from algorithms.node_dispatch import run_node_dispatch
+                result = run_node_dispatch(new_db, schedule_code, demo_mode=False)
+                
+                # 提交事务
+                new_db.commit()
+                
+                import logging
+                logging.info(f"第二次F005执行成功：{result}")
+                
+            except Exception as e:
+                import logging
+                logging.error(f"第二次F005执行失败：{e}")
+            finally:
+                new_db.close()
+        
+        # 提交当前事务（确保重新打包的结果已保存）
+        db.commit()
+        
+        # 异步执行
+        executor = ThreadPoolExecutor(max_workers=1)
+        executor.submit(_execute_second_f005)
+        
+        return True
