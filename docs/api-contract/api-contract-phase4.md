@@ -162,10 +162,15 @@ Authorization: Bearer {access_token}
 
 **流程**：
 
-1. F005 节点调度算法：第一次调用（L0→L1），分配车辆与司机
-2. 写入 dispatch_batches + node_dispatches（level_phase=0）
-3. 第二次调用（L1→L2），分配车辆与司机
-4. 写入 node_dispatches（level_phase=1）
+1. 后端自动检测调用阶段：
+   - 检查是否存在该 `schedule_code` 的 `l0_l1_done` 或 `completed` 状态的批次
+   - 若不存在 → 首次调用（执行 L0→L1 调度）
+   - 若存在 `l0_l1_done` 批次 → 第二次调用（执行 L1→L2 调度）
+2. 根据 `demo_mode` 参数决定执行方式：
+   - `demo_mode=true`：一次调用完成 L0→L1 和 L1→L2 两次调度（跳过 L1 送达等待，用于演示）
+   - `demo_mode=false`：首次调用仅执行 L0→L1，第二次调用才执行 L1→L2（需等待 L1 实际送达）
+3. F005 节点调度算法：分配车辆与司机
+4. 写入 dispatch_batches + node_dispatches
 5. 单事务写入数据库并更新包裹/货物/车辆/司机状态
 
 **请求**：
@@ -442,6 +447,7 @@ curl -X GET "http://localhost:8000/api/schedule/batches?page=1&page_size=20" \
     "batch_code": "BATCH20260614001",
     "schedule_code": "GS20260614001",
     "status": "completed",
+    "unallocated_packages": ["PKG202606140005", "PKG202606140006"],
     "dispatches": [
       {
         "dispatch_code": "DISP20260614001",
@@ -481,6 +487,7 @@ curl -X GET "http://localhost:8000/api/schedule/batches?page=1&page_size=20" \
 | batch_code | string | 批次编号 |
 | schedule_code | string | 全局调度方案编号 |
 | status | string | 批次状态：pending / l0_l1_done / completed / failed |
+| unallocated_packages | array | 未分配的包裹编码列表（可能因车辆不足或载重不够而未分配） |
 | dispatches | array | 调度明细列表 |
 | dispatches[].dispatch_code | string | 调度明细编号 |
 | dispatches[].vehicle_code | string | 车辆编号 |
@@ -518,6 +525,7 @@ curl -X GET "http://localhost:8000/api/schedule/batches/BATCH20260614001" \
     "batch_code": "BATCH20260614001",
     "schedule_code": "GS20260614001",
     "status": "completed",
+    "unallocated_packages": ["PKG202606140005", "PKG202606140006"],
     "dispatches": [
       {
         "dispatch_code": "DISP20260614001",
@@ -805,6 +813,7 @@ loadBatches()
 | 版本 | 日期 | 修改内容 | 作者 |
 |---|---|---|---|
 | V1.0 | 2026-06-14 | 初版：阶段4 节点间调度 F005 API 契约文档 | AI 开发助手 |
+| V1.1 | 2026-06-17 | 更新 `GET /api/schedule/batches/{batch_code}` 接口，添加 `unallocated_packages` 字段（未分配的包裹编码列表） | AI 开发助手 |
 
 ---
 
