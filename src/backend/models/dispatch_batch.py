@@ -15,6 +15,7 @@ class DispatchBatch(Base):
     demo_mode = Column(Boolean, nullable=False, server_default="0")  # False
     l0_l1_dispatch_count = Column(Integer, nullable=False, server_default="0")
     l1_l2_dispatch_count = Column(Integer, nullable=False, server_default="0")
+    unallocated_packages = Column(String(2000), nullable=True)  # JSON 字符串，存储未分配包裹编码列表
     algorithm_type = Column(String(32), nullable=False, server_default="traditional")
     version = Column(Integer, nullable=False, server_default="1")
     parent_id = Column(Integer, ForeignKey("dispatch_batches.id"), nullable=True)

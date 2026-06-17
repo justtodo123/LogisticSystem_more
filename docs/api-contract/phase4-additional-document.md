@@ -28,7 +28,7 @@
 | --- | --- | --- |
 | **包裹按重量拆分** | L0→L1 打包时按最小车辆载重拆分，避免单个包裹超重 | `algorithms/packaging.py` |
 | **部分分配支持** | 车辆不足时跳过当前分组，记录未分配包裹，不中断流程 | `algorithms/node_dispatch.py` |
-| **未分配包裹返回** | API 返回 `unallocated_packages` 字段，标识下次需处理的包裹 | `schemas/dispatch.py`、`services/dispatch_service.py` |
+| **未分配包裹返回** | API 返回 `unallocated_packages` 字段，标识下次需处理的包裹 | `schemas/dispatch.py`、`services/dispatch_service.py`、`models/dispatch_batch.py` |
 
 ### 1.2 变更类型
 
@@ -99,6 +99,73 @@
 3. **部分分配不中断**：
    - 车辆不足时不再报错，跳过当前分组并记录未分配包裹
    - 只要有部分车辆分配成功，批次状态仍为 `completed`
+
+---
+
+### 2.2 GET /api/schedule/batches/{batch_code}
+
+#### 2.2.1 接口说明
+
+获取调度批次详情（含 dispatches）。
+
+**是否需要前端修改**：否（新增字段为可选，前端可不处理）
+
+#### 2.2.2 请求参数（无变更）
+
+```
+GET /api/schedule/batches/{batch_code}
+```
+
+#### 2.2.3 响应参数（新增字段）
+
+**成功响应（HTTP 200）**：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "batch_code": "BATCH20260614001",
+    "schedule_code": "GS20260614001",
+    "status": "completed",
+    "unallocated_packages": ["PKG202606140005", "PKG202606140006"],  // 新增字段
+    "dispatches": [
+      {
+        "dispatch_code": "DISP20260614001",
+        "vehicle_code": "VEHSC00101",
+        "driver_code": "DRVSC00101",
+        "level_phase": 0,
+        "tasks": [
+          {
+            "from_node_code": "SC001",
+            "to_node_code": "L1001",
+            "package_codes": ["PKG202606140001"],
+            "is_return": false
+          }
+        ],
+        "total_distance": 25.3,
+        "total_time": 0.42
+      }
+    ]
+  },
+  "meta": {
+    "degraded": false,
+    "degraded_reason": null
+  }
+}
+```
+
+**字段说明**：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `unallocated_packages` | `List[str]` | 否 | 未分配的包裹编码列表。从数据库 `dispatch_batches.unallocated_packages` 字段读取（JSON 字符串）。 |
+
+#### 2.2.4 数据源
+
+- `unallocated_packages` 字段存储在 `dispatch_batches` 表中（JSON 字符串）
+- 创建批次时（L0→L1 或 L0→L1+L1→L2）保存
+- 查询详情时从数据库读取并返回
 
 ---
 
@@ -220,9 +287,18 @@ for target_node_code, grouped_packages in packages_by_target.items():
 
 ## 4. 数据库变更
 
-### 4.1 无新增表或字段
+### 4.1 新增字段
 
-本次修订未修改数据库表结构，仅修改算法逻辑和 API 响应格式。
+**表**：`dispatch_batches`
+
+| 字段名 | 类型 | 说明 |
+| --- | --- | --- |
+| `unallocated_packages` | `String(2000)` | 未分配的包裹编码列表（JSON 字符串） |
+
+**说明**：
+- 存储因车辆不足或载重不够而未分配的包裹编码列表
+- 使用 JSON 字符串格式存储，如 `["PKG001", "PKG002"]`
+- 若为 NULL，表示该批次所有包裹都已分配
 
 ### 4.2 数据状态说明
 
@@ -239,6 +315,23 @@ for target_node_code, grouped_packages in packages_by_target.items():
 ```
 packed (未分配) → in_transit (已分配) → delivered (已送达)
 ```
+
+### 4.3 迁移脚本（待执行）
+
+**注意**：修改数据库模型后，需要执行以下操作之一：
+
+1. **开发环境**：重新初始化数据库
+   ```bash
+   cd src/backend
+   python scripts/init_demo_data.py
+   ```
+
+2. **生产环境**：创建 Alembic 迁移脚本
+   ```bash
+   cd src/backend
+   alembic revision --autogenerate -m "Add unallocated_packages to dispatch_batches"
+   alembic upgrade head
+   ```
 
 ---
 
@@ -317,6 +410,7 @@ def test_l0_l1_packaging_splits_by_weight(self, db_session, test_nodes, test_ord
 | 版本 | 日期 | 说明 |
 | --- | --- | --- |
 | V1.0 | 2026-06-17 | 初始版本，记录阶段 4 API 契约补充 |
+| V1.1 | 2026-06-17 | 更新 `GET /api/schedule/batches/{batch_code}` 接口，添加 `unallocated_packages` 字段；更新数据库表结构，新增 `dispatch_batches.unallocated_packages` 字段 |
 
 ---
 
@@ -327,9 +421,10 @@ def test_l0_l1_packaging_splits_by_weight(self, db_session, test_nodes, test_ord
 | 文件 | 变更类型 | 说明 |
 | --- | --- | --- |
 | `algorithms/packaging.py` | 修改 | 新增 `get_min_vehicle_capacity()`，修改 L0→L1 打包逻辑 |
-| `algorithms/node_dispatch.py` | 修改 | 修改 `_dispatch_level()` 返回值，支持部分分配 |
-| `services/dispatch_service.py` | 修改 | 修改 `create_node_dispatch()` 返回结构，新增 `unallocated_packages` |
+| `algorithms/node_dispatch.py` | 修改 | 修改 `_dispatch_level()` 返回值，支持部分分配；修改批次创建逻辑，保存 `unallocated_packages` |
+| `services/dispatch_service.py` | 修改 | 修改 `create_node_dispatch()` 返回结构，新增 `unallocated_packages`；修改 `get_dispatch_batch_detail()`，返回 `unallocated_packages` |
 | `schemas/dispatch.py` | 修改 | 新增 `unallocated_packages` 字段 |
+| `models/dispatch_batch.py` | 修改 | 新增 `unallocated_packages` 字段（数据库表结构变更） |
 | `tests/test_algorithms/test_packaging.py` | 新增 | 新增 3 个测试用例 |
 
 ### 8.2 参考文档

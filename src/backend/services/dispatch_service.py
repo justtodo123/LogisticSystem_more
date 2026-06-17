@@ -56,9 +56,17 @@ class DispatchService:
             # 1. 调用 F005 算法（纯计算，不提交事务）
             dispatch_result = run_node_dispatch(db, schedule_code, demo_mode)
             
-            # 2. 更新状态（包裹、货物、车辆、司机）
-            batch_code = dispatch_result["batch_code"]
+            # 2. 检查是否有调度明细创建
             dispatches = dispatch_result["dispatches"]
+            unallocated_packages = dispatch_result.get("unallocated_packages", [])
+            
+            # 如果没有创建任何调度明细且所有包裹都未分配，则返回错误
+            if not dispatches and unallocated_packages:
+                db.rollback()
+                return error_response(code=40001, message=f"节点调度失败：没有可用的车辆完成调度，{len(unallocated_packages)}个包裹未分配")
+            
+            # 3. 更新状态（包裹、货物、车辆、司机）
+            batch_code = dispatch_result["batch_code"]
             
             # 更新车辆和司机状态
             for dispatch_data in dispatches:
@@ -77,20 +85,26 @@ class DispatchService:
                     if driver:
                         driver.status = 'busy'
             
-            # 3. 提交事务
+            # 4. 提交事务
             db.commit()
             
-            # 4. 返回结果
+            # 5. 返回结果
             return success_response(data={
                 "batch_code": batch_code,
                 "status": dispatch_result["status"],
                 "dispatches": dispatches,
-                "unallocated_packages": dispatch_result.get("unallocated_packages", [])
+                "unallocated_packages": unallocated_packages
             })
             
         except Exception as e:
             db.rollback()
-            return error_response(code=40001, message=f"节点调度失败：{str(e)}")
+            # 检查是否是调度方案不存在的错误
+            error_msg = str(e)
+            if "不存在" in error_msg:
+                # 提取调度方案编码
+                if "全局调度方案不存在：" in error_msg:
+                    return error_response(code=40401, message=error_msg)
+            return error_response(code=40001, message=f"节点调度失败：{error_msg}")
 
     @staticmethod
     async def get_dispatch_batches(
@@ -139,25 +153,14 @@ class DispatchService:
             ).first()
             schedule_code = schedule.schedule_code if schedule else None
             
-            # 统计调度明细数量
-            l0_l1_count = db.query(NodeDispatch).filter(
-                NodeDispatch.dispatch_batch_id == batch.id,
-                NodeDispatch.level_phase == 0
-            ).count()
-            
-            l1_l2_count = db.query(NodeDispatch).filter(
-                NodeDispatch.dispatch_batch_id == batch.id,
-                NodeDispatch.level_phase == 1
-            ).count()
-            
-            # 构建批次响应
+            # 构建批次响应（使用DispatchBatch表中的字段）
             batch_data = {
                 "batch_code": batch.batch_code,
                 "schedule_code": schedule_code,
                 "status": batch.status,
                 "demo_mode": batch.demo_mode if hasattr(batch, 'demo_mode') else False,
-                "l0_l1_dispatch_count": l0_l1_count,
-                "l1_l2_dispatch_count": l1_l2_count,
+                "l0_l1_dispatch_count": batch.l0_l1_dispatch_count,
+                "l1_l2_dispatch_count": batch.l1_l2_dispatch_count,
                 "unallocated_packages": [],  # 列表视图暂不返回，详情接口返回
                 "created_at": batch.created_at,
                 "updated_at": batch.updated_at,
@@ -190,7 +193,7 @@ class DispatchService:
         ).first()
         
         if not batch:
-            return error_response(code=404, message=f"调度批次不存在：{batch_code}")
+            return error_response(code=40402, message=f"调度批次不存在：{batch_code}")
         
         # 获取调度方案编码
         from models.global_schedule import GlobalSchedule
@@ -221,10 +224,20 @@ class DispatchService:
                 "total_time": float(dispatch.total_time)
             })
         
+        # 解析 unallocated_packages（JSON 字符串 → 列表）
+        unallocated_packages = []
+        if batch.unallocated_packages:
+            try:
+                import json
+                unallocated_packages = json.loads(batch.unallocated_packages)
+            except:
+                unallocated_packages = []
+        
         # 构建响应
         return success_response(data={
             "batch_code": batch.batch_code,
             "schedule_code": schedule_code,
             "status": batch.status,
+            "unallocated_packages": unallocated_packages,
             "dispatches": dispatch_list
         })
