@@ -22,6 +22,7 @@ from models.goods import Goods
 from models.vehicle import Vehicle
 from models.driver import Driver
 from models.order import Order
+from schemas.dispatch import DispatchBatchListResponse, DispatchBatchResponse
 from utils.response import success_response, error_response
 
 
@@ -108,12 +109,14 @@ class DispatchService:
         Returns:
             统一响应格式 dict
         """
+        # 导入模型（避免循环导入）
+        from models.global_schedule import GlobalSchedule
+        
         # 构建查询
         query = db.query(DispatchBatch)
         
         # 按调度方案筛选
         if schedule_code:
-            from models.global_schedule import GlobalSchedule
             schedule = db.query(GlobalSchedule).filter(
                 GlobalSchedule.schedule_code == schedule_code
             ).first()
@@ -127,7 +130,7 @@ class DispatchService:
         # 执行查询
         batches = query.order_by(DispatchBatch.created_at.desc()).all()
         
-        # 构建响应
+        # 构建响应（使用 Pydantic schema）
         items = []
         for batch in batches:
             # 获取调度方案编码
@@ -136,17 +139,35 @@ class DispatchService:
             ).first()
             schedule_code = schedule.schedule_code if schedule else None
             
-            items.append({
+            # 统计调度明细数量
+            l0_l1_count = db.query(NodeDispatch).filter(
+                NodeDispatch.dispatch_batch_id == batch.id,
+                NodeDispatch.level_phase == 0
+            ).count()
+            
+            l1_l2_count = db.query(NodeDispatch).filter(
+                NodeDispatch.dispatch_batch_id == batch.id,
+                NodeDispatch.level_phase == 1
+            ).count()
+            
+            # 构建批次响应
+            batch_data = {
                 "batch_code": batch.batch_code,
                 "schedule_code": schedule_code,
                 "status": batch.status,
-                "created_at": batch.created_at.isoformat() if batch.created_at else None
-            })
+                "demo_mode": batch.demo_mode if hasattr(batch, 'demo_mode') else False,
+                "l0_l1_dispatch_count": l0_l1_count,
+                "l1_l2_dispatch_count": l1_l2_count,
+                "unallocated_packages": [],  # 列表视图暂不返回，详情接口返回
+                "created_at": batch.created_at,
+                "updated_at": batch.updated_at,
+                "dispatches": None  # 列表视图不返回调度明细
+            }
+            items.append(DispatchBatchResponse(**batch_data))
         
-        return success_response(data={
-            "items": items,
-            "total": len(items)
-        })
+        # 使用 Pydantic schema 序列化
+        response_data = DispatchBatchListResponse(items=items, total=len(items))
+        return success_response(data=response_data.model_dump())
 
     @staticmethod
     async def get_dispatch_batch_detail(
