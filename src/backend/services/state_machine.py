@@ -132,7 +132,7 @@ def repack_at_l1(
     l1_node_code: str,
     l2_node_code: str,
     schedule_id: int = None
-) -> List[Package]:
+) -> Dict[str, Any]:
     """
     在L1分拣中心重新打包
     
@@ -148,7 +148,7 @@ def repack_at_l1(
         schedule_id: 全局调度方案ID（可选）
     
     Returns:
-        新创建的包裹列表
+        字典，包含新创建的包裹列表和层级信息
     """
     from datetime import datetime
     
@@ -226,7 +226,14 @@ def repack_at_l1(
     
     db.flush()
     
-    return [new_package]
+    # 9. 返回结果（包含层级信息）
+    return {
+        "new_packages": [new_package],
+        "level_info": {
+            "level_phase": 1,  # L1→L2
+            "description": "L1→L2重新打包"
+        }
+    }
 
 
 def simulate_delivery_l1_to_l2(

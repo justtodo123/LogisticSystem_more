@@ -16,7 +16,11 @@ from models.driver import Driver
 from models.node_dispatch import NodeDispatch
 from models.dispatch_batch import DispatchBatch
 from models.global_schedule import GlobalSchedule
+from models.node import Node
 from utils.response import success_response, error_response
+from algorithms.node_dispatch import dispatch_level, _load_config
+import json
+import logging
 
 
 class SimulationService:
@@ -72,6 +76,7 @@ class SimulationService:
             delivered_package_codes = []
             status_changed_goods_count = 0
             updated_order_ids = set()
+            level_info = {"l0_to_l1": 0, "l1_to_l2": 0}  # 层级信息：记录每种层级的送达数量
             
             # 2. 处理每个包裹
             for package in packages:
@@ -111,11 +116,13 @@ class SimulationService:
                     
                     # 判断是否送达目的地
                     if goods.node_id == order.destination_node_id:
-                        # 送达目的地 → delivered
+                        # 送达目的地 → delivered（L1→L2）
                         goods.status = "delivered"
+                        level_info["l1_to_l2"] += 1
                     else:
-                        # 中间节点 → pending_pack
+                        # 中间节点 → pending_pack（L0→L1）
                         goods.status = "pending_pack"
+                        level_info["l0_to_l1"] += 1
                     
                     status_changed_goods_count += 1
                     updated_order_ids.add(order.id)
@@ -206,13 +213,22 @@ class SimulationService:
                 import logging
                 logging.error(f"自动触发失败：{e}")
             
-            # 9. 返回结果
+            # 9. 自动重新调度未分配包裹
+            try:
+                redispatch_result = SimulationService._auto_redispatch_unallocated(db)
+                auto_triggered["redispatch"] = redispatch_result
+            except Exception as e:
+                logging.error(f"自动重新调度失败：{e}")
+                auto_triggered["redispatch"] = False
+            
+            # 10. 返回结果
             return success_response(data={
                 "delivered_package_codes": delivered_package_codes,
                 "status_changed_goods_count": status_changed_goods_count,
                 "updated_order_count": len(delivered_order_codes),
                 "delivered_order_codes": delivered_order_codes,
-                "auto_triggered": auto_triggered
+                "auto_triggered": auto_triggered,
+                "level_info": level_info  # 添加层级信息
             })
             
         except Exception as e:
@@ -396,3 +412,159 @@ class SimulationService:
                 batch.status = 'l0_l1_done'
         
         db.flush()
+
+    @staticmethod
+    def _auto_redispatch_unallocated(db: Session) -> bool:
+        """
+        自动重新调度未分配的包裹（支持递归重新调度）
+        
+        逻辑：
+        1. 查询所有有未分配包裹的批次
+        2. 检查这些批次相关的节点是否有空闲车辆
+        3. 如果有空闲车辆，调用 dispatch_level() 重新调度
+        4. 更新批次的未分配包裹列表
+        5. 如果成功重新调度了至少一个包裹，递归调用自身，尝试重新调度剩余的未分配包裹
+        
+        Returns:
+            bool: 是否成功重新调度了至少一个包裹
+        """
+        try:
+            # 1. 查询所有有未分配包裹的批次
+            batches = db.query(DispatchBatch).filter(
+                DispatchBatch.unallocated_packages.isnot(None)
+            ).all()
+            
+            if not batches:
+                return False
+            
+            # 2. 加载配置
+            config = _load_config()
+            
+            total_redispatch_count = 0
+            
+            # 3. 遍历每个批次
+            for batch in batches:
+                if not batch.unallocated_packages:
+                    continue
+                
+                # 递归重新调度该批次的未分配包裹
+                redispatch_count = SimulationService._redispatch_batch_unallocated(
+                    db, batch, config
+                )
+                
+                total_redispatch_count += redispatch_count
+            
+            return total_redispatch_count > 0
+            
+        except Exception as e:
+            logging.error(f"自动重新调度失败：{e}")
+            return False
+    
+    @staticmethod
+    def _redispatch_batch_unallocated(db: Session, batch, config: dict) -> int:
+        """
+        重新调度指定批次的未分配包裹（递归调用）
+        
+        递归逻辑：
+        1. 尝试重新调度未分配的包裹
+        2. 如果成功分配了至少一个包裹，递归调用自身，尝试分配剩余的未分配包裹
+        3. 递归终止条件：没有成功分配任何包裹，或者所有包裹都已分配
+        
+        Args:
+            db: 数据库会话
+            batch: 调度批次对象
+            config: 算法配置
+            
+        Returns:
+            int: 成功重新调度的包裹数量
+        """
+        # 1. 解析未分配包裹
+        if not batch.unallocated_packages:
+            return 0
+        
+        unallocated_codes = json.loads(batch.unallocated_packages)
+        
+        # 查询这些包裹
+        unallocated_pkgs = db.query(Package).filter(
+            Package.package_code.in_(unallocated_codes),
+            Package.status == 'packed'
+        ).all()
+        
+        if not unallocated_pkgs:
+            # 这些包裹已经被分配了，清除记录
+            batch.unallocated_packages = None
+            db.flush()
+            return 0
+        
+        # 2. 检查是否有空闲车辆
+        # 获取这些包裹的起始节点
+        from_node_ids = set(pkg.from_node_id for pkg in unallocated_pkgs)
+        
+        has_idle_vehicle = False
+        for node_id in from_node_ids:
+            idle_vehicles = db.query(Vehicle).filter(
+                Vehicle.node_id == node_id,
+                Vehicle.status == 'idle'
+            ).first()
+            
+            if idle_vehicles:
+                has_idle_vehicle = True
+                break
+        
+        if not has_idle_vehicle:
+            # 没有空闲车辆，终止递归
+            return 0
+        
+        # 3. 确定是 L0→L1 还是 L1→L2
+        # 检查第一个包裹的 from_node 类型
+        first_pkg = unallocated_pkgs[0]
+        from_node = db.query(Node).filter(Node.id == first_pkg.from_node_id).first()
+        
+        if not from_node:
+            return 0
+        
+        if from_node.node_type == 'storage_center':
+            level_phase = 0  # L0→L1
+        else:
+            level_phase = 1  # L1→L2
+        
+        # 4. 调用调度算法，只调度未分配的包裹
+        # 传入batch_id，自动写入调度明细
+        _, updated_packages, new_unallocated = dispatch_level(
+            db, batch.global_schedule_id, level_phase, config, 
+            package_codes=unallocated_codes,
+            batch_id=batch.id
+        )
+        
+        # 5. 更新已分配包裹的状态
+        for pkg in updated_packages:
+            pkg.status = 'in_transit'
+            # 更新货物状态
+            if pkg.goods_items:
+                goods_items = pkg.goods_items
+                if isinstance(goods_items, str):
+                    goods_items = json.loads(goods_items)
+                for item in goods_items:
+                    goods_code = item.get('goods_code')
+                    if goods_code:
+                        goods = db.query(Goods).filter(Goods.goods_code == goods_code).first()
+                        if goods:
+                            goods.status = 'in_transit'
+        
+        # 6. 更新批次的未分配包裹
+        if new_unallocated:
+            batch.unallocated_packages = json.dumps(
+                [pkg.package_code for pkg in new_unallocated]
+            )
+        else:
+            batch.unallocated_packages = None
+        
+        db.flush()
+        
+        # 7. 递归调用：如果成功分配了至少一个包裹，尝试分配剩余的未分配包裹
+        if updated_packages:
+            # 递归调用，尝试分配剩余的未分配包裹
+            remaining_count = SimulationService._redispatch_batch_unallocated(db, batch, config)
+            return len(updated_packages) + remaining_count
+        else:
+            return 0

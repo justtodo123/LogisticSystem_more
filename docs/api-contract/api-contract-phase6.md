@@ -28,7 +28,7 @@
 
 | API路径 | 方法 | 说明 | 优先级 | 状态 |
 |---------|------|------|--------|------|
-| `/api/simulation/deliver` | POST | 模拟送达，驱动状态流转 | P0 | ✅ 已实现 |
+| `/api/simulation/deliver` | POST | 模拟送达，驱动状态流转（支持自动重新调度） | P0 | ✅ 已实现 |
 | `/api/simulation/status/{batch_code}` | GET | 查询送达状态和待重新打包货物 | P1 | ⏳ 待实现 |
 | `/api/simulation/deliver-batch` | POST | 批量送达同一批次所有车辆 | P1 | ⏳ 待实现 |
 
@@ -40,12 +40,13 @@
 
 #### 2.1.1 功能说明
 
-模拟包裹送达操作，驱动状态流转。支持单个/批量送达，并在第一次送达完成后自动触发L1重新打包和第二次F005（L1→L2调度）。
+模拟包裹送达操作，驱动状态流转。支持单个/批量送达，并在第一次送达完成后自动触发L1重新打包和第二次F005（L1→L2调度），以及自动重新调度未分配包裹。
 
 **自动触发逻辑**：
 - 第一次送达（L0→L1）完成后，系统自动检测 `pending_pack` 状态的货物
 - 自动执行F021重新打包（生成L1→L2新包裹）
 - 自动触发第二次F005（L1→L2调度，异步执行）
+- 自动检测未分配的包裹，如果有空闲车辆，自动重新调度（支持递归重新调度）
 
 #### 2.1.2 认证要求
 
@@ -118,6 +119,8 @@
 | `auto_triggered` | object | 自动触发的操作 |
 | `auto_triggered.repackaging` | boolean | 是否自动触发了重新打包 |
 | `auto_triggered.second_f005` | boolean | 是否自动触发了第二次F005 |
+| `auto_triggered.redispatch` | boolean | 是否自动重新调度了未分配包裹 |
+| `level_info` | object | 层级信息（L0→L1 和 L1→L2 的送达数量） |
 
 **业务失败响应**（HTTP 200，code≠0）：
 
