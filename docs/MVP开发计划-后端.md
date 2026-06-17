@@ -185,7 +185,7 @@ F007 最小可行 → 写 global_schedules → F021 → 写 packages → POST �
 
 ### 阶段 4：节点间调度（F005）
 
-**目标**：两次串行 F005，形成 dispatch_batches。
+**目标**：两次串行 F005，形成 dispatch_batches；支持部分分配和包裹拆分。
 
 | 任务 | 说明 |
 | --- | --- |
@@ -196,13 +196,33 @@ F007 最小可行 → 写 global_schedules → F021 → 写 packages → POST �
 | 司机分配 | 车辆 node 下 status=idle 司机，取第一个 |
 | tasks JSON | from_node_code、to_node_code、package_codes、is_return |
 | 批次状态机 | pending → l0_l1_done → completed / failed |
+| **包裹拆分** | L0→L1 打包时按最小车辆载重拆分，超重包裹单独打包 |
+| **部分分配** | 车辆不足时跳过当前分组，记录未分配包裹，不中断流程 |
+| **未分配包裹** | API 返回 `unallocated_packages` 字段，标识下次需处理的包裹 |
 | API | POST /schedule/node-dispatch；GET /batches、/{batch_code} |
+
+**实现要点**：
+
+1. **打包拆分**（algorithms/packaging.py）：
+   - 新增 `get_min_vehicle_capacity(db)` 查询系统最小车辆载重
+   - L0→L1 打包时，同节点对货物按最小载重拆分
+   - 单个超重货物单独打包
+
+2. **部分分配**（algorithms/node_dispatch.py）：
+   - 车辆不足时不再报错，跳过当前分组并记录未分配包裹
+   - 返回三元组（调度明细、已分配包裹、未分配包裹）
+
+3. **API 返回**（services/dispatch_service.py）：
+   - 新增 `unallocated_packages` 字段返回未分配包裹编码列表
+   - 未分配包裹标识：`dispatch_id` 为 NULL、`status` 为 `packed`、`current_node_code` 为包裹当前所在节点
 
 **自测**：
 
 - [ ] demo_mode=true 下一次调用产生两次 level_phase 记录
 - [ ] 第一次失败不执行第二次
 - [ ] 每辆车有 driver_code
+- [ ] 车辆不足时部分包裹未分配，API 返回 `unallocated_packages`
+- [ ] 下次调用节点调度时自动处理未分配包裹
 
 **必须与前端联调通过后**再进阶段 5。
 

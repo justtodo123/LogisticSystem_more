@@ -309,6 +309,79 @@ class TestPackagingEdgeCases:
         with pytest.raises(ValueError, match="goods_schedules 为空"):
             packaging(schedule_result, schedule_id=None, db=db_session)
 
+
+class TestPackagingWeightLimit:
+    """测试包裹重量限制（按最小车辆载重拆分）"""
+
+    @pytest.mark.unit
+    def test_l0_l1_packaging_splits_by_weight(self, db_session, test_nodes, test_orders, test_goods):
+        """
+        测试 L0→L1 打包时按最小车辆载重拆分：
+        如果节点对的总重量超过最小车辆载重，应拆分成多个包裹
+        """
+        # 设置最小车辆载重（通过创建一辆载重较小的车辆）
+        from models.vehicle import Vehicle
+        min_capacity_vehicle = Vehicle(
+            vehicle_code="V_MIN",
+            model="小型货车",
+            capacity=50.0,  # 最小载重 50kg
+            energy_type="fuel",
+            node_id=test_nodes["SC001"].id,
+            last_arrived_node_id=test_nodes["SC001"].id,  # 必填字段
+            status="idle"
+        )
+        db_session.add(min_capacity_vehicle)
+        db_session.commit()
+
+        # 创建货物数据，使得某个节点对的总重量超过 50kg
+        # G001 重量 30kg, G002 重量 30kg，总重量 60kg > 50kg
+        from models.goods import Goods
+        goods1 = db_session.query(Goods).filter(Goods.goods_code == "G001").first()
+        goods2 = db_session.query(Goods).filter(Goods.goods_code == "G002").first()
+        goods1.weight = 30.0
+        goods2.weight = 30.0
+        db_session.commit()
+
+        # 构造调度结果：G001 和 G002 都走 SC001→SO001
+        schedule_result = {
+            "schedule_code": "GS20260613002",
+            "order_codes": ["O001", "O002"],
+            "total_distance": 50.0,
+            "total_time": 2.0,
+            "total_goods": 2,
+            "score": 25.0,
+            "goods_schedules": [
+                {
+                    "goods_code": "G001",
+                    "order_code": "O001",
+                    "path": ["SC001", "SO001", "SO010"],
+                },
+                {
+                    "goods_code": "G002",
+                    "order_code": "O002",
+                    "path": ["SC001", "SO001", "SO010"],
+                },
+            ],
+        }
+
+        packages = packaging(schedule_result, schedule_id=None, db=db_session)
+
+        # 验证：SC001→SO001 的包裹应被拆分成 2 个
+        node_id_to_code = {n.id: n.node_code for n in test_nodes.values()}
+        l0_l1_packages = [
+            pkg for pkg in packages
+            if node_id_to_code.get(pkg.from_node_id) == "SC001"
+            and node_id_to_code.get(pkg.to_node_id) == "SO001"
+        ]
+
+        # 每个包裹重量应不超过 50kg
+        for pkg in l0_l1_packages:
+            assert pkg.weight <= 50.0, f"包裹重量 {pkg.weight} 超过最小车辆载重 50kg"
+
+        # 总重量应为 60kg
+        total_weight = sum(pkg.weight for pkg in l0_l1_packages)
+        assert abs(total_weight - 60.0) < 0.1, f"总重量应为 60kg，实际 {total_weight}"
+
     @pytest.mark.unit
     def test_package_code_uniqueness(self, db_session, test_nodes, test_orders, test_goods):
         """验证同一批次内 package_code 不重复"""

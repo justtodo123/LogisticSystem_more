@@ -83,7 +83,8 @@ class DispatchService:
             return success_response(data={
                 "batch_code": batch_code,
                 "status": dispatch_result["status"],
-                "dispatches": dispatches
+                "dispatches": dispatches,
+                "unallocated_packages": dispatch_result.get("unallocated_packages", [])
             })
             
         except Exception as e:

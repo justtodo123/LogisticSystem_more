@@ -42,6 +42,7 @@ class DispatchBatchResponse(BaseModel):
     demo_mode: bool
     l0_l1_dispatch_count: int
     l1_l2_dispatch_count: int
+    unallocated_packages: Optional[List[str]] = None  # 未分配的包裹编码列表
     created_at: datetime
     updated_at: datetime
     dispatches: Optional[List[NodeDispatchResponse]] = None
