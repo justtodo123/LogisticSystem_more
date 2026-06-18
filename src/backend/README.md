@@ -283,14 +283,9 @@ src/backend/
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| `POST` | `/api/simulation/deliver` | 模拟送达，驱动状态流转（支持自动重新调度） | Bearer Token (dispatcher) |
+| `POST` | `/api/simulation/deliver` | 模拟送达，驱动状态流转 | Bearer Token (dispatcher) |
 | `GET` | `/api/simulation/status/{batch_code}` | 查询送达状态和待重新打包货物（P1） | Bearer Token (dispatcher/manager) |
 | `POST` | `/api/simulation/deliver-batch` | 批量送达同一批次所有车辆（P1） | Bearer Token (dispatcher) |
-
-**自动重新调度功能**（阶段6新增）：
-- 模拟送达后，系统自动检测未分配的包裹
-- 如果有空闲车辆，自动重新调度未分配包裹
-- 支持递归重新调度（多次循环，直到没有新分配或没有空闲车辆）
 
 ### 规划中（阶段 7-8）
 
@@ -473,22 +468,17 @@ alembic downgrade -1
 
 ### 阶段 6 自测（模拟送达 F013-1）
 
-测试时间：2026-06-17，结果：**10/10 通过，8个跳过**
+测试时间：2026-06-18，结果：**7/7 通过（100%）**
 
 | 类别 | 测试项 | 结果 |
 |------|--------|------|
-| 集成测试 | `test_dispatch_pipeline_success`：完整调度流水线 | ✅ |
-| 集成测试 | `test_dispatch_pipeline_no_packages`：无包裹场景 | ✅ |
-| 集成测试 | `test_dispatch_pipeline_transaction_rollback`：事务回滚 | ✅ |
-| 集成测试 | `test_dispatch_pipeline_demo_mode_false`：demo_mode=false | ✅ |
-| 集成测试 | `test_full_pipeline`：完整流水线 | ✅ |
-| 集成测试 | `test_schedule_then_query`：调度后查询 | ✅ |
-| 集成测试 | `test_schedule_transaction_rollback`：事务回滚 | ✅ |
-| 集成测试 | `test_simulate_l0_l1_delivery`：L0→L1 模拟送达 | ✅ |
-| 集成测试 | `test_simulate_l1_l2_delivery`：L1→L2 模拟送达 | ✅ |
-| 集成测试 | `test_simulation_pipeline_complete`：完整模拟送达流水线 | ✅ |
-| 跳过测试 | `test_auto_redispatch.py` (4个)：自动重新调度功能（需要修复） | ⏭ |
-| 跳过测试 | `test_exception_replan.py` (4个)：异常重规划功能（阶段7） | ⏭ |
+| 模拟送达 | test_deliver_by_vehicle_success：按车辆送达 | ✅ |
+| 模拟送达 | test_deliver_by_package_success：按包裹送达 | ✅ |
+| 模拟送达 | test_deliver_all_success：全部送达 | ✅ |
+| 模拟送达 | test_deliver_no_packages_in_transit：无可送达包裹 | ✅ |
+| 模拟送达 | test_deliver_package_not_in_transit：包裹状态错误 | ✅ |
+| 模拟送达 | test_deliver_vehicle_not_busy：车辆状态无效 | ✅ |
+| 模拟送达 | test_deliver_nonexistent_vehicle：不存在的车辆 | ✅ |
 
 #### 算法层测试 (12/12)
 

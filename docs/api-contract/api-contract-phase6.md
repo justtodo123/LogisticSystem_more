@@ -28,7 +28,7 @@
 
 | API路径 | 方法 | 说明 | 优先级 | 状态 |
 |---------|------|------|--------|------|
-| `/api/simulation/deliver` | POST | 模拟送达，驱动状态流转（支持自动重新调度） | P0 | ✅ 已实现 |
+| `/api/simulation/deliver` | POST | 模拟送达，驱动状态流转 | P0 | ✅ 已实现 |
 | `/api/simulation/status/{batch_code}` | GET | 查询送达状态和待重新打包货物 | P1 | ⏳ 待实现 |
 | `/api/simulation/deliver-batch` | POST | 批量送达同一批次所有车辆 | P1 | ⏳ 待实现 |
 
@@ -40,13 +40,7 @@
 
 #### 2.1.1 功能说明
 
-模拟包裹送达操作，驱动状态流转。支持单个/批量送达，并在第一次送达完成后自动触发L1重新打包和第二次F005（L1→L2调度），以及自动重新调度未分配包裹。
-
-**自动触发逻辑**：
-- 第一次送达（L0→L1）完成后，系统自动检测 `pending_pack` 状态的货物
-- 自动执行F021重新打包（生成L1→L2新包裹）
-- 自动触发第二次F005（L1→L2调度，异步执行）
-- 自动检测未分配的包裹，如果有空闲车辆，自动重新调度（支持递归重新调度）
+模拟包裹送达操作，驱动状态流转。支持单个/批量送达（按车辆或按包裹）。仅负责状态流转，不自动触发重新打包（F021）或调度（F005），这些操作由用户通过 `/api/schedule/*` 接口手动触发。
 
 #### 2.1.2 认证要求
 
@@ -96,9 +90,9 @@
     "status_changed_goods_count": 5,
     "updated_order_count": 1,
     "delivered_order_codes": ["O001"],
-    "auto_triggered": {
-      "repackaging": true,
-      "second_f005": true
+    "level_info": {
+      "l0_to_l1": 3,
+      "l1_to_l2": 2
     }
   },
   "meta": {
@@ -116,11 +110,7 @@
 | `status_changed_goods_count` | integer | 状态变更的货物数量 |
 | `updated_order_count` | integer | 更新的订单数量 |
 | `delivered_order_codes` | string[] | 已送达订单编号列表 |
-| `auto_triggered` | object | 自动触发的操作 |
-| `auto_triggered.repackaging` | boolean | 是否自动触发了重新打包 |
-| `auto_triggered.second_f005` | boolean | 是否自动触发了第二次F005 |
-| `auto_triggered.redispatch` | boolean | 是否自动重新调度了未分配包裹 |
-| `level_info` | object | 层级信息（L0→L1 和 L1→L2 的送达数量） |
+| `level_info` | object | 层级信息：`l0_to_l1`（L0→L1送达数量）和 `l1_to_l2`（L1→L2送达数量） |
 
 **业务失败响应**（HTTP 200，code≠0）：
 
@@ -184,18 +174,13 @@
 |------|--------|------|--------|
 | 包裹 | `in_transit` | 送达 | `delivered` |
 | 货物 | `in_transit` | `goods.node_id == order.destination_node_id` | `delivered` |
-| 货物 | `in_transit` | `goods.node_id != order.destination_node_id` | `pending_pack` |
+| 货物 | `in_transit` | `goods.node_id != order.destination_node_id` | `packed` |
 | 车辆 | `delivering` | 车辆上所有包裹都送达 | `idle` |
 | 司机 | `busy` | 车辆状态变为 `idle` | `idle` |
 | 订单 | `delivering` | 订单所有货物都 `delivered` | `completed` |
 | 批次 | `pending` | 第一次送达完成 | `l0_l1_done` |
 
-**自动重新打包（F021）**：
-
-| 实体 | 原状态 | 条件 | 新状态 |
-|------|--------|------|--------|
-| 货物 | `pending_pack` | 重新打包完成 | `packed` |
-| 包裹 | - | 生成新包裹（L1→L2） | `packed` |
+> **说明**：F021（打包）已在全局调度阶段一次性生成 L0→L1 和 L1→L2 所有包裹。L0→L1 送达后，货物状态直接变为 `packed`（对应的 L1→L2 包裹已存在），无需重新打包。L1→L2 第二次 F005 调度由用户手动调用 `POST /api/schedule/node-dispatch` 触发。
 
 **第二次送达（L1→L2）**：
 
@@ -250,9 +235,9 @@ curl -X POST "http://localhost:8000/api/simulation/deliver" \
     "status_changed_goods_count": 15,
     "updated_order_count": 2,
     "delivered_order_codes": ["O001", "O002"],
-    "auto_triggered": {
-      "repackaging": true,
-      "second_f005": true
+    "level_info": {
+      "l0_to_l1": 10,
+      "l1_to_l2": 5
     }
   },
   "meta": {
@@ -436,12 +421,12 @@ curl -X POST "http://localhost:8000/api/simulation/deliver-batch" \
 ```json
 {
   "delivered_package_codes": ["PKG001"],
-  "status_changed_goods_count": 0,
-  "updated_order_count": 0,
+  "status_changed_goods_count": 5,
+  "updated_order_count": 1,
   "delivered_order_codes": ["O001"],
-  "auto_triggered": {
-    "repackaging": false,
-    "second_f005": false
+  "level_info": {
+    "l0_to_l1": 3,
+    "l1_to_l2": 2
   }
 }
 ```
@@ -452,9 +437,7 @@ curl -X POST "http://localhost:8000/api/simulation/deliver-batch" \
 | `status_changed_goods_count` | integer | 状态变更的货物数量 |
 | `updated_order_count` | integer | 更新的订单数量 |
 | `delivered_order_codes` | string[] | 已送达订单编号列表 |
-| `auto_triggered` | object | 自动触发的操作 |
-| `auto_triggered.repackaging` | boolean | 是否自动触发了重新打包 |
-| `auto_triggered.second_f005` | boolean | 是否自动触发了第二次F005 |
+| `level_info` | object | 层级信息：`l0_to_l1`（L0→L1送达数量）和 `l1_to_l2`（L1→L2送达数量） |
 
 ---
 
@@ -545,7 +528,7 @@ Authorization: Bearer <token>
 ### 6.1 单元测试
 
 - 测试文件：`tests/unit/services/test_simulation_service.py`
-- 测试覆盖：✅ 56个测试全部通过（2026-06-17）
+- 测试覆盖：✅ 7/7 测试全部通过（2026-06-18）
 
 ### 6.2 集成测试
 
@@ -556,13 +539,13 @@ Authorization: Bearer <token>
 4. 验证车辆/司机/订单状态流转正确
 
 **测试场景2：demo_mode=false完整流程**
-1. 执行 `POST /api/schedule/global`（F007 + F021）
-2. 执行 `POST /api/schedule/node-dispatch (demo_mode=false)`（L0→L1调度）
-3. 调用 `POST /api/simulation/deliver` 送达L0→L1包裹
-4. 验证系统自动执行F021重新打包
-5. 验证系统自动触发第二次F005（异步）
-6. 轮询 `GET /api/schedule/batches/{batch_code}` 查看批次状态
-7. 验证批次状态最终变为 `completed`
+1. 执行 `POST /api/schedule/global`（F007 + F021，一次性生成 L0→L1 和 L1→L2 所有包裹）
+2. 执行 `POST /api/schedule/node-dispatch (demo_mode=false)`（L0→L1 调度）
+3. 调用 `POST /api/simulation/deliver` 送达 L0→L1 包裹（货物状态 `in_transit → packed`）
+4. 由用户手动调用 `POST /api/schedule/node-dispatch`（L1→L2 调度）
+5. 调用 `POST /api/simulation/deliver` 送达 L1→L2 包裹（货物状态 `packed → delivered`）
+6. 验证批次状态更新为 `l0_l1_done` → `completed`
+7. 验证订单状态更新为 `completed`
 
 **测试场景3：异常边界情况**
 1. 包裹状态不是 `in_transit`，返回错误（code=40001）

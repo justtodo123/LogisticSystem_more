@@ -17,4 +17,4 @@ class DeliverResponse(BaseModel):
     status_changed_goods_count: int = Field(..., description="状态变更的货物数量")
     updated_order_count: int = Field(..., description="更新的订单数量")
     delivered_order_codes: List[str] = Field(..., description="已送达订单编号列表")
-    auto_triggered: Optional[Dict[str, bool]] = Field(None, description="自动触发的操作（repackaging: L1重新打包, second_f005: 第二次F005）")
+    level_info: Optional[Dict[str, int]] = Field(None, description="层级信息：l0_to_l1 / l1_to_l2")
