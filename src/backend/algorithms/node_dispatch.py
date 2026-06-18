@@ -448,13 +448,57 @@ def _dispatch_level(
     return dispatch_list, updated_packages, unallocated_packages
 
 
+def _check_packages_by_level(db: Session, schedule_id: int, level_phase: int) -> bool:
+    """
+    检查指定层级的包裹是否存在
+    
+    Args:
+        db: 数据库会话
+        schedule_id: 调度方案 ID
+        level_phase: 0 (L0→L1) 或 1 (L1→L2)
+    
+    Returns:
+        bool: 是否存在该层级的包裹
+    """
+    packages = db.query(Package).filter(
+        Package.status == 'packed',
+        Package.schedule_id == schedule_id
+    ).all()
+    
+    for pkg in packages:
+        from_node = db.query(Node).filter(Node.id == pkg.from_node_id).first()
+        to_node = db.query(Node).filter(Node.id == pkg.to_node_id).first()
+        
+        if not from_node or not to_node:
+            continue
+        
+        if level_phase == 0:
+            # L0→L1: from_node.node_type='storage_center', to_node.node_type='sorting_center'
+            if from_node.node_type == 'storage_center' and to_node.node_type == 'sorting_center':
+                sorting_center = db.query(SortingCenter).filter(SortingCenter.node_id == to_node.id).first()
+                if sorting_center and sorting_center.level == 1:
+                    return True
+        else:
+            # L1→L2: from_node.node_type='sorting_center', to_node.node_type='sorting_center'
+            if from_node.node_type == 'sorting_center' and to_node.node_type == 'sorting_center':
+                sorting_center_from = db.query(SortingCenter).filter(SortingCenter.node_id == from_node.id).first()
+                sorting_center_to = db.query(SortingCenter).filter(SortingCenter.node_id == to_node.id).first()
+                if (sorting_center_from and sorting_center_to and
+                    sorting_center_from.level == 1 and sorting_center_to.level == 0):
+                    return True
+    
+    return False
+
+
 def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) -> Dict[str, Any]:
     """
     F005 节点间调度主函数
     
-    自动检测是首次调用还是第二次调用：
-    - 如果不存在 status=l0_l1_done 的批次 → 首次调用
-    - 如果已存在 status=l0_l1_done 的批次 → 第二次调用
+    智能检测应该执行哪个层级的调度：
+    - 如果 L0→L1 和 L1→L2 的包裹都存在 → 优先执行 L0→L1
+    - 如果只有 L0→L1 的包裹 → 执行 L0→L1
+    - 如果只有 L1→L2 的包裹 → 直接执行 L1→L2（自动创建批次）
+    - 如果都不存在 → 报错
     
     Args:
         db: 数据库会话
@@ -478,10 +522,14 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
         DispatchBatch.status == 'l0_l1_done'
     ).first()
     
-    # 3. 加载算法配置
+    # 3. 智能判断：检查存在哪些类型的包裹
+    has_l0_l1 = _check_packages_by_level(db, schedule.id, level_phase=0)
+    has_l1_l2 = _check_packages_by_level(db, schedule.id, level_phase=1)
+    
+    # 4. 加载算法配置
     config = _load_config()
     
-    # 4. 根据 demo_mode 和 existing_batch 决定执行逻辑
+    # 5. 根据 demo_mode、existing_batch 和包裹类型决定执行逻辑
     if demo_mode:
         # demo_mode=true：一次完成两次调度（L0→L1 + L1→L2）
         return _run_dispatch_both_levels(db, schedule, config)
@@ -489,11 +537,34 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
     else:
         # demo_mode=false：分阶段调度
         if existing_batch:
-            # 第二次调用：只执行 L1→L2
+            # 已有批次，执行 L1→L2（第二次调用）
             return _run_dispatch_l1_to_l2(db, schedule, existing_batch, config)
         else:
-            # 首次调用：只执行 L0→L1
-            return _run_dispatch_l0_to_l1(db, schedule, config)
+            # 没有批次，判断是首次调用还是跳过 L0→L1
+            if has_l0_l1 and has_l1_l2:
+                # 同时存在两个层级的包裹，优先执行 L0→L1
+                result = _run_dispatch_l0_to_l1(db, schedule, config)
+                result["message"] = "L0→L1调度完成，请再次调用以执行L1→L2"
+                return result
+            elif has_l0_l1:
+                # 只有 L0→L1 包裹，执行首次调用
+                return _run_dispatch_l0_to_l1(db, schedule, config)
+            elif has_l1_l2:
+                # 只有 L1→L2 包裹，直接执行 L1→L2
+                # 需要先创建一个批次（模拟首次调用的批次）
+                batch = DispatchBatch(
+                    batch_code=_generate_batch_code(db),
+                    global_schedule_id=schedule.id,
+                    status='l0_l1_done',  # 直接设为 l0_l1_done
+                    demo_mode=False,
+                    l0_l1_dispatch_count=0,  # L0→L1 没有调度
+                    l1_l2_dispatch_count=0,
+                )
+                db.add(batch)
+                db.flush()
+                return _run_dispatch_l1_to_l2(db, schedule, batch, config)
+            else:
+                raise ValueError("没有可调度的包裹")
 
 
 def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, Any]:
