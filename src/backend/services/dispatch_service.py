@@ -68,22 +68,24 @@ class DispatchService:
             # 3. 更新状态（包裹、货物、车辆、司机）
             batch_code = dispatch_result["batch_code"]
             
-            # 更新车辆和司机状态
-            for dispatch_data in dispatches:
-                # 更新车辆状态：idle → delivering
-                vehicle = db.query(Vehicle).filter(
-                    Vehicle.vehicle_code == dispatch_data["vehicle_code"]
-                ).first()
-                if vehicle:
-                    vehicle.status = 'delivering'
-                
-                # 更新司机状态：idle → busy
-                if dispatch_data.get("driver_code"):
-                    driver = db.query(Driver).filter(
-                        Driver.driver_code == dispatch_data["driver_code"]
+            # demo_mode=true 时，算法内部已通过 simulate 函数正确处理了所有状态
+            # （车辆/driver 已恢复为 idle），服务层不需要再次更新，否则会覆盖正确状态
+            if not demo_mode:
+                for dispatch_data in dispatches:
+                    # 更新车辆状态：idle → delivering
+                    vehicle = db.query(Vehicle).filter(
+                        Vehicle.vehicle_code == dispatch_data["vehicle_code"]
                     ).first()
-                    if driver:
-                        driver.status = 'busy'
+                    if vehicle:
+                        vehicle.status = 'delivering'
+                    
+                    # 更新司机状态：idle → busy
+                    if dispatch_data.get("driver_code"):
+                        driver = db.query(Driver).filter(
+                            Driver.driver_code == dispatch_data["driver_code"]
+                        ).first()
+                        if driver:
+                            driver.status = 'busy'
             
             # 4. 提交事务
             db.commit()
