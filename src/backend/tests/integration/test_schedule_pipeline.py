@@ -70,7 +70,7 @@ class TestSchedulePipeline:
         
         # ── 验证 ─────────────────────────────────────────────
         # 至少验证全局调度和打包是工作的
-        assert schedule_result["data"]["total_goods"] == 3
+        assert schedule_result["data"]["total_goods"] == 18  # 9订单 × 2货物/订单
         assert schedule_result["data"]["package_count"] > 0
 
     @pytest.mark.integration
@@ -109,8 +109,8 @@ class TestSchedulePipeline:
         
         assert detail_result["code"] == 0
         assert detail_result["data"]["schedule_code"] == schedule_code
-        assert detail_result["data"]["total_goods"] == 3
-        assert len(detail_result["data"]["goods_schedules"]) == 3
+        assert detail_result["data"]["total_goods"] == 18  # 9订单 × 2货物/订单
+        assert len(detail_result["data"]["goods_schedules"]) == 18
         assert len(detail_result["data"]["packages"]) > 0
 
 

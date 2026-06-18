@@ -39,7 +39,7 @@ class TestGlobalScheduleNormal:
 
         # ── 验证 goods_schedules ──
         goods_schedules = result["goods_schedules"]
-        assert len(goods_schedules) == 3  # 3 个货物
+        assert len(goods_schedules) == 18  # 9个订单 × 每单2个货物
 
         for gs in goods_schedules:
             assert "goods_code" in gs
@@ -69,12 +69,12 @@ class TestGlobalScheduleNormal:
         # ── 验证数值合理性 ──
         assert result["total_distance"] > 0
         assert result["total_time"] > 0
-        assert result["total_goods"] == 3
+        assert result["total_goods"] == 18
         assert result["score"] > 0
 
         # ── 验证 order_codes ──
-        assert len(result["order_codes"]) == 3
-        for code in ["O001", "O002", "O003"]:
+        assert len(result["order_codes"]) == 9
+        for code in ["O001", "O002", "O003", "O004", "O005", "O006", "O007", "O008", "O009"]:
             assert code in result["order_codes"]
 
 

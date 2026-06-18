@@ -44,7 +44,7 @@ class TestScheduleServiceNormalFlow:
         assert result["code"] == 0
         assert result["message"] == "success"
         assert result["data"]["schedule_code"].startswith("GS")
-        assert result["data"]["total_goods"] == 3
+        assert result["data"]["total_goods"] == 18  # 9订单 × 2货物/订单
         assert result["data"]["package_count"] > 0
         assert result["data"]["version"] == 1
         assert result["data"]["is_replan"] is False
@@ -54,7 +54,7 @@ class TestScheduleServiceNormalFlow:
         assert len(gs_list) == 1
         gs = gs_list[0]
         assert gs.schedule_code == result["data"]["schedule_code"]
-        assert gs.total_goods == 3
+        assert gs.total_goods == 18  # 9订单 × 2货物/订单
         assert gs.algorithm_type == "traditional"
         assert gs.version == 1
         assert gs.is_replan is False
@@ -96,7 +96,7 @@ class TestScheduleServiceNormalFlow:
         )
 
         assert result["code"] == 0
-        assert result["data"]["total_goods"] == 2
+        assert result["data"]["total_goods"] == 4  # O001有2个货物 + O002有2个货物
 
         # O001、O002 应变为 delivering
         db_session.refresh(test_orders["O001"])
