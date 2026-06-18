@@ -280,14 +280,13 @@ def simulate_delivery_l1_to_l2(
                         if goods:
                             goods.status = 'delivered'
     
-    # 4. 更新订单状态
+    # 4. 更新订单状态（仅当该订单所有货物都已 delivered 时才设为 completed）
     for order_code in order_codes:
-        order = db.query(Order).filter(Order.order_code == order_code).first()
-        if order:
-            order.status = 'completed'
+        check_and_update_order_status(db, order_code)
     
-    # 5. 更新批次状态
-    batch.status = 'completed'
+    # 5. 更新批次状态（仅当 goods 全部送达时才 completed，否则保持 l0_l1_done）
+    # 由调用方负责最终批次状态更新
+    # batch.status = 'completed'  # 不再在此处设置，由 _run_dispatch_both_levels 统一管理
     
     # 6. 更新车辆状态
     vehicle = db.query(Vehicle).filter(Vehicle.id == dispatch.vehicle_id).first()
