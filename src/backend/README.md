@@ -424,6 +424,451 @@ alembic downgrade -1
 | 错误处理 | 无可用车辆 → 40001、L0→L1 未完成 → 40001、不存在的 schedule_code → 40401 | ✅ |
 | 数据完整性 | 调度批次、节点调度明细、包裹状态更新、车辆/司机状态更新 | ✅ |
 
+## demo_mode 使用指南
+
+### 概述
+
+`POST /api/schedule/node-dispatch` 接口支持两种模式：
+- **`demo_mode=true`**：演示模式，一次调用完成 L0→L1 和 L1→L2 两次调度（用于课堂演示）
+- **`demo_mode=false`**：正常模式，分两次调用，首次执行 L0→L1，第二次执行 L1→L2（需等待 L1 送达）
+
+### demo_mode=true（演示模式）
+
+**使用场景**：课堂演示、快速测试完整链路
+
+**请求示例**：
+```json
+{
+  "schedule_code": "GS20260614001",
+  "demo_mode": true
+}
+```
+
+**响应结果**（HTTP 200）：
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "batch_code": "BATCH20260614001",
+    "status": "completed",
+    "dispatches": [
+      {
+        "vehicle_code": "VEHSC00101",
+        "driver_code": "DRVSC00101",
+        "tasks": [
+          {
+            "from_node_code": "SC001",
+            "to_node_code": "L1001",
+            "package_codes": ["PKG202606140001"],
+            "is_return": false
+          },
+          {
+            "from_node_code": "L1001",
+            "to_node_code": "SC001",
+            "package_codes": [],
+            "is_return": true
+          }
+        ],
+        "total_distance": 25.3,
+        "total_time": 0.42
+      }
+    ]
+  },
+  "meta": {
+    "degraded": false,
+    "degraded_reason": null
+  }
+}
+```
+
+**关键字段说明**：
+- `status`: `"completed"` - 批次已完成（L0→L1 和 L1→L2 都已完成）
+- `dispatches`: 包含所有调度明细（L0→L1 + L1→L2）
+- `tasks[].is_return`: `false` = 去程任务，`true` = 返程任务
+
+**后续操作**：
+1. **查看调度批次详情**：`GET /api/schedule/batches/{batch_code}`
+2. **路径规划**（阶段5，当前未实现）：`POST /api/routes/plan`（为每辆车规划路径）
+3. **模拟送达**（阶段6，当前未实现）：`POST /api/simulation/deliver`（模拟货物送达）
+
+> **⚠️ 注意**：路径规划和模拟送达功能当前未实现，计划分别在阶段5和阶段6实现。当前阶段4只能完成到节点调度。
+
+### demo_mode=false（正常模式）
+
+**使用场景**：生产环境、真实物流调度
+
+**第一次调用**（执行 L0→L1 调度）：
+
+请求：
+```json
+{
+  "schedule_code": "GS20260614001",
+  "demo_mode": false
+}
+```
+
+响应（HTTP 200）：
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "batch_code": "BATCH20260614001",
+    "status": "l0_l1_done",
+    "dispatches": [
+      {
+        "vehicle_code": "VEHSC00101",
+        "driver_code": "DRVSC00101",
+        "tasks": [
+          {
+            "from_node_code": "SC001",
+            "to_node_code": "L1001",
+            "package_codes": ["PKG202606140001"],
+            "is_return": false
+          }
+        ],
+        "total_distance": 12.5,
+        "total_time": 0.21
+      }
+    ]
+  },
+  "meta": {
+    "degraded": false,
+    "degraded_reason": null
+  }
+}
+```
+
+**关键字段说明**：
+- `status`: `"l0_l1_done"` - L0→L1 调度已完成，等待 L1 送达
+- `dispatches`: 只包含 L0→L1 的调度明细
+
+**后续操作**（等待 L1 送达）：
+1. **模拟送达**（阶段6，**当前未实现**）：`POST /api/simulation/deliver`
+   - 将 L0→L1 的包裹状态更新为 `delivered`
+   - 货物状态更新为 `pending_pack`（需要在 L1 重新打包）
+   
+   > **⚠️ 注意**：模拟送达功能计划在阶段6实现，当前阶段4无法执行此操作。
+   
+2. **重新打包**（自动，需模拟送达后触发）：L1 送达后，系统自动触发重新打包（F021）
+   - 将货物打包成 L1→L2 的包裹
+
+**第二次调用**（执行 L1→L2 调度）：
+
+请求（使用同一个 `schedule_code`）：
+```json
+{
+  "schedule_code": "GS20260614001",
+  "demo_mode": false
+}
+```
+
+响应（HTTP 200）：
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "batch_code": "BATCH20260614001",
+    "status": "completed",
+    "dispatches": [
+      {
+        "vehicle_code": "VEHL100101",
+        "driver_code": "DRVL100101",
+        "tasks": [
+          {
+            "from_node_code": "L1001",
+            "to_node_code": "SO001",
+            "package_codes": ["PKG202606140051"],
+            "is_return": false
+          }
+        ],
+        "total_distance": 8.3,
+        "total_time": 0.14
+      }
+    ]
+  },
+  "meta": {
+    "degraded": false,
+    "degraded_reason": null
+  }
+}
+```
+
+**关键字段说明**：
+- `status`: `"completed"` - 批次已完成（L1→L2 也已完成）
+- `dispatches`: 包含 L1→L2 的调度明细
+
+### 自动检测调用阶段
+
+系统会自动检测当前应该执行哪个阶段的调度：
+- 如果不存在 `l0_l1_done` 状态的批次 → 执行 L0→L1 调度
+- 如果已存在 `l0_l1_done` 状态的批次 → 执行 L1→L2 调度
+
+**无需手动指定阶段**，只需多次调用同一接口即可。
+
+## 完整链路指南（阶段 3 → 4 → 5 → 6）
+
+### 概述
+
+完整物流调度链路包含以下阶段：
+1. **阶段 3**：全局调度（F007）+ 打包（F021）
+2. **阶段 4**：节点间调度（F005）
+3. **阶段 6**：模拟送达（F013-1）
+4. **阶段 5**：路径规划（F006）
+
+### ⚠️ 重要说明
+
+**当前阶段4的限制**：
+- ✅ **已实现**：阶段3（全局调度）+ 阶段4（节点调度）
+- ❌ **未实现**：阶段5（路径规划）、阶段6（模拟送达）
+- ⚠️ **影响**：完整链路（阶段3→4→5→6）在现阶段**无法完全测试**
+
+**可以完成的操作**：
+1. 触发全局调度（阶段3）
+2. 触发节点调度（阶段4）
+3. 查看调度批次和明细
+4. 验证状态变更（包裹、车辆、司机）
+
+**无法完成的操作**（需等待阶段5和阶段6）：
+1. 模拟送达（阶段6）- 无法将包裹状态更新为 `delivered`
+2. 路径规划（阶段5）- 无法为车辆规划最优路径
+3. 完成完整链路测试
+
+---
+
+### 完整链路步骤
+
+#### 步骤 1：全局调度（阶段 3）
+
+**接口**：`POST /api/schedule/global`
+
+**请求**：
+```json
+{
+  "order_codes": ["O001", "O002"],
+  "algorithm": "traditional"
+}
+```
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "schedule_code": "GS20260614001",
+    "total_orders": 2,
+    "total_packages": 5,
+    "goods_schedules": [...]
+  }
+}
+```
+
+**状态变更**：
+- 订单状态：`pending` → `delivering`
+- 货物状态：`pending_pack` → `packed`
+- 包裹状态：`pending_pack` → `packed`
+
+#### 步骤 2：节点调度（阶段 4）
+
+**接口**：`POST /api/schedule/node-dispatch`
+
+**演示模式（推荐用于测试）**：
+```json
+{
+  "schedule_code": "GS20260614001",
+  "demo_mode": true
+}
+```
+
+**响应**：`status="completed"`，可直接进入步骤 4（路径规划）
+
+**正常模式**：
+```json
+{
+  "schedule_code": "GS20260614001",
+  "demo_mode": false
+}
+```
+
+**第一次调用响应**：`status="l0_l1_done"`，需执行步骤 3（模拟送达）
+
+**状态变更**（L0→L1 完成后）：
+- 包裹状态：`packed` → `in_transit`
+- 货物状态：`packed` → `in_transit`
+- 车辆状态：`idle` → `delivering`
+- 司机状态：`idle` → `busy`
+
+#### 步骤 3：模拟送达（阶段 6）
+
+**接口**：`POST /api/simulation/deliver`
+
+**请求**：
+```json
+{
+  "batch_code": "BATCH20260614001",
+  "level": 0
+}
+```
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "delivered_packages": 5,
+    "delivered_goods": 15
+  }
+}
+```
+
+**状态变更**（L0→L1 送达后）：
+- 包裹状态：`in_transit` → `delivered`
+- 货物状态：`in_transit` → `pending_pack`（需在 L1 重新打包）
+- 车辆状态：`delivering` → `idle`
+- 司机状态：`busy` → `idle`
+
+**重新打包**（自动触发）：
+- 系统自动将 `pending_pack` 的货物打包成 L1→L2 的包裹
+- 包裹状态：`pending_pack` → `packed`
+
+**第二次调用节点调度**（L1→L2）：
+```json
+{
+  "schedule_code": "GS20260614001",
+  "demo_mode": false
+}
+```
+
+**响应**：`status="completed"`
+
+#### 步骤 4：路径规划（阶段 5）
+
+**接口**：`POST /api/routes/plan`
+
+**请求**：
+```json
+{
+  "batch_code": "BATCH20260614001"
+}
+```
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "routes": [
+      {
+        "route_code": "RT20260614001",
+        "vehicle_code": "VEHSC00101",
+        "total_distance": 25.3,
+        "total_time": 0.42,
+        "route_segments": [...]
+      }
+    ]
+  }
+}
+```
+
+**状态变更**：
+- 路线已规划，可查看路线详情：`GET /api/routes/{route_code}`
+- 查看路线坐标：`GET /api/routes/by-vehicle/{vehicle_code}/coordinates`
+
+#### 步骤 5：L1→L2 模拟送达（阶段 6）
+
+**接口**：`POST /api/simulation/deliver`
+
+**请求**：
+```json
+{
+  "batch_code": "BATCH20260614001",
+  "level": 1
+}
+```
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "delivered_packages": 8,
+    "delivered_goods": 15,
+    "completed_orders": 2
+  }
+}
+```
+
+**状态变更**（L1→L2 送达后）：
+- 包裹状态：`in_transit` → `delivered`
+- 货物状态：`in_transit` → `delivered`
+- 订单状态：所有货物送达 → `completed`
+- 批次状态：`completed`
+- 车辆状态：`delivering` → `idle`
+- 司机状态：`busy` → `idle`
+
+### 完整链路示意图
+
+```
+阶段 3: POST /api/schedule/global
+  ↓
+  订单: pending → delivering
+  货物: pending_pack → packed
+  包裹: pending_pack → packed
+  ↓
+阶段 4: POST /api/schedule/node-dispatch (demo_mode=true)
+  ↓
+  批次: pending → completed (一次性完成 L0→L1 和 L1→L2)
+  包裹: packed → in_transit
+  车辆: idle → delivering
+  司机: idle → busy
+  ↓
+阶段 6: POST /api/simulation/deliver (level=0 和 level=1)
+  ↓
+  包裹: in_transit → delivered
+  货物: in_transit → delivered
+  订单: delivering → completed
+  车辆: delivering → idle
+  司机: busy → idle
+  ↓
+阶段 5: POST /api/routes/plan
+  ↓
+  路线规划完成，可查看路线图
+```
+
+### 常见问题
+
+**Q1: demo_mode=true 和 false 的区别是什么？**
+
+A: 
+- `demo_mode=true`：跳过 L1 实际送达等待，一次调用完成两次调度，适合演示
+- `demo_mode=false`：分两次调用，首次 L0→L1，第二次 L1→L2，需等待 L1 送达
+
+**Q2: 如何查看调度批次详情？**
+
+A: 使用 `GET /api/schedule/batches/{batch_code}` 接口，可查看完整的调度明细（dispatches）
+
+**Q3: 如何知道批次状态？**
+
+A: 使用 `GET /api/schedule/batches` 接口，查看 `status` 字段：
+- `pending`: 批次已创建，但未执行调度
+- `l0_l1_done`: L0→L1 调度已完成，等待 L1 送达
+- `completed`: L1→L2 调度已完成（或 demo_mode=true 时一次性完成）
+- `failed`: 调度失败
+
+**Q4: 如果 L0→L1 调度失败怎么办？**
+
+A: 批次状态变为 `failed`，不会执行 L1→L2 调度。需要检查错误信息，解决问题后重新调用。
+
+**Q5: 阶段 4 完成后，如何进入阶段 5？**
+
+A: 阶段 4 完成后，可以调用阶段 5 的路径规划接口（`POST /api/routes/plan`），为每辆车规划最优路径。
+
 ## 相关文档
 
 - [项目宪章](../../.codebuddy/CODEBUDDY.md)
@@ -436,4 +881,4 @@ alembic downgrade -1
 - [阶段 3 开发文档](../../My_doc/阶段3开发文档-全局调度F007+F021.md)
 - [阶段 3 API 契约文档](../../docs/api-contract/api-contract-phase3.md)（V1.0）
 - [阶段 4 开发文档](../../My_doc/阶段4开发文档.md)
-- [阶段 4 API 契约文档](../../My_doc/阶段4-API契约文档.md)（V1.0）
+- [阶段 4 API 契约文档](../../docs/api-contract/api-contract-phase4.md)（V1.1）
