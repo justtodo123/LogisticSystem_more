@@ -537,3 +537,184 @@ class TestUnallocatedPackages:
             import json
             unallocated = json.loads(batch.unallocated_packages)
             assert isinstance(unallocated, list)
+
+
+@pytest.mark.unit
+class TestIntelligentDispatch:
+    """测试智能调度逻辑"""
+
+    @pytest.mark.unit
+    def test_only_l0_l1_packages(self, db_session, test_nodes, test_vehicles, test_drivers):
+        """测试只有 L0→L1 包裹的场景"""
+        # 1. 创建全局调度方案
+        from models.global_schedule import GlobalSchedule
+        schedule = GlobalSchedule(
+            schedule_code="GS_TEST_INT001",
+            order_codes=["O001"],
+            goods_schedules=[
+                {"goods_code": "G001", "order_code": "O001", "path": ["SC001", "SO001", "SO010"]}
+            ],
+            total_distance=0,
+            total_time=0,
+            total_goods=1,
+            score=0,
+        )
+        db_session.add(schedule)
+        db_session.flush()
+
+        # 2. 创建 L0→L1 包裹
+        pkg = Package(
+            package_code="PKG_TEST_INT001",
+            weight=10.0,
+            volume=0.5,
+            status="packed",
+            from_node_id=test_nodes["SC001"].id,
+            to_node_id=test_nodes["SO001"].id,
+            goods_items=[{"goods_code": "G001", "order_code": "O001"}],
+            schedule_id=schedule.id,
+        )
+        db_session.add(pkg)
+        db_session.commit()
+
+        # 3. 执行 F005（demo_mode=false）
+        result = run_node_dispatch(
+            db=db_session,
+            schedule_code="GS_TEST_INT001",
+            demo_mode=False,
+        )
+
+        # 4. 验证执行了 L0→L1 调度
+        assert "batch_code" in result
+        assert result["status"] == "l0_l1_done"
+        assert len(result["dispatches"]) > 0
+
+    @pytest.mark.unit
+    def test_only_l1_l2_packages(self, db_session, test_nodes, test_vehicles, test_drivers):
+        """测试只有 L1→L2 包裹的场景"""
+        # 1. 创建全局调度方案
+        from models.global_schedule import GlobalSchedule
+        schedule = GlobalSchedule(
+            schedule_code="GS_TEST_INT002",
+            order_codes=["O001"],
+            goods_schedules=[
+                {"goods_code": "G001", "order_code": "O001", "path": ["SC001", "SO001", "SO010"]}
+            ],
+            total_distance=0,
+            total_time=0,
+            total_goods=1,
+            score=0,
+        )
+        db_session.add(schedule)
+        db_session.flush()
+
+        # 2. 创建 L1→L2 包裹（from_node 是 L1 分拣中心）
+        pkg = Package(
+            package_code="PKG_TEST_INT002",
+            weight=10.0,
+            volume=0.5,
+            status="packed",
+            from_node_id=test_nodes["SO001"].id,  # L1 分拣中心
+            to_node_id=test_nodes["SO010"].id,  # L2 分拣中心
+            goods_items=[{"goods_code": "G001", "order_code": "O001"}],
+            schedule_id=schedule.id,
+        )
+        db_session.add(pkg)
+        db_session.commit()
+
+        # 3. 执行 F005（demo_mode=false）
+        result = run_node_dispatch(
+            db=db_session,
+            schedule_code="GS_TEST_INT002",
+            demo_mode=False,
+        )
+
+        # 4. 验证直接执行了 L1→L2 调度
+        assert "batch_code" in result
+        assert result["status"] == "completed"
+        assert len(result["dispatches"]) > 0
+
+    @pytest.mark.unit
+    def test_both_levels_packages(self, db_session, test_nodes, test_vehicles, test_drivers):
+        """测试两个层级都有包裹的场景"""
+        # 1. 创建全局调度方案
+        from models.global_schedule import GlobalSchedule
+        schedule = GlobalSchedule(
+            schedule_code="GS_TEST_INT003",
+            order_codes=["O001"],
+            goods_schedules=[
+                {"goods_code": "G001", "order_code": "O001", "path": ["SC001", "SO001", "SO010"]}
+            ],
+            total_distance=0,
+            total_time=0,
+            total_goods=1,
+            score=0,
+        )
+        db_session.add(schedule)
+        db_session.flush()
+
+        # 2. 创建 L0→L1 包裹
+        pkg1 = Package(
+            package_code="PKG_TEST_INT003_1",
+            weight=10.0,
+            volume=0.5,
+            status="packed",
+            from_node_id=test_nodes["SC001"].id,
+            to_node_id=test_nodes["SO001"].id,
+            goods_items=[{"goods_code": "G001", "order_code": "O001"}],
+            schedule_id=schedule.id,
+        )
+        db_session.add(pkg1)
+
+        # 3. 创建 L1→L2 包裹
+        pkg2 = Package(
+            package_code="PKG_TEST_INT003_2",
+            weight=10.0,
+            volume=0.5,
+            status="packed",
+            from_node_id=test_nodes["SO001"].id,
+            to_node_id=test_nodes["SO010"].id,
+            goods_items=[{"goods_code": "G001", "order_code": "O001"}],
+            schedule_id=schedule.id,
+        )
+        db_session.add(pkg2)
+        db_session.commit()
+
+        # 4. 执行 F005（demo_mode=false）
+        result = run_node_dispatch(
+            db=db_session,
+            schedule_code="GS_TEST_INT003",
+            demo_mode=False,
+        )
+
+        # 5. 验证优先执行了 L0→L1 调度
+        assert "batch_code" in result
+        assert result["status"] == "l0_l1_done"
+        assert "再次调用" in result["message"]
+
+    @pytest.mark.unit
+    def test_no_packages(self, db_session):
+        """测试两个层级都没有包裹的场景"""
+        # 1. 创建全局调度方案（但没有包裹）
+        from models.global_schedule import GlobalSchedule
+        schedule = GlobalSchedule(
+            schedule_code="GS_TEST_INT004",
+            order_codes=["O001"],
+            goods_schedules=[
+                {"goods_code": "G001", "order_code": "O001", "path": ["SC001", "SO001", "SO010"]}
+            ],
+            total_distance=0,
+            total_time=0,
+            total_goods=1,
+            score=0,
+        )
+        db_session.add(schedule)
+        db_session.commit()
+
+        # 2. 执行 F005（demo_mode=false）→ 应该报错
+        with pytest.raises(ValueError, match="没有可调度的包裹"):
+            run_node_dispatch(
+                db=db_session,
+                schedule_code="GS_TEST_INT004",
+                demo_mode=False,
+            )
+
