@@ -88,7 +88,7 @@ class RouteService:
                 db.add(route)
                 routes.append(route_data)
             
-            # 提交事务（手动触发路径规划时需要）
+            # 添加提交逻辑
             db.commit()
             
             # 5. 返回成功响应
