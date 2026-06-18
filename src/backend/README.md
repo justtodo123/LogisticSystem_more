@@ -8,10 +8,9 @@
 **下一阶段**：阶段 5（路径规划与可视化 F006）
 
 **阶段4最新更新**：
-- 修复 `demo_mode` 逻辑，使其符合项目宪章设计
-- `demo_mode=true`：一次调用完成 L0→L1 和 L1→L2 两次调度
-- `demo_mode=false`：首次调用仅执行 L0→L1，第二次调用才执行 L1→L2
-- 自动检测调用阶段（通过检查是否已有 `l0_l1_done` 状态的批次）
+- **阶段4实现范围**：仅完整实现 `demo_mode=true`，`demo_mode=false` 完整流程推迟到阶段6
+- `demo_mode=true`：一次调用完成 L0→L1 和 L1→L2 两次调度（含自动模拟送达 + L1 重新打包 + 自动送达L2），货物从L0直达L2
+- `demo_mode=false`：代码框架已预留（`_check_packages_by_level()` 智能检测 + 4种场景），但完整流程需阶段6的模拟送达接口配合
 - ✅ **状态机实现完成** (2026-06-17)：实现所有状态流转逻辑，包括 F005 调用后、模拟送达、重新打包等场景
 - ✅ **单元测试通过** (2026-06-17)：5/5 测试通过，验证状态流转正确性
 
@@ -409,10 +408,10 @@ alembic downgrade -1
 | 类别 | 测试项 | 结果 |
 |------|--------|------|
 | F005 算法 | L0→L1 调度、L1→L2 调度、车辆匹配（载重/节点优先级）、返回任务添加 | ✅ |
-| F005 算法 | 车辆不足错误、包裹状态错误、L0→L1 未完成错误 | ✅ |
-| F005 算法 | demo_mode=true 一次完成两次调度 | ✅ |
-| F005 算法 | demo_mode=false 分阶段调度（首次L0→L1，第二次L1→L2） | ✅ |
-| F005 算法 | 自动检测调用阶段（通过检查是否已有 l0_l1_done 状态的批次） | ✅ |
+| F005 算法 | 车辆不足错误、包裹状态错误、无可调度包裹错误 | ✅ |
+| F005 算法 | demo_mode=true 一次调用完成 L0→L2 全链路（含自动模拟送达 + 重新打包） | ✅ |
+| F005 算法 | demo_mode=false 代码框架预留（智能检测4种场景），阶段6完整验证 | ⚠️ 框架已就绪 |
+| F005 算法 | 智能检测调用阶段（通过 `_check_packages_by_level()` + 批次状态） | ✅ |
 | ✅ 状态机 | F005调用后状态更新（货物、包裹、车辆、司机）| ✅ (2026-06-17) |
 | ✅ 状态机 | L0→L1模拟送达后状态更新（包裹、货物、批次、车辆、司机）| ✅ (2026-06-17) |
 | ✅ 状态机 | L1重新打包后状态更新（货物、新包裹）| ✅ (2026-06-17) |
@@ -600,60 +599,68 @@ alembic downgrade -1
 - `status`: `"completed"` - 批次已完成（L1→L2 也已完成）
 - `dispatches`: 包含 L1→L2 的调度明细
 
-### 自动检测调用阶段
+### 自动检测调用阶段（demo_mode=false 预留框架）
 
-系统会自动检测当前应该执行哪个阶段的调度：
-- 如果不存在 `l0_l1_done` 状态的批次 → 执行 L0→L1 调度
-- 如果已存在 `l0_l1_done` 状态的批次 → 执行 L1→L2 调度
+> **注意**：以下智能检测逻辑是 `demo_mode=false` 的代码框架，已在阶段4中实现但尚未完整联调。阶段6将配合模拟送达接口完成完整验证。阶段4推荐使用 `demo_mode=true`。
 
-**无需手动指定阶段**，只需多次调用同一接口即可。
+系统会通过 `_check_packages_by_level()` 智能检测当前应该执行哪个阶段的调度（demo_mode=false 时生效）：
+
+| 场景 | 条件 | 行为 |
+|------|------|------|
+| A | L0→L1 和 L1→L2 包裹都存在 | 优先执行 L0→L1，提示再次调用执行 L1→L2 |
+| B | 仅存在 L0→L1 包裹 | 执行 L0→L1 |
+| C | 仅存在 L1→L2 包裹 | 自动创建批次（status=l0_l1_done），直接执行 L1→L2 |
+| D | 包裹都不存在 | 返回错误"没有可调度的包裹" |
+
+**无需手动指定阶段**，只需多次调用同一接口即可。场景 C 确保即使 L0→L1 已送达并重新打包，也能自动完成 L1→L2 调度。
 
 ## 完整链路指南（阶段 3 → 4 → 5 → 6）
 
 ### 概述
 
 完整物流调度链路包含以下阶段：
-1. **阶段 3**：全局调度（F007）+ 打包（F021）
-2. **阶段 4**：节点间调度（F005）
-3. **阶段 6**：模拟送达（F013-1）
-4. **阶段 5**：路径规划（F006）
+1. **阶段 3**：全局调度（F007）+ 打包（F021） → 规划货物从 L0→L1→L2 的路径
+2. **阶段 4**：节点间调度（F005） → 分配车辆/司机执行运输
+3. **阶段 5**：路径规划（F006） → 为每辆车规划最优行驶路线
+4. **阶段 6**：模拟送达（F013-1） → 驱动状态流转，完成送达
 
-### ⚠️ 重要说明
+### ⚠️ 阶段4实现范围说明
 
-**当前阶段4的限制**：
-- ✅ **已实现**：阶段3（全局调度）+ 阶段4（节点调度）
-- ❌ **未实现**：阶段5（路径规划）、阶段6（模拟送达）
-- ⚠️ **影响**：完整链路（阶段3→4→5→6）在现阶段**无法完全测试**
+**阶段4仅完整实现 `demo_mode=true`**：
 
-**可以完成的操作**：
+- ✅ **已实现**：`demo_mode=true` — 一次 `POST /api/schedule/node-dispatch` 调用，后端自动完成 L0→L1 调度 + 模拟送达 + L1 重新打包 + L1→L2 调度 + 模拟送达，货物直通 L2
+- ⚠️ **框架预留**：`demo_mode=false` 的代码框架已存在（`_check_packages_by_level()` 智能检测 + 4种场景分阶段），但因阶段6模拟送达接口尚未就绪，完整流程需在阶段6中联调验证
+- ❌ **未实现**：阶段5（路径规划 F006）、阶段6（模拟送达独立接口）
+
+**阶段4内可以完成的操作**：
 1. 触发全局调度（阶段3）
-2. 触发节点调度（阶段4）
-3. 查看调度批次和明细
-4. 验证状态变更（包裹、车辆、司机）
+2. 以 `demo_mode=true` 触发节点调度 → 一次调用完成 L0→L2 全链路
+3. 查看调度批次和明细（`GET /api/schedule/batches`、`GET /api/schedule/batches/{code}`）
+4. 验证完整状态流转（包裹/货物/订单/车辆/司机）
 
-**无法完成的操作**（需等待阶段5和阶段6）：
-1. 模拟送达（阶段6）- 无法将包裹状态更新为 `delivered`
-2. 路径规划（阶段5）- 无法为车辆规划最优路径
-3. 完成完整链路测试
+**需等待阶段5/6的操作**：
+1. 路径规划（阶段5）— 为车辆规划最优路线
+2. `demo_mode=false` 完整流程（阶段6）— 分阶段调度 + 手动模拟送达
 
 ---
 
-### 完整链路步骤
+### demo_mode=true 完整演示流程（推荐）
+
+以下是使用 `demo_mode=true` 演示货物从 L0 到 L2 的完整步骤：
 
 #### 步骤 1：全局调度（阶段 3）
 
-**接口**：`POST /api/schedule/global`
+| 项目 | 内容 |
+|------|------|
+| **前端操作** | 选择订单 → 点击"全局调度"按钮 |
+| **调用的 API** | `POST /api/schedule/global` |
+| **请求体** | `{ "order_codes": ["O001", "O002"], "algorithm": "traditional" }` |
+| **后端行为** | ① F007 为每票货物规划 L0→L1→L2 路径 → ② F021 生成 L0→L1 和 L1→L2 包裹 → ③ 写入 global_schedules + packages |
+| **状态变化** | 订单 `pending`→`delivering`；货物/包裹 `pending_pack`→`packed` |
+| **前端拿到** | `data.schedule_code`（保存用于步骤2） |
 
-**请求**：
 ```json
-{
-  "order_codes": ["O001", "O002"],
-  "algorithm": "traditional"
-}
-```
-
-**响应**：
-```json
+// 响应示例
 {
   "code": 0,
   "message": "success",
@@ -666,179 +673,72 @@ alembic downgrade -1
 }
 ```
 
-**状态变更**：
-- 订单状态：`pending` → `delivering`
-- 货物状态：`pending_pack` → `packed`
-- 包裹状态：`pending_pack` → `packed`
+#### 步骤 2：节点调度 — demo_mode=true（阶段 4）
 
-#### 步骤 2：节点调度（阶段 4）
+| 项目 | 内容 |
+|------|------|
+| **前端操作** | 输入 `schedule_code` → 勾选"演示模式" → 点击"节点调度"按钮 |
+| **调用的 API** | `POST /api/schedule/node-dispatch` |
+| **请求体** | `{ "schedule_code": "GS20260614001", "demo_mode": true }` |
+| **后端行为** | **一次性自动完成以下全部步骤**（单事务）： |
+|  | **A. L0→L1 调度**：查询 L0→L1 packed 包裹 → 按节点分组 → 分配车辆/司机 → 写入 DispatchBatch + NodeDispatch(level_phase=0) |
+|  | **B. 自动模拟 L0→L1 送达**：包裹 `packed`→`delivered`；货物 `packed`→`pending_pack`；车辆/司机恢复 idle |
+|  | **C. 自动 L1 重新打包**：到达 L1 的货物重新打包为 L1→L2 包裹（同订单合并） |
+|  | **D. L1→L2 调度**：查询 L1→L2 packed 包裹 → 分配车辆/司机 → 写入 NodeDispatch(level_phase=1) |
+|  | **E. 自动模拟 L1→L2 送达**：包裹 `packed`→`delivered`；货物 `packed`→`delivered`；订单所有货物到达 → `completed`；车辆/司机恢复 idle；批次 `pending`→`completed` |
+| **前端拿到** | `data.batch_code` + `data.status="completed"` + `data.dispatches`（含 L0→L1 和 L1→L2 全部明细） |
 
-**接口**：`POST /api/schedule/node-dispatch`
-
-**演示模式（推荐用于测试）**：
 ```json
-{
-  "schedule_code": "GS20260614001",
-  "demo_mode": true
-}
-```
-
-**响应**：`status="completed"`，可直接进入步骤 4（路径规划）
-
-**正常模式**：
-```json
-{
-  "schedule_code": "GS20260614001",
-  "demo_mode": false
-}
-```
-
-**第一次调用响应**：`status="l0_l1_done"`，需执行步骤 3（模拟送达）
-
-**状态变更**（L0→L1 完成后）：
-- 包裹状态：`packed` → `in_transit`
-- 货物状态：`packed` → `in_transit`
-- 车辆状态：`idle` → `delivering`
-- 司机状态：`idle` → `busy`
-
-#### 步骤 3：模拟送达（阶段 6）
-
-**接口**：`POST /api/simulation/deliver`
-
-**请求**：
-```json
-{
-  "batch_code": "BATCH20260614001",
-  "level": 0
-}
-```
-
-**响应**：
-```json
+// 响应示例
 {
   "code": 0,
   "message": "success",
   "data": {
-    "delivered_packages": 5,
-    "delivered_goods": 15
+    "batch_code": "BATCH20260614001",
+    "status": "completed",
+    "dispatches": [
+      // ... L0→L1 调度明细 (level_phase=0) ...
+      // ... L1→L2 调度明细 (level_phase=1) ...
+    ],
+    "unallocated_packages": []
   }
 }
 ```
 
-**状态变更**（L0→L1 送达后）：
-- 包裹状态：`in_transit` → `delivered`
-- 货物状态：`in_transit` → `pending_pack`（需在 L1 重新打包）
-- 车辆状态：`delivering` → `idle`
-- 司机状态：`busy` → `idle`
+#### 步骤 2 完成后：查看结果
 
-**重新打包**（自动触发）：
-- 系统自动将 `pending_pack` 的货物打包成 L1→L2 的包裹
-- 包裹状态：`pending_pack` → `packed`
+| 前端操作 | 调用的 API | 可查看内容 |
+|---------|-----------|----------|
+| 查看批次列表 | `GET /api/schedule/batches` | 所有批次及状态 |
+| 查看批次详情 | `GET /api/schedule/batches/{batch_code}` | dispatches 明细（车辆/司机/包裹/任务） |
+| 查看订单状态 | `GET /api/orders` | 订单是否已 `completed` |
+| 查看货物状态 | `GET /api/goods` | 货物是否已 `delivered` |
 
-**第二次调用节点调度**（L1→L2）：
-```json
-{
-  "schedule_code": "GS20260614001",
-  "demo_mode": false
-}
-```
-
-**响应**：`status="completed"`
-
-#### 步骤 4：路径规划（阶段 5）
-
-**接口**：`POST /api/routes/plan`
-
-**请求**：
-```json
-{
-  "batch_code": "BATCH20260614001"
-}
-```
-
-**响应**：
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "routes": [
-      {
-        "route_code": "RT20260614001",
-        "vehicle_code": "VEHSC00101",
-        "total_distance": 25.3,
-        "total_time": 0.42,
-        "route_segments": [...]
-      }
-    ]
-  }
-}
-```
-
-**状态变更**：
-- 路线已规划，可查看路线详情：`GET /api/routes/{route_code}`
-- 查看路线坐标：`GET /api/routes/by-vehicle/{vehicle_code}/coordinates`
-
-#### 步骤 5：L1→L2 模拟送达（阶段 6）
-
-**接口**：`POST /api/simulation/deliver`
-
-**请求**：
-```json
-{
-  "batch_code": "BATCH20260614001",
-  "level": 1
-}
-```
-
-**响应**：
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "delivered_packages": 8,
-    "delivered_goods": 15,
-    "completed_orders": 2
-  }
-}
-```
-
-**状态变更**（L1→L2 送达后）：
-- 包裹状态：`in_transit` → `delivered`
-- 货物状态：`in_transit` → `delivered`
-- 订单状态：所有货物送达 → `completed`
-- 批次状态：`completed`
-- 车辆状态：`delivering` → `idle`
-- 司机状态：`busy` → `idle`
-
-### 完整链路示意图
+### 完整链路示意图（demo_mode=true）
 
 ```
-阶段 3: POST /api/schedule/global
-  ↓
-  订单: pending → delivering
-  货物: pending_pack → packed
-  包裹: pending_pack → packed
-  ↓
-阶段 4: POST /api/schedule/node-dispatch (demo_mode=true)
-  ↓
-  批次: pending → completed (一次性完成 L0→L1 和 L1→L2)
-  包裹: packed → in_transit
-  车辆: idle → delivering
-  司机: idle → busy
-  ↓
-阶段 6: POST /api/simulation/deliver (level=0 和 level=1)
-  ↓
-  包裹: in_transit → delivered
-  货物: in_transit → delivered
-  订单: delivering → completed
-  车辆: delivering → idle
-  司机: busy → idle
-  ↓
-阶段 5: POST /api/routes/plan
-  ↓
-  路线规划完成，可查看路线图
+前端                          后端                         状态
+ │                             │                            │
+ │─ POST /schedule/global ────→│                            │
+ │                             │─ F007+F021 ──────────────→│ 订单→delivering
+ │←─ { schedule_code } ───────│                            │ 货物→packed
+ │                             │                            │ 包裹→packed
+ │                             │                            │
+ │─ POST /node-dispatch ──────→│                            │
+ │   { demo_mode: true }      │                            │
+ │                             │─ A.L0→L1调度 ─────────────→│ 车辆→delivering
+ │                             │─ B.模拟L0→L1送达 ─────────→│ 包裹→delivered
+ │                             │                           │ 货物→pending_pack
+ │                             │─ C.L1重新打包 ────────────→│ 包裹→packed
+ │                             │─ D.L1→L2调度 ─────────────→│ 车辆→delivering
+ │                             │─ E.模拟L1→L2送达 ─────────→│ 包裹→delivered
+ │                             │   (以上在单事务中)          │ 货物→delivered
+ │←─ { batch_code,            │                           │ 订单→completed
+ │     status:"completed",    │                           │ 车辆/司机→idle
+ │     dispatches: [...] }    │                           │
+ │                             │                            │
+ │─ GET /batches/{code} ──────→│─ 查询 ────────────────────→│
+ │←─ 批次详情（含全量明细）────│                            │
 ```
 
 ### 常见问题
@@ -846,28 +746,32 @@ alembic downgrade -1
 **Q1: demo_mode=true 和 false 的区别是什么？**
 
 A: 
-- `demo_mode=true`：跳过 L1 实际送达等待，一次调用完成两次调度，适合演示
-- `demo_mode=false`：分两次调用，首次 L0→L1，第二次 L1→L2，需等待 L1 送达
+- `demo_mode=true`（阶段4已实现）：**一次调用**，后端自动执行 L0→L1 调度 → 模拟送达 → 重新打包 → L1→L2 调度 → 模拟送达，货物直接从 L0 到达 L2。前端只需调一次接口。
+- `demo_mode=false`（阶段6完整实现）：**分多次调用**，首次 L0→L1 → 手动模拟送达 → 手动重新打包 → 第二次 L1→L2 → 手动模拟送达。适合生产环境逐步推进。
 
-**Q2: 如何查看调度批次详情？**
+**Q2: 为什么 demo_mode=true 响应中 status 直接是 "completed"？**
 
-A: 使用 `GET /api/schedule/batches/{batch_code}` 接口，可查看完整的调度明细（dispatches）
+A: 因为 `demo_mode=true` 在后端内部自动完成了 L0→L1 和 L1→L2 的全部调度 + 送达，所以批次状态直接为 `completed`。不需要前端再调模拟送达接口。
 
-**Q3: 如何知道批次状态？**
+**Q3: 如何查看调度批次详情？**
+
+A: 使用 `GET /api/schedule/batches/{batch_code}` 接口，可查看完整的调度明细（dispatches），包含每辆车的 tasks、包裹列表、距离等。
+
+**Q4: 如何知道批次状态？**
 
 A: 使用 `GET /api/schedule/batches` 接口，查看 `status` 字段：
 - `pending`: 批次已创建，但未执行调度
-- `l0_l1_done`: L0→L1 调度已完成，等待 L1 送达
-- `completed`: L1→L2 调度已完成（或 demo_mode=true 时一次性完成）
+- `l0_l1_done`: L0→L1 调度已完成（demo_mode=false 时出现）
+- `completed`: L1→L2 调度已完成（demo_mode=true 直接到达此状态）
 - `failed`: 调度失败
 
-**Q4: 如果 L0→L1 调度失败怎么办？**
+**Q5: demo_mode=true 后还需要调阶段6的模拟送达接口吗？**
 
-A: 批次状态变为 `failed`，不会执行 L1→L2 调度。需要检查错误信息，解决问题后重新调用。
+A: **不需要**。`demo_mode=true` 已经在后端内部自动完成了模拟送达（L0→L1 和 L1→L2 各一次）。货物状态已直接变为 `delivered`，订单已 `completed`。
 
-**Q5: 阶段 4 完成后，如何进入阶段 5？**
+**Q6: 阶段 4 完成后，如何进入阶段 5？**
 
-A: 阶段 4 完成后，可以调用阶段 5 的路径规划接口（`POST /api/routes/plan`），为每辆车规划最优路径。
+A: 阶段 4 完成后，可调用阶段 5 的路径规划接口（`POST /api/routes/plan`），为每辆车规划最优行驶路线并生成路线可视化数据。
 
 ## 相关文档
 
