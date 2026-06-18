@@ -83,10 +83,14 @@ def packaging(
     packages: List[Package] = []
 
     # 预加载 goods_code → Goods 映射（避免逐个查询）
+    # 只加载待打包状态的货物，防止已打包/运输中/已送达的货物被重复打包
     all_goods_codes = [gs["goods_code"] for gs in goods_schedules]
     goods_map: Dict[str, Goods] = {}
     for gc in all_goods_codes:
-        goods = db.query(Goods).filter(Goods.goods_code == gc).first()
+        goods = db.query(Goods).filter(
+            Goods.goods_code == gc,
+            Goods.status == "pending_pack"  # 只允许待打包状态的货物
+        ).first()
         if goods:
             goods_map[gc] = goods
 
