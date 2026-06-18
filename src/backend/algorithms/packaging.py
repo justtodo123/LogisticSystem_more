@@ -16,11 +16,6 @@ from models.node import Node
 from models.goods import Goods
 from models.vehicle import Vehicle
 
-# 内存计数器：避免同一事务中 package_code 重复
-_pkg_counter: int = 0
-_pkg_date: str = ""
-
-
 def get_min_vehicle_capacity(db: Session) -> float:
     """
     获取系统中最小车辆载重（用于限制L0→L1包裹重量）
@@ -34,14 +29,23 @@ def get_min_vehicle_capacity(db: Session) -> float:
     return 1000.0  # 默认最小值
 
 
-def _generate_package_code(db: Session) -> str:
-    """生成包裹编号，格式：PKG + YYYYMMDD + 4位序号（内存递增，避免同事务冲突）"""
-    global _pkg_counter, _pkg_date
+def _generate_package_code(db: Session, _local_counter: dict) -> str:
+    """
+    生成包裹编号，格式：PKG + YYYYMMDD + 4位序号
+    
+    使用局部计数器（传入的字典）在事务内生成唯一编码，
+    同时查询数据库获取跨事务的最大序号，避免重复
+    
+    Args:
+        db: 数据库会话
+        _local_counter: 局部计数器字典，格式：{"date": "YYYYMMDD", "seq": int}
+                       在单个 packaging() 调用中共享，跨调用不共享
+    """
     today_str = datetime.now().strftime("%Y%m%d")
-    if _pkg_date != today_str:
-        _pkg_date = today_str
-        # 从数据库获取当日最大序号作为起点
-        prefix = f"PKG{today_str}"
+    prefix = f"PKG{today_str}"
+    
+    # 如果是新的一天，或者首次调用，从数据库查询最大序号
+    if _local_counter.get("date") != today_str:
         max_record = (
             db.query(Package.package_code)
             .filter(Package.package_code.like(f"{prefix}%"))
@@ -49,11 +53,14 @@ def _generate_package_code(db: Session) -> str:
             .first()
         )
         if max_record and max_record[0]:
-            _pkg_counter = int(max_record[0][-4:])
+            _local_counter["seq"] = int(max_record[0][-4:])
         else:
-            _pkg_counter = 0
-    _pkg_counter += 1
-    return f"PKG{today_str}{_pkg_counter:04d}"
+            _local_counter["seq"] = 0
+        _local_counter["date"] = today_str
+    
+    # 递增序号
+    _local_counter["seq"] += 1
+    return f"{prefix}{_local_counter['seq']:04d}"
 
 
 def packaging(
@@ -76,6 +83,9 @@ def packaging(
     Returns:
         Package 对象列表（未写入数据库，由调用方统一写入）
     """
+    # 初始化局部计数器（在单个 packaging() 调用中共享，跨调用不共享）
+    counter = {"date": "", "seq": 0}
+    
     goods_schedules = schedule_result.get("goods_schedules", [])
     if not goods_schedules:
         raise ValueError("goods_schedules 为空，无法打包")
@@ -152,7 +162,7 @@ def packaging(
             if goods_weight > min_vehicle_capacity:
                 # 单独打包这个超重货物
                 pkg = Package(
-                    package_code=_generate_package_code(db),
+                    package_code=_generate_package_code(db, counter),
                     weight=round(goods_weight, 3),
                     volume=round(float(g.volume), 3),
                     status="pending_pack",
@@ -170,7 +180,7 @@ def packaging(
                 # 当前分组已满，先打包当前分组
                 total_weight, total_volume = _sum_weight_volume(current_group)
                 pkg = Package(
-                    package_code=_generate_package_code(db),
+                    package_code=_generate_package_code(db, counter),
                     weight=round(total_weight, 3),
                     volume=round(total_volume, 3),
                     status="pending_pack",
@@ -196,7 +206,7 @@ def packaging(
         if current_group:
             total_weight, total_volume = _sum_weight_volume(current_group)
             pkg = Package(
-                package_code=_generate_package_code(db),
+                package_code=_generate_package_code(db, counter),
                 weight=round(total_weight, 3),
                 volume=round(total_volume, 3),
                 status="pending_pack",
@@ -228,7 +238,7 @@ def packaging(
         total_weight, total_volume = _sum_weight_volume(gs_list)
 
         pkg = Package(
-            package_code=_generate_package_code(db),
+            package_code=_generate_package_code(db, counter),
             weight=round(total_weight, 3),
             volume=round(total_volume, 3),
             status="pending_pack",
