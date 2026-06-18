@@ -138,11 +138,10 @@ def global_schedule(
     w3 = weights["w3_packages"]
 
     # ── 1. 查询订单 ──
-    query = db.query(Order)
+    # 始终只允许 pending 状态的订单参与调度，防止已完成的订单被重复调度
+    query = db.query(Order).filter(Order.status == "pending")
     if order_codes:
         query = query.filter(Order.order_code.in_(order_codes))
-    else:
-        query = query.filter(Order.status == "pending")
     orders = query.all()
 
     if not orders:
