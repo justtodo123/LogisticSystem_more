@@ -205,6 +205,8 @@ class SimulationService:
                         auto_triggered["repackaging"] = repack_result
                         
                         if repack_result:
+                            # 先提交事务，确保重新打包的结果已保存
+                            db.commit()
                             # 自动触发第二次F005（异步）
                             second_f005_result = SimulationService._trigger_second_f005_async(db, schedule_id)
                             auto_triggered["second_f005"] = second_f005_result
@@ -221,7 +223,10 @@ class SimulationService:
                 logging.error(f"自动重新调度失败：{e}")
                 auto_triggered["redispatch"] = False
             
-            # 10. 返回结果
+            # 10. 提交事务（确保所有状态更新被持久化）
+            db.commit()
+            
+            # 11. 返回结果
             return success_response(data={
                 "delivered_package_codes": delivered_package_codes,
                 "status_changed_goods_count": status_changed_goods_count,
@@ -307,15 +312,9 @@ class SimulationService:
                     from services.state_machine import repack_at_l1
                     repack_at_l1(db, order.order_code, l1_node_code, l2_node_code, schedule_id)
             
-            # 提交事务（确保重新打包的结果已保存）
-            db.commit()
-            
             return True
             
         except Exception as e:
-            # 回滚事务
-            db.rollback()
-            
             import logging
             logging.error(f"重新打包失败：{e}")
             return False
@@ -378,9 +377,6 @@ class SimulationService:
                     
             finally:
                 new_db.close()
-        
-        # 提交当前事务（确保重新打包的结果已保存）
-        db.commit()
         
         # 异步执行
         executor = ThreadPoolExecutor(max_workers=1)
