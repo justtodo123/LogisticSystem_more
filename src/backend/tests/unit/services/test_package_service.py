@@ -10,7 +10,6 @@ import pytest
 from unittest.mock import MagicMock
 from sqlalchemy.orm import Session
 from datetime import datetime
-import json
 
 from services.package_service import PackageService
 from models.package import Package
@@ -43,9 +42,9 @@ def sample_package():
     package.status = "pending_pack"
     package.from_node_id = 1
     package.to_node_id = 2
-    package.goods_items = json.dumps([
+    package.goods_items = [
         {"goods_code": "G1700000000000_0", "order_code": "O1700000000000"}
-    ])
+    ]
     package.from_longitude = 114.3
     package.from_latitude = 30.5
     package.to_longitude = 114.4
