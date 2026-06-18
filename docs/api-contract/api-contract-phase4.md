@@ -1,11 +1,13 @@
 # 阶段4：节点间调度 F005 - API 契约文档
 
-> **文档版本**：V1.0  
+> **文档版本**：V1.3  
 > **创建日期**：2026年6月14日  
 > **开发阶段**：阶段4（节点间调度 F005）  
 > **API 基础路径**：`http://localhost:8000/api`  
 > **API 协议**：HTTP/JSON，UTF-8  
-> **参考资料**：PRD V2.7、系统架构设计说明书 V1.0、阶段4开发文档 V1.0、阶段4实际实现代码
+> **参考资料**：PRD V2.7、系统架构设计说明书 V1.0、阶段4开发文档 V1.0、阶段4实际实现代码  
+> 
+> **⚠️ 阶段限制**：阶段4仅完整实现 `demo_mode=true`（一次调用完成 L0→L2 全链路）。`demo_mode=false` 的完整流程（分阶段调度 + 手动模拟送达）将在阶段6中完整实现。
 
 ---
 
@@ -131,7 +133,7 @@ Authorization: Bearer {access_token}
 |---|---|---|---|
 | 0 | 200 | 成功 | 接口调用成功 |
 | 40000 | 400 | 参数校验失败 | 请求体字段验证失败 |
-| 40001 | 200 | 节点调度失败 | F005 算法无法完成调度（无可用车辆、L0→L1未完成等） |
+| 40001 | 200 | 节点调度失败 | F005 算法无法完成调度（无可用车辆、无可调度包裹等） |
 | 40401 | 200 | 调度方案不存在 | POST /api/schedule/node-dispatch 的 schedule_code 无效 |
 | 40402 | 200 | 调度批次不存在 | GET /api/schedule/batches/{code} 批次编号无效 |
 | 40100 | 401 | 未登录或 Token 无效 | Token 缺失、格式错误、签名验证失败 |
@@ -162,14 +164,24 @@ Authorization: Bearer {access_token}
 
 **流程**：
 
-1. 后端自动检测调用阶段：
-   - 检查是否存在该 `schedule_code` 的 `l0_l1_done` 或 `completed` 状态的批次
-   - 若不存在 → 首次调用（执行 L0→L1 调度）
-   - 若存在 `l0_l1_done` 批次 → 第二次调用（执行 L1→L2 调度）
-2. 根据 `demo_mode` 参数决定执行方式：
-   - `demo_mode=true`：一次调用完成 L0→L1 和 L1→L2 两次调度（跳过 L1 送达等待，用于演示）
-   - `demo_mode=false`：首次调用仅执行 L0→L1，第二次调用才执行 L1→L2（需等待 L1 实际送达）
-3. F005 节点调度算法：分配车辆与司机
+> **阶段4实现范围**：阶段4仅实现 `demo_mode=true` 的完整流程。`demo_mode=false` 的分阶段调度（场景 A/B/C/D + 手动模拟送达）将在阶段6中完整实现。
+
+1. **`demo_mode=true`（阶段4已实现）**：一次调用完成 L0→L2 全链路调度
+   - L0→L1 调度（分配车辆与司机）
+   - 写入批次 + L0→L1 调度明细
+   - 自动模拟 L0→L1 送达（包裹→delivered、货物→pending_pack、车辆/司机恢复idle）
+   - 自动在 L1 重新打包（货物→packed、生成 L1→L2 包裹）
+   - L1→L2 调度（分配车辆与司机）
+   - 写入 L1→L2 调度明细
+   - 自动模拟 L1→L2 送达（包裹→delivered、货物→delivered、订单→completed）
+   - 批次状态更新为 `completed`
+   - **一条请求完成所有步骤，前端无需额外操作**
+2. **`demo_mode=false`（阶段6实现）**：分阶段调度，后端通过 `_check_packages_by_level()` 智能检测：
+   - **场景 A**：同时存在 L0→L1 和 L1→L2 包裹 → 优先执行 L0→L1
+   - **场景 B**：仅存在 L0→L1 包裹 → 执行 L0→L1
+   - **场景 C**：仅存在 L1→L2 包裹 → 自动创建批次，直接执行 L1→L2
+   - **场景 D**：都不存在 → 返回错误"没有可调度的包裹"
+3. F005 节点调度算法：分配车辆与司机（含跨节点后备车辆 Phase 2 重试）
 4. 写入 dispatch_batches + node_dispatches
 5. 单事务写入数据库并更新包裹/货物/车辆/司机状态
 
@@ -184,7 +196,7 @@ Authorization: Bearer {access_token}
 ```json
 {
   "schedule_code": "GS20260614001",  // 必填，全局调度方案编号
-  "demo_mode": false                // 可选，是否演示模式（跳过L1送达等待），默认 false
+  "demo_mode": true                 // 可选，是否演示模式，默认 true（阶段4仅支持 true）
 }
 ```
 
@@ -193,7 +205,7 @@ Authorization: Bearer {access_token}
 | 字段 | 类型 | 必填 | 验证规则 |
 |---|---|---|---|
 | schedule_code | string | 是 | 全局调度方案编号，必须存在 |
-| demo_mode | bool | 否 | 是否演示模式，默认 false |
+| demo_mode | bool | 否 | 是否演示模式，默认 true。阶段4仅支持 `true`；`false` 将在阶段6完整实现 |
 
 **响应成功（HTTP 200）**：
 
@@ -227,7 +239,8 @@ Authorization: Bearer {access_token}
         "vehicle_id": 1,
         "driver_id": 1
       }
-    ]
+    ],
+    "unallocated_packages": []
   },
   "meta": {
     "degraded": false,
@@ -243,6 +256,7 @@ Authorization: Bearer {access_token}
 | batch_code | string | 调度批次编号，格式：BATCH + YYYYMMDD + 3位序号 |
 | status | string | 批次状态：pending / l0_l1_done / completed / failed |
 | dispatches | array | 调度明细列表（L0→L1 + L1→L2） |
+| unallocated_packages | array | 未分配的包裹编码列表（因车辆不足等原因未分配） |
 | dispatches[].vehicle_code | string | 车辆编号 |
 | dispatches[].driver_code | string | 司机编号 |
 | dispatches[].tasks | array | 任务列表 |
@@ -261,7 +275,8 @@ Authorization: Bearer {access_token}
 |---|---|---|
 | 40001 | 节点调度失败：L0→L1调度失败：节点 SC001 没有可用的车辆（载重不足或无不空闲车辆） | 车辆不足或载重不够 |
 | 40001 | 节点调度失败：L1→L2调度失败：节点 L1001 没有可用的车辆 | L1→L2 车辆不足 |
-| 40001 | 节点调度失败：L0→L1未完成，不能执行L1→L2 | demo_mode=false 且 L0→L1 未完成 |
+| 40001 | 节点调度失败：没有可调度的包裹 | 该 schedule_code 下不存在 packed 状态的包裹 |
+| 40001 | 节点调度失败：没有可用的车辆完成调度，N个包裹未分配 | 所有可用车辆均已满载，部分包裹无法分配 |
 | 40401 | 调度方案不存在：GS20260614999 | schedule_code 无效 |
 
 **cURL 示例**：
@@ -282,7 +297,7 @@ curl -X POST "http://localhost:8000/api/schedule/node-dispatch" \
 # Swagger UI 中的示例请求
 {
   "schedule_code": "GS20260614001",
-  "demo_mode": false
+  "demo_mode": true
 }
 
 # Swagger UI 中的示例响应（200）
@@ -320,6 +335,143 @@ curl -X POST "http://localhost:8000/api/schedule/node-dispatch" \
 
 ---
 
+### 3.2.1 demo_mode=true 完整演示流程（L0→L2 全链路）
+
+当使用 `demo_mode=true` 时，一次 API 调用即可完成货物从 L0 到 L2 的全部调度流程。以下是前端需执行的步骤及后端对应的内部行为：
+
+#### 前置条件
+
+- 已完成阶段3全局调度（`POST /api/schedule/global`），获得 `schedule_code`
+- 数据库中已存在 `packed` 状态的 L0→L1 包裹
+
+#### 前端步骤 &amp; 后端行为对照表
+
+| 步骤 | 前端操作 | 调用的 API | 后端内部行为 | 状态变化 |
+|------|---------|-----------|-------------|---------|
+| **0** | 触发全局调度 | `POST /api/schedule/global` | F007 全局调度 → F021 打包 → 写入 global_schedules + packages | 订单→delivering、货物→packed、包裹→packed |
+| **1** | 调用节点调度（demo_mode=true） | `POST /api/schedule/node-dispatch`<br>`{"schedule_code":"GS...","demo_mode":true}` | **见下方详细拆解** | **见下方** |
+| **2** | 查看批次结果 | `GET /api/schedule/batches/{batch_code}` | 返回批次详情（含 dispatches、状态等） | — |
+| **3** | （可选）查看路线 | `GET /api/routes` | 阶段5实现路径规划后可查看 | — |
+
+#### 步骤1 后端内部行为详细拆解
+
+当 `POST /api/schedule/node-dispatch` 以 `demo_mode=true` 调用时，后端按以下顺序自动执行：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 阶段 A：L0→L1 调度                                           │
+├─────────────────────────────────────────────────────────────┤
+│ A1. 查询 schedule_code 下所有 L0→L1 的 packed 包裹            │
+│ A2. 按 from_node(L0仓储中心) 分组                             │
+│ A3. 为每个节点组分配车辆（同节点优先，载重匹配）                  │
+│     - 同节点无可用车辆 → 跨节点后备车辆 Phase 2 重试            │
+│ A4. 分配空闲司机（从车辆归属节点选第一个 idle 司机）             │
+│ A5. 为每辆车添加返回任务（is_return=true, package_codes=[]）    │
+│ A6. 生成 batch_code，写入 DispatchBatch（status=pending）      │
+│ A7. 写入 NodeDispatch 明细（level_phase=0）                    │
+├─────────────────────────────────────────────────────────────┤
+│ 阶段 B：自动模拟 L0→L1 送达                                    │
+├─────────────────────────────────────────────────────────────┤
+│ B1. 更新 L0→L1 包裹状态：packed → delivered                   │
+│ B2. 更新 L0→L1 货物状态：packed → pending_pack（到达L1需重打包）│
+│ B3. 更新车辆状态：delivering → idle                            │
+│ B4. 更新司机状态：busy → idle                                  │
+├─────────────────────────────────────────────────────────────┤
+│ 阶段 C：自动 L1 重新打包                                        │
+├─────────────────────────────────────────────────────────────┤
+│ C1. 查询到达 L1 的 pending_pack 货物                           │
+│ C2. 按 L1→L2 规则打包（同订单的货物合并成一个包裹）              │
+│ C3. 写入新的 L1→L2 packages（status=packed）                  │
+│ C4. 更新货物状态：pending_pack → packed                        │
+├─────────────────────────────────────────────────────────────┤
+│ 阶段 D：L1→L2 调度                                             │
+├─────────────────────────────────────────────────────────────┤
+│ D1. 查询新生成的 L1→L2 packed 包裹                             │
+│ D2. 按 from_node(L1分拣中心) 分组                              │
+│ D3. 分配车辆与司机（同节点优先）                                 │
+│ D4. 添加返回任务                                               │
+│ D5. 写入 NodeDispatch 明细（level_phase=1）                    │
+│ D6. 更新批次：l0_l1_dispatch_count、l1_l2_dispatch_count       │
+├─────────────────────────────────────────────────────────────┤
+│ 阶段 E：自动模拟 L1→L2 送达                                    │
+├─────────────────────────────────────────────────────────────┤
+│ E1. 更新 L1→L2 包裹状态：packed → delivered                    │
+│ E2. 更新 L1→L2 货物状态：packed → delivered                    │
+│ E3. 检查订单：若该订单所有货物均已 delivered → 订单→completed    │
+│ E4. 更新车辆状态：delivering → idle                            │
+│ E5. 更新司机状态：busy → idle                                  │
+│ E6. 批次状态更新：pending → completed                          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 前后端交互时序图
+
+```
+前端                          后端                         数据库
+ │                             │                            │
+ │── POST /schedule/global ──→│                            │
+ │                             │── F007+F021 ──────────────→│
+ │←──── { schedule_code } ────│←── 写入成功 ───────────────│
+ │                             │                            │
+ │── POST /node-dispatch ────→│                            │
+ │   {demo_mode: true}        │                            │
+ │                             │── A. L0→L1调度 ────────────→│
+ │                             │── B. 模拟L0→L1送达 ────────→│
+ │                             │── C. L1重新打包 ───────────→│
+ │                             │── D. L1→L2调度 ────────────→│
+ │                             │── E. 模拟L1→L2送达 ────────→│
+ │                             │   (以上全部在单事务中)        │
+ │←── { batch_code, ──────────│←── commit ─────────────────│
+ │      status:"completed",   │                            │
+ │      dispatches: [...] }   │                            │
+ │                             │                            │
+ │── GET /batches/{code} ────→│                            │
+ │←── 批次详情 ───────────────│── 查询 ────────────────────→│
+```
+
+#### 响应解读
+
+调用成功后，响应中 `status` 直接为 `"completed"`，表示 L0→L2 全链路已完成：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "batch_code": "BATCH20260614001",
+    "status": "completed",
+    "dispatches": [
+      // L0→L1 调度明细（level_phase=0）+ L1→L2 调度明细（level_phase=1）
+    ],
+    "unallocated_packages": []
+  }
+}
+```
+
+| 响应字段 | demo_mode=true 时的含义 |
+|---------|----------------------|
+| `status: "completed"` | L0→L1 + L1→L2 均已完成，货物已送达 L2 |
+| `dispatches` | 包含 L0→L1（level_phase=0）和 L1→L2（level_phase=1）全部调度明细 |
+| `unallocated_packages` | 因车辆/载重不足未分配的包裹（空数组=全部分配成功） |
+
+#### 前端状态判断
+
+```typescript
+// 前端收到响应后的处理逻辑
+const res = await triggerNodeDispatch({ schedule_code, demo_mode: true })
+
+if (res.code === 0 && res.data.status === 'completed') {
+  // demo_mode=true 成功 → 货物已到达 L2，可直接展示结果
+  showSuccess('调度完成！货物已全部送达 L2 末端节点')
+  // 可通过 GET /api/orders 查看订单状态（应为 completed）
+  // 可通过 GET /api/goods 查看货物状态（应为 delivered）
+} else if (res.code === 0 && res.data.status === 'failed') {
+  showError('调度失败：' + res.message)
+}
+```
+
+---
+
 ### 3.3 GET /api/schedule/batches
 
 **功能**：获取调度批次列表。
@@ -338,6 +490,8 @@ curl -X POST "http://localhost:8000/api/schedule/node-dispatch" \
 | page | int | 否 | 页码，默认 1 |
 | page_size | int | 否 | 每页数量，默认 20，最大 100 |
 
+> **注意**：当前版本暂未实现分页参数（page/page_size），接口返回所有匹配的批次记录。后续版本将补充分页支持。
+
 **响应成功（HTTP 200）**：
 
 ```json
@@ -350,15 +504,13 @@ curl -X POST "http://localhost:8000/api/schedule/node-dispatch" \
         "batch_code": "BATCH20260614001",
         "schedule_code": "GS20260614001",
         "status": "completed",
-        "demo_mode": false,
+        "demo_mode": true,
         "l0_l1_dispatch_count": 5,
         "l1_l2_dispatch_count": 8,
         "created_at": "2026-06-14T10:30:00"
       }
     ],
-    "total": 1,
-    "page": 1,
-    "page_size": 20
+    "total": 1
   },
   "meta": {
     "degraded": false,
@@ -375,18 +527,16 @@ curl -X POST "http://localhost:8000/api/schedule/node-dispatch" \
 | items[].batch_code | string | 批次编号 |
 | items[].schedule_code | string | 全局调度方案编号 |
 | items[].status | string | 批次状态：pending / l0_l1_done / completed / failed |
-| items[].demo_mode | bool | 是否演示模式 |
+| items[].demo_mode | bool | 是否演示模式（阶段4统一为 true） |
 | items[].l0_l1_dispatch_count | int | L0→L1 调度明细数量 |
 | items[].l1_l2_dispatch_count | int | L1→L2 调度明细数量 |
 | items[].created_at | string | 创建时间（ISO 8601） |
 | total | int | 总记录数 |
-| page | int | 当前页码 |
-| page_size | int | 每页数量 |
 
 **cURL 示例**：
 
 ```bash
-curl -X GET "http://localhost:8000/api/schedule/batches?page=1&page_size=20" \
+curl -X GET "http://localhost:8000/api/schedule/batches" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -403,15 +553,13 @@ curl -X GET "http://localhost:8000/api/schedule/batches?page=1&page_size=20" \
         "batch_code": "BATCH20260614001",
         "schedule_code": "GS20260614001",
         "status": "completed",
-        "demo_mode": false,
+        "demo_mode": true,
         "l0_l1_dispatch_count": 5,
         "l1_l2_dispatch_count": 8,
         "created_at": "2026-06-14T10:30:00"
       }
     ],
-    "total": 1,
-    "page": 1,
-    "page_size": 20
+    "total": 1
   },
   "meta": {
     "degraded": false,
@@ -652,8 +800,6 @@ export async function createNodeDispatch(data: NodeDispatchRequest) {
 export async function listDispatchBatches(params: {
   schedule_code?: string
   status?: string
-  page?: number
-  page_size?: number
 }) {
   return request.get('/schedule/batches', { params })
 }
@@ -698,7 +844,7 @@ const batches = ref([])
 const loading = ref(false)
 
 const loadBatches = async () => {
-  const res = await listDispatchBatches({ page: 1, page_size: 20 })
+  const res = await listDispatchBatches({})
   batches.value = res.data.items
 }
 
@@ -776,20 +922,19 @@ loadBatches()
 
 | 测试用例 | 请求 | 预期响应 |
 |---|---|---|
-| 正常调度（demo_mode=true） | `{ "schedule_code": "GS20260614001", "demo_mode": true }` | 200, code=0, 返回 batch_code |
-| 正常调度（demo_mode=false） | `{ "schedule_code": "GS20260614001", "demo_mode": false }` | 200, code=0, 返回 batch_code |
-| 无可用车辆 | 车辆状态=delivering | 200, code=40001, message="没有可用的车辆" |
-| L0→L1 未完成 | demo_mode=false 且 L0→L1 未完成 | 200, code=40001, message="L0→L1未完成" |
+| 正常调度（demo_mode=true） | `{ "schedule_code": "GS20260614001", "demo_mode": true }` | 200, code=0, 返回 batch_code, status=completed, dispatches 含 L0→L1+L1→L2 |
+| 无可调度包裹 | 无packed包裹 | 200, code=40001, message="没有可调度的包裹" |
+| 无可用车辆 | 车辆状态=delivering | 200, code=40001, message="没有可用的车辆完成调度" |
 | 调度方案不存在 | `{ "schedule_code": "GS999" }` | 200, code=40401, message="调度方案不存在" |
+| demo_mode=false（阶段6预留） | `{ "schedule_code": "GS20260614001", "demo_mode": false }` | ⚠️ 阶段4未完整实现，行为以阶段6文档为准 |
 
 ### 6.2 调度批次列表测试
 
 | 测试用例 | 请求 | 预期响应 |
 |---|---|---|
-| 获取列表 | `GET /api/schedule/batches?page=1` | 200, code=0, 返回 items 数组 |
+| 获取列表 | `GET /api/schedule/batches` | 200, code=0, 返回 items 数组 |
 | 按方案筛选 | `GET /api/schedule/batches?schedule_code=GS20260614001` | 200, code=0, 返回该方案的批次 |
 | 按状态筛选 | `GET /api/schedule/batches?status=completed` | 200, code=0, 返回 completed 批次 |
-| 分页 | `GET /api/schedule/batches?page=1&page_size=10` | 200, code=0, total=1, items.length=1 |
 
 ### 6.3 批次详情测试
 
@@ -814,6 +959,8 @@ loadBatches()
 |---|---|---|---|
 | V1.0 | 2026-06-14 | 初版：阶段4 节点间调度 F005 API 契约文档 | AI 开发助手 |
 | V1.1 | 2026-06-17 | 更新 `GET /api/schedule/batches/{batch_code}` 接口，添加 `unallocated_packages` 字段（未分配的包裹编码列表） | AI 开发助手 |
+| V1.2 | 2026-06-18 | 更新节点调度流程描述（智能检测包裹类型、4种场景）；更新 `GET /api/schedule/batches` 分页说明（当前未实现 page/page_size）；移除过时错误信息；`POST /api/schedule/node-dispatch` 响应新增 `unallocated_packages` 字段 | AI 开发助手 |
+| V1.3 | 2026-06-18 | 标注阶段4仅实现 `demo_mode=true`，`demo_mode=false` 完整流程推迟到阶段6；新增 §3.2.1 demo_mode=true 完整演示流程（前端步骤+后端行为对照表、内部行为拆解、交互时序图）；Swagger 示例默认改为 demo_mode=true；测试用例更新 | AI 开发助手 |
 
 ---
 
