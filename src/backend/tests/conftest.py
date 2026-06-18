@@ -161,6 +161,12 @@ def test_orders(db_session, test_nodes):
     - O001: 目的地 SO010（武昌），来自 SC001
     - O002: 目的地 SO011（汉口），来自 SC001
     - O003: 目的地 SO012（长沙），来自 SC002
+    - O004: 目的地 SO010（武昌），来自 SC001
+    - O005: 目的地 SO011（汉口），来自 SC001
+    - O006: 目的地 SO012（长沙），来自 SC002
+    - O007: 目的地 SO010（武昌），来自 SC001
+    - O008: 目的地 SO011（汉口），来自 SC001
+    - O009: 目的地 SO012（长沙），来自 SC002
     """
     orders_data = [
         {
@@ -178,8 +184,38 @@ def test_orders(db_session, test_nodes):
             "destination_node_code": "SO012",
             "time_window": "2026-06-15 全天",
         },
+        {
+            "order_code": "O004",
+            "destination_node_code": "SO010",
+            "time_window": "2026-06-15 全天",
+        },
+        {
+            "order_code": "O005",
+            "destination_node_code": "SO011",
+            "time_window": "2026-06-15 全天",
+        },
+        {
+            "order_code": "O006",
+            "destination_node_code": "SO012",
+            "time_window": "2026-06-15 全天",
+        },
+        {
+            "order_code": "O007",
+            "destination_node_code": "SO010",
+            "time_window": "2026-06-15 全天",
+        },
+        {
+            "order_code": "O008",
+            "destination_node_code": "SO011",
+            "time_window": "2026-06-15 全天",
+        },
+        {
+            "order_code": "O009",
+            "destination_node_code": "SO012",
+            "time_window": "2026-06-15 全天",
+        },
     ]
-
+    
     order_objects = {}
     for od in orders_data:
         order = Order(
@@ -190,7 +226,7 @@ def test_orders(db_session, test_nodes):
         )
         db_session.add(order)
         order_objects[od["order_code"]] = order
-
+    
     db_session.commit()
     return order_objects
 
@@ -199,14 +235,14 @@ def test_orders(db_session, test_nodes):
 def test_goods(db_session, test_orders, test_nodes):
     """
     创建测试货物数据：
-    - G001: 属于 O001，在 SC001
-    - G002: 属于 O002，在 SC001
-    - G003: 属于 O003，在 SC002
+    - 每个订单有2-3个货物
+    - 总计约20个货物，用于测试复杂场景（L1节点包裹数量众多）
     """
     goods_data = [
+        # O001的货物（2个）
         {
             "goods_code": "G001",
-            "goods_name": "测试货物A",
+            "goods_name": "测试货物A1",
             "goods_type": "普通",
             "weight": 10.0,
             "volume": 0.5,
@@ -215,7 +251,17 @@ def test_goods(db_session, test_orders, test_nodes):
         },
         {
             "goods_code": "G002",
-            "goods_name": "测试货物B",
+            "goods_name": "测试货物A2",
+            "goods_type": "普通",
+            "weight": 15.0,
+            "volume": 0.8,
+            "order_code": "O001",
+            "node_code": "SC001",
+        },
+        # O002的货物（2个）
+        {
+            "goods_code": "G003",
+            "goods_name": "测试货物B1",
             "goods_type": "普通",
             "weight": 5.0,
             "volume": 0.3,
@@ -223,16 +269,149 @@ def test_goods(db_session, test_orders, test_nodes):
             "node_code": "SC001",
         },
         {
-            "goods_code": "G003",
-            "goods_name": "测试货物C",
+            "goods_code": "G004",
+            "goods_name": "测试货物B2",
             "goods_type": "普通",
             "weight": 8.0,
             "volume": 0.4,
+            "order_code": "O002",
+            "node_code": "SC001",
+        },
+        # O003的货物（2个）
+        {
+            "goods_code": "G005",
+            "goods_name": "测试货物C1",
+            "goods_type": "普通",
+            "weight": 12.0,
+            "volume": 0.6,
             "order_code": "O003",
             "node_code": "SC002",
         },
+        {
+            "goods_code": "G006",
+            "goods_name": "测试货物C2",
+            "goods_type": "普通",
+            "weight": 9.0,
+            "volume": 0.5,
+            "order_code": "O003",
+            "node_code": "SC002",
+        },
+        # O004的货物（2个）
+        {
+            "goods_code": "G007",
+            "goods_name": "测试货物D1",
+            "goods_type": "普通",
+            "weight": 11.0,
+            "volume": 0.7,
+            "order_code": "O004",
+            "node_code": "SC001",
+        },
+        {
+            "goods_code": "G008",
+            "goods_name": "测试货物D2",
+            "goods_type": "普通",
+            "weight": 7.0,
+            "volume": 0.4,
+            "order_code": "O004",
+            "node_code": "SC001",
+        },
+        # O005的货物（2个）
+        {
+            "goods_code": "G009",
+            "goods_name": "测试货物E1",
+            "goods_type": "普通",
+            "weight": 6.0,
+            "volume": 0.3,
+            "order_code": "O005",
+            "node_code": "SC001",
+        },
+        {
+            "goods_code": "G010",
+            "goods_name": "测试货物E2",
+            "goods_type": "普通",
+            "weight": 9.0,
+            "volume": 0.5,
+            "order_code": "O005",
+            "node_code": "SC001",
+        },
+        # O006的货物（2个）
+        {
+            "goods_code": "G011",
+            "goods_name": "测试货物F1",
+            "goods_type": "普通",
+            "weight": 13.0,
+            "volume": 0.8,
+            "order_code": "O006",
+            "node_code": "SC002",
+        },
+        {
+            "goods_code": "G012",
+            "goods_name": "测试货物F2",
+            "goods_type": "普通",
+            "weight": 8.0,
+            "volume": 0.4,
+            "order_code": "O006",
+            "node_code": "SC002",
+        },
+        # O007的货物（2个）
+        {
+            "goods_code": "G013",
+            "goods_name": "测试货物G1",
+            "goods_type": "普通",
+            "weight": 10.0,
+            "volume": 0.6,
+            "order_code": "O007",
+            "node_code": "SC001",
+        },
+        {
+            "goods_code": "G014",
+            "goods_name": "测试货物G2",
+            "goods_type": "普通",
+            "weight": 12.0,
+            "volume": 0.7,
+            "order_code": "O007",
+            "node_code": "SC001",
+        },
+        # O008的货物（2个）
+        {
+            "goods_code": "G015",
+            "goods_name": "测试货物H1",
+            "goods_type": "普通",
+            "weight": 7.0,
+            "volume": 0.4,
+            "order_code": "O008",
+            "node_code": "SC001",
+        },
+        {
+            "goods_code": "G016",
+            "goods_name": "测试货物H2",
+            "goods_type": "普通",
+            "weight": 9.0,
+            "volume": 0.5,
+            "order_code": "O008",
+            "node_code": "SC001",
+        },
+        # O009的货物（2个）
+        {
+            "goods_code": "G017",
+            "goods_name": "测试货物I1",
+            "goods_type": "普通",
+            "weight": 11.0,
+            "volume": 0.6,
+            "order_code": "O009",
+            "node_code": "SC002",
+        },
+        {
+            "goods_code": "G018",
+            "goods_name": "测试货物I2",
+            "goods_type": "普通",
+            "weight": 8.0,
+            "volume": 0.4,
+            "order_code": "O009",
+            "node_code": "SC002",
+        },
     ]
-
+    
     goods_objects = {}
     for gd in goods_data:
         goods = Goods(
@@ -247,7 +426,7 @@ def test_goods(db_session, test_orders, test_nodes):
         )
         db_session.add(goods)
         goods_objects[gd["goods_code"]] = goods
-
+    
     db_session.commit()
     # 刷新 orders 以便访问 .goods 关系
     for order in test_orders.values():
