@@ -91,11 +91,23 @@ class RouteService:
             # 添加提交逻辑
             db.commit()
             
-            # 5. 返回成功响应
+            # 5. 构建响应（移除内部 id，仅暴露 _code 业务编号）
+            api_routes = []
+            for r in routes:
+                api_routes.append({
+                    "route_code": r["route_code"],
+                    "dispatch_code": r["dispatch_code"],
+                    "vehicle_code": r["vehicle_code"],
+                    "route_segments": r["route_segments"],
+                    "total_distance": r["total_distance"],
+                    "total_time": r["total_time"],
+                    "total_emission": r["total_emission"],
+                    "algorithm_type": r["algorithm_type"],
+                })
             return success_response(data={
                 "batch_code": batch_code,
                 "status": batch.status,
-                "routes": routes
+                "routes": api_routes
             })
             
         except Exception as e:

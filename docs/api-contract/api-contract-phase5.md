@@ -42,7 +42,7 @@
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `batch_code` | string | 是 | 调度批次编码 |
-| `dispatch_codes` | array[string] | 否 | 节点调度明细编码列表（不传则处理批次下所有dispatch） |
+| `dispatch_codes` | array[string] | 否 | 节点调度明细编码列表（不传则处理批次下所有dispatch）。注意：空数组 `[]` 与不传效果相同；含空字符串 `[""]` 会查询编码为空串的记录，导致"没有可处理的调度明细"错误 |
 
 **请求体示例**：
 
@@ -67,8 +67,8 @@
     "routes": [
       {
         "route_code": "ROUTE20260614001",
-        "dispatch_id": 1,
-        "vehicle_id": 21,
+        "dispatch_code": "DISP20260614001",
+        "vehicle_code": "VEH0021",
         "route_segments": [
           {
             "road_name": "虚拟道路",
@@ -121,6 +121,8 @@
 **功能**：查询路线列表
 
 可按批次编码、车辆编码筛选，支持分页。
+
+> **注意**：`batch_code` 和 `dispatch_code` 可能为 `null`（当关联的调度批次或调度明细被删除时）。
 
 **请求参数**：
 
@@ -329,8 +331,8 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `route_code` | string | 路线编码 |
-| `batch_code` | string | 批次编码 |
-| `dispatch_code` | string | 调度明细编码 |
+| `batch_code` | string\|null | 批次编码（关联丢失时为null） |
+| `dispatch_code` | string\|null | 调度明细编码（关联丢失时为null） |
 | `vehicle_code` | string | 车辆编码 |
 | `total_distance` | float | 总距离（公里） |
 | `total_time` | float | 总时间（分钟） |
@@ -342,8 +344,8 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `route_code` | string | 路线编码 |
-| `batch_code` | string | 批次编码 |
-| `dispatch_code` | string | 调度明细编码 |
+| `batch_code` | string\|null | 批次编码（关联丢失时为null） |
+| `dispatch_code` | string\|null | 调度明细编码（关联丢失时为null） |
 | `vehicle_code` | string | 车辆编码 |
 | `route_segments` | array[RouteSegment] | 路径路段 |
 | `total_distance` | float | 总距离（公里） |
@@ -416,11 +418,11 @@
 
 | 测试类型 | 文件 | 测试数 | 状态 |
 |---------|------|--------|------|
-| 算法层 | `tests/test_algorithms/test_route_planning.py` | 8 | ✅ |
-| 服务层 | `tests/test_services/test_route_service.py` | 7 | ✅ |
-| API层 | `tests/test_api/test_routes_api.py` | 6 | ✅ |
-| 集成测试 | `tests/test_integration/test_routes_integration.py` | 4 | ✅ |
-| **总计** | | **25** | **100%** |
+| 算法层 | `tests/test_algorithms/test_route_planning.py` | 12 | ✅ |
+| 服务层 | `tests/test_services/test_route_service.py` | 13 | ✅ |
+| API层 | `tests/test_routes_api.py` | 6 | ✅ |
+| 集成测试 | `tests/test_routes_integration.py` | 4 | ✅ |
+| **总计** | | **35** | **100%** |
 
 ---
 

@@ -114,8 +114,10 @@ def run_route_planning(db: Session, dispatch_id: int) -> Dict[str, Any]:
     Returns:
         route_data: 路径规划结果字典，包含：
             - route_code: 路线编码
-            - dispatch_id: 节点调度明细ID
-            - vehicle_id: 车辆ID
+            - dispatch_id: 节点调度明细ID（内部使用）
+            - vehicle_id: 车辆ID（内部使用）
+            - dispatch_code: 节点调度明细业务编码（API暴露）
+            - vehicle_code: 车辆业务编码（API暴露）
             - route_segments: 路径路段JSON
             - total_distance: 总距离
             - total_time: 总时间
@@ -193,11 +195,13 @@ def run_route_planning(db: Session, dispatch_id: int) -> Dict[str, Any]:
     
     # 6. 计算总距离、总时间、总碳排放（已在上面完成）
     
-    # 7. 返回 route_data
+    # 7. 返回 route_data（内部包含 id 用于写库，_code 用于 API 响应）
     route_data = {
         "route_code": _generate_route_code(db),
         "dispatch_id": dispatch_id,
         "vehicle_id": vehicle_id,
+        "dispatch_code": dispatch.dispatch_code,
+        "vehicle_code": vehicle.vehicle_code,
         "route_segments": route_segments,
         "total_distance": round(total_distance, 3),
         "total_time": round(total_time, 3),
