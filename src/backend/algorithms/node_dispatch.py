@@ -532,7 +532,7 @@ def _check_packages_by_level(db: Session, schedule_id: int, level_phase: int, is
     return False
 
 
-def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False, excluded_vehicles: Optional[List[str]] = None, is_replan: bool = False) -> Dict[str, Any]:
+def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False, excluded_vehicles: Optional[List[str]] = None, is_replan: bool = False, custom_weights: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     F005 节点间调度主函数
     
@@ -548,6 +548,8 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False, 
         demo_mode: 是否演示模式（跳过L1送达等待）
         excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
         is_replan: 是否为重规划模式（True=调度exception包裹，False=调度packed包裹）
+        custom_weights: 自定义权重参数（可选，优先级高于 algorithm_config.json）
+            格式: {"node_dispatch": {"weights": {"distance": 0.7, "time": 0.2, "package_count": 0.1}}}
     
     Returns:
         调度结果字典，包含 batch_code, status, dispatches
@@ -570,8 +572,15 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False, 
     has_l0_l1 = _check_packages_by_level(db, schedule.id, level_phase=0, is_replan=is_replan)
     has_l1_l2 = _check_packages_by_level(db, schedule.id, level_phase=1, is_replan=is_replan)
     
-    # 4. 加载算法配置
+    # 4. 加载算法配置（custom_weights 优先于文件配置）
     config = _load_config()
+    if custom_weights and "node_dispatch" in custom_weights:
+        nd_weights = custom_weights["node_dispatch"].get("weights", {})
+        config["node_dispatch_weights"] = {
+            "w1": nd_weights.get("distance", 0.5),
+            "w2": nd_weights.get("time", 0.3),
+            "w3": nd_weights.get("package_count", 0.2),
+        }
     
     # 5. 根据 demo_mode、existing_batch 和包裹类型决定执行逻辑
     if demo_mode:

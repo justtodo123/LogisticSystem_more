@@ -13,6 +13,9 @@ from sqlalchemy.orm import Session
 
 from models.exception_event import ExceptionEvent
 from models.global_schedule import GlobalSchedule
+from models.goods import Goods
+from models.order import Order
+from models.package import Package
 from models.route import Route
 from models.node_dispatch import NodeDispatch
 from models.dispatch_batch import DispatchBatch
@@ -29,6 +32,7 @@ class ReplanService:
         original_schedule_code: str,
         replan_reason: str,
         event: Optional[ExceptionEvent] = None,
+        custom_weights: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         重调度（F007→F021→F005→F006）
@@ -47,6 +51,7 @@ class ReplanService:
             original_schedule_code: 原调度方案业务编号
             replan_reason: 重规划原因
             event: 异常事件对象（可选，用于提取排除参数）
+            custom_weights: 自定义权重参数（可选，用于AI驱动的重规划）
 
         Returns:
             统一响应格式 dict
@@ -67,7 +72,12 @@ class ReplanService:
             order_codes = original.order_codes
             algorithm = original.algorithm_type or "traditional"
 
-            # 3. 提取排除参数
+            # 3. 判断是否为异常驱动的重规划（vs AI 权重重规划）
+            #    异常驱动：有 event 对象 → is_replan=True → 查找 exception 状态订单/包裹
+            #    AI 权重：无 event → is_replan=False → 查找 packed 状态包裹（新生成的）
+            has_event = event is not None
+
+            # 4. 提取排除参数
             excluded_nodes = []
             excluded_vehicles = []
             if event:
@@ -88,7 +98,25 @@ class ReplanService:
                             if v and v.vehicle_code not in excluded_vehicles:
                                 excluded_vehicles.append(v.vehicle_code)
 
-            # 4. 调用现有服务层（不修改它们）
+            # 4.5 AI重规划（无异常事件）：重置货物状态为 pending_pack
+            #     packaging(is_replan=False) 只查 pending_pack 的货物，
+            #     但原方案已将货物推进到 packed/in_transit/delivered，
+            #     需要全部回退才能重新打包。
+            if not has_event:
+                orders = db.query(Order).filter(
+                    Order.order_code.in_(order_codes)
+                ).all()
+                order_ids = [o.id for o in orders]
+                db.query(Goods).filter(
+                    Goods.order_id.in_(order_ids),
+                    Goods.status.in_(["packed", "in_transit", "delivered"])
+                ).update(
+                    {"status": "pending_pack"},
+                    synchronize_session=False
+                )
+                db.flush()
+
+            # 5. 调用现有服务层（不修改它们）
             from services.schedule_service import ScheduleService
 
             schedule_result = await ScheduleService.create_global_schedule(
@@ -96,7 +124,8 @@ class ReplanService:
                 algorithm=algorithm,
                 db=db,
                 excluded_nodes=excluded_nodes if excluded_nodes else None,
-                is_replan=True,  # 重规划模式：只调度 exception 订单
+                is_replan=has_event,  # 仅异常驱动时查询 exception 订单；AI 重规划时 order_codes 已指定
+                custom_weights=custom_weights,  # AI驱动的自定义权重
             )
 
             # 检查调度是否成功
@@ -105,7 +134,7 @@ class ReplanService:
 
             new_schedule_code = schedule_result["data"]["schedule_code"]
 
-            # 4. 更新新版调度方案的版本链字段
+            # 7. 更新新版调度方案的版本链字段
             new_schedule = db.query(GlobalSchedule).filter(
                 GlobalSchedule.schedule_code == new_schedule_code
             ).first()
@@ -117,22 +146,61 @@ class ReplanService:
                 new_schedule.is_replan = True
                 db.commit()
 
-            # 5. 继续调用节点调度（获取该方案的完整结果）
-            #    注：重规划只生成方案，不走 demo_mode 自动送达
+            # 7.5 将原方案包裹标记为 exception（已被重规划替代）
+            #     无论 AI 重规划还是异常驱动重规划，新方案创建成功后，
+            #     原方案包裹即被替代，标记为 exception 避免歧义。
+            db.query(Package).filter(
+                Package.schedule_id == original.id,
+                Package.status.in_(["packed", "pending_pack", "in_transit"])
+            ).update(
+                {"status": "exception"},
+                synchronize_session=False
+            )
+            db.commit()
+
+            # 6. 继续调用节点调度（获取该方案的完整结果）
+            #    AI 重规划(has_event=False)：demo_mode=True 完成全链路 L0→L1→L2
+            #    异常驱动(has_event=True)：demo_mode=False 仅生成方案，不自动送达
             from services.dispatch_service import DispatchService
 
             dispatch_result = await DispatchService.create_node_dispatch(
                 schedule_code=new_schedule_code,
-                demo_mode=False,  # 重规划只生成方案，不模拟送达
+                demo_mode=not has_event,  # AI重规划自动完成全链路；异常重规划仅生成方案
                 db=db,
                 excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
-                is_replan=True,  # 重规划模式：只调度 exception 包裹
+                is_replan=False,  # 新方案包裹始终为 packed，不需要查询 exception 包裹
+                custom_weights=custom_weights,  # AI驱动的自定义权重
             )
 
-            # 提取批次编码（节点调度可能失败，不影响主结果）
-            batch_code = None
-            if isinstance(dispatch_result, dict) and dispatch_result.get("code") == 0:
-                batch_code = dispatch_result["data"].get("batch_code")
+            # 调度失败时上报错误（不再静默吞掉）
+            if not isinstance(dispatch_result, dict) or dispatch_result.get("code") != 0:
+                error_msg = dispatch_result.get("message", "未知错误") if isinstance(dispatch_result, dict) else str(dispatch_result)
+                return error_response(code=40001, message=f"节点调度失败：{error_msg}")
+
+            batch_code = dispatch_result["data"].get("batch_code")
+
+            # 6.5 执行路径规划（F006，为每辆车规划行驶路线）
+            from services.route_service import RouteService
+            route_result = await RouteService.create_route_planning(
+                batch_code=batch_code,
+                dispatch_codes=None,  # 批量规划该批次所有车辆
+                db=db,
+                custom_weights=custom_weights,
+            )
+            if route_result.get("code") != 0:
+                route_error = route_result.get("message", "未知错误") if isinstance(route_result, dict) else str(route_result)
+                return error_response(code=40001, message=f"路径规划失败：{route_error}")
+
+            # 8. 将原方案的 dispatch_batches 标记为 failed（已被重规划替代）
+            #    新方案 dispatch 成功后，旧批次即被取代。
+            db.query(DispatchBatch).filter(
+                DispatchBatch.global_schedule_id == original.id,
+                DispatchBatch.status.in_(["pending", "l0_l1_done", "completed"])
+            ).update(
+                {"status": "failed"},
+                synchronize_session=False
+            )
+            db.commit()
 
             return success_response(data={
                 "schedule_code": new_schedule_code,
@@ -154,6 +222,7 @@ class ReplanService:
         original_route_code: str,
         replan_reason: str,
         excluded_vehicles: Optional[List[str]] = None,
+        custom_weights: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         重路径规划（F006）
@@ -171,6 +240,7 @@ class ReplanService:
             original_route_code: 原路径规划业务编号
             replan_reason: 重规划原因
             excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
+            custom_weights: 自定义权重参数（可选，用于AI驱动的重规划）
         
         Returns:
             统一响应格式 dict
@@ -219,6 +289,7 @@ class ReplanService:
                 dispatch_codes=dispatch_codes,
                 db=db,
                 excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
+                custom_weights=custom_weights,  # AI驱动的自定义权重
             )
 
             # 检查路径规划是否成功

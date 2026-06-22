@@ -106,6 +106,7 @@ def global_schedule(
     db: Session,
     excluded_nodes: Optional[List[str]] = None,
     is_replan: bool = False,
+    custom_weights: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     F007 全局调度算法
@@ -116,6 +117,8 @@ def global_schedule(
         db: 数据库会话
         excluded_nodes: 排除的节点编码列表（重规划时使用）
         is_replan: 是否为重规划模式（True=只调度exception订单，False=只调度pending订单）
+        custom_weights: 自定义权重参数（可选，优先级高于 algorithm_config.json）
+            格式: {"global_schedule": {"weights": {"distance": 0.7, "time": 0.2, "package_count": 0.1}}}
 
     Returns:
         dict: {
@@ -134,26 +137,32 @@ def global_schedule(
     if algorithm != "traditional":
         raise ValueError(f"阶段3仅支持 traditional 算法，收到: {algorithm}")
 
-    # 加载配置
-    config = _load_config()
-    weights = config["global_schedule_weights"]
-    w1 = weights["w1_distance"]
-    w2 = weights["w2_time"]
-    w3 = weights["w3_packages"]
+    # 加载配置（custom_weights 优先于文件配置）
+    if custom_weights and "global_schedule" in custom_weights:
+        gs_weights = custom_weights["global_schedule"].get("weights", {})
+        w1 = gs_weights.get("distance", 0.5)
+        w2 = gs_weights.get("time", 0.3)
+        w3 = gs_weights.get("package_count", 0.2)
+    else:
+        config = _load_config()
+        weights = config["global_schedule_weights"]
+        w1 = weights["w1_distance"]
+        w2 = weights["w2_time"]
+        w3 = weights["w3_packages"]
 
     # ── 1. 查询订单 ──
-    # 正常调度：只处理 pending 订单
-    # 重规划调度：只处理 exception 订单
-    if is_replan:
+    # order_codes 显式提供：信任调用方，按编码查询（不限状态，支持 AI 权重重规划）
+    # order_codes 为空：按状态自动筛选
+    if order_codes:
+        query = db.query(Order).filter(Order.order_code.in_(order_codes))
+    elif is_replan:
         query = db.query(Order).filter(Order.status == "exception")
     else:
         query = db.query(Order).filter(Order.status == "pending")
-    if order_codes:
-        query = query.filter(Order.order_code.in_(order_codes))
     orders = query.all()
 
     if not orders:
-        raise ValueError("没有找到符合条件的订单（status=pending 或 status=exception）")
+        raise ValueError("没有找到符合条件的订单（请确认订单存在且状态为 pending/exception，或提供了有效的 order_codes）")
 
     # ── 2. 预加载 L1 节点（含 sorting_center 属性） ──
     l1_nodes = (

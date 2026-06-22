@@ -12,6 +12,7 @@ from schemas.route import (  # noqa: F401
     RoutePlanRequest, RouteListResponse, RouteDetailResponse, RouteCoordinatesResponse
 )
 from services.route_service import RouteService
+from services.log_service import LogService, build_route_plan_event_data
 from config.database import get_db
 from api.dependencies import get_current_user, require_dispatcher
 from models.user import User
@@ -36,6 +37,20 @@ async def plan_routes(
         dispatch_codes=request.dispatch_codes,
         db=db
     )
+    
+    # 记录埋点
+    if result.get("code") == 0:  # 成功
+        LogService.log_event(
+            event_name="route_plan",
+            user_id=current_user.id,
+            role=current_user.role,
+            event_data=build_route_plan_event_data(
+                route_count=len(result["data"].get("routes", [])),
+                vehicle_count=len(set([r.get("vehicle_code") for r in result["data"].get("routes", [])]))
+            ),
+            db=db
+        )
+    
     return result
 
 

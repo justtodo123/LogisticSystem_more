@@ -4,10 +4,21 @@
 
 ## 项目状态
 
-**当前阶段**：阶段 7（异常与重规划 F013）已完成  
-**下一阶段**：阶段 8（AI 助手与收尾 F014）
+**当前阶段**：阶段 8（AI 助手与收尾 F014）✅ 已完成  
+**项目状态**：🎉 全部 8 阶段 MVP 开发完成
 
-**阶段4最新更新**：
+**阶段8最新更新** (2026-06-23)：
+- ✅ **AI 自然语言调度完成**：`POST /api/ai/parse` 接收自然语言 → DeepSeek 解析为算法参数 → 自动执行完整调度链路
+- ✅ **四种参数模式**：`ai`（纯 DeepSeek 解析）/ `manual`（纯手动权重）/ `hybrid`（AI + 权重覆盖）/ `default`（默认参数）
+- ✅ **两种执行模式**：新建调度（全部 pending 订单）+ 版本化重规划（指定 `schedule_codes`）
+- ✅ **dry-run 模式**：`execute=false` 仅返回解析参数，不执行调度不写库
+- ✅ **系统上下文增强**：DeepSeek 提示词自动注入待分配订单、可用车辆、历史方案指标（对比评分/距离/时间）
+- ✅ **DeepSeek 降级策略**：API 调用失败自动 fallback 默认参数，`meta.degraded=true` 明确告知用户
+- ✅ **DeepSeek 调用埋点**：每次调用记录到 `log_events`（成功/失败/degraded）
+- ✅ **批量重规划**：`schedule_codes` 支持多条，逐条生成新版本
+- ✅ **P1 占位**：`/api/ai/explain`、`/api/ai/review`、`/api/ai/analyze-exception` 返回 501
+
+**阶段4最新更新** (2026-06-17)：
 - **阶段4实现范围**：仅完整实现 `demo_mode=true`，`demo_mode=false` 完整流程推迟到阶段6
 - `demo_mode=true`：一次调用完成 L0→L1 和 L1→L2 两次调度（含自动模拟送达 + L1 重新打包 + 自动送达L2），货物从L0直达L2
 - `demo_mode=false`：代码框架已预留（`_check_packages_by_level()` 智能检测 + 4种场景），但完整流程需阶段6的模拟送达接口配合
@@ -581,11 +592,128 @@ src/backend/
 
 ---
 
-### 规划中（阶段 8）
+#### AI 助手（阶段 8）
 
-详见 `docs/` 目录下的 MVP 开发计划。核心接口包括：
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| `POST` | `/api/ai/parse` | 自然语言解析 → 调度执行（F014，P0 核心） | Bearer Token |
+| `POST` | `/api/ai/explain` | 方案解释（F015，P1 占位 501） | Bearer Token |
+| `POST` | `/api/ai/review` | 方案审查（F016，P1 占位 501） | Bearer Token |
+| `POST` | `/api/ai/analyze-exception` | 异常分析（F017，P1 占位 501） | Bearer Token |
 
-- **AI**：`POST /api/ai/parse`（P0，DeepSeek 自然语言调度）、`POST /api/ai/explain`、`POST /api/ai/review`、`POST /api/ai/analyze-exception`（P1 占位 501）
+##### POST /api/ai/parse — 三步模型
+
+**步骤1** — 确定参数来源（4 种模式）：
+
+| 条件 | 模式 | 说明 |
+|------|------|------|
+| 有 `message`，无 `weights` | `ai` | DeepSeek 解析自然语言 → 算法参数 |
+| 无 `message`，有 `weights` | `manual` | 直接使用手动权重，不调 DeepSeek |
+| 有 `message`，有 `weights` | `hybrid` | DeepSeek 解析后用 `weights` 覆盖部分参数 |
+| 无 `message`，无 `weights` | `default` | 使用 `algorithm_config.json` 默认值 |
+
+**步骤2** — 确定执行目标：
+
+| `schedule_codes` | 模式 | 说明 |
+|:-:|------|------|
+| 空 | 新建调度 | 对全部 `pending` 订单执行 F007→F021→F005→F006 |
+| 非空 | 版本化重规划 | 逐条对指定方案生成新版本（走 `ReplanService.redispatch()`） |
+
+**步骤3** — `execute` 控制：
+
+| `execute` | 说明 |
+|:-:|------|
+| `true`（默认） | 完整执行调度链路并写库 |
+| `false` | dry-run：仅返回解析参数，不写库 |
+
+**请求体** (`AiParseRequest`)：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `message` | string | 否 | 自然语言指令 |
+| `weights` | object | 否 | 手动权重（结构与 `algorithm_config.json` 一致） |
+| `schedule_codes` | string[] | 否 | 目标方案编号列表（非空=重规划） |
+| `execute` | boolean | 否 | 是否执行调度链路（默认 `true`） |
+
+**请求示例**：
+
+```json
+// ① AI 重规划（最常用）
+{"message": "优先缩短距离，多用电车", "schedule_codes": ["GS20260623001"]}
+
+// ② AI 新建调度
+{"message": "优先时效，减少总时间"}
+
+// ③ dry-run 预览
+{"message": "缩短距离，减少碳排放", "execute": false}
+
+// ④ 纯手动权重
+{"weights": {"global_schedule": {"weights": {"distance": 0.9, "time": 0.05, "package_count": 0.05}}}, "schedule_codes": ["GS20260623001"]}
+
+// ⑤ 默认参数（无 message 无 weights）
+{"schedule_codes": ["GS20260623001"]}
+```
+
+**响应格式**：
+
+```json
+// dry-run 成功
+{
+  "code": 0, "message": "success (dry-run)",
+  "data": {
+    "algorithm_params": {"global_schedule": {...}, "node_dispatch": {...}, "route_planning": {...}},
+    "mode": "ai",
+    "is_replan": false,
+    "executed": false,
+    "reference_codes": null
+  },
+  "meta": {"degraded": false, "degraded_reason": null}
+}
+
+// AI 重规划成功
+{
+  "code": 0, "message": "success",
+  "data": {
+    "schedule_code": "GS20260623010",
+    "replan_results": [{"original_schedule_code": "GS20260623008", "new_schedule_code": "GS20260623010"}],
+    "algorithm_params": {...},
+    "mode": "ai",
+    "is_replan": true,
+    "executed": true,
+    "reference_codes": ["GS20260623008"]
+  },
+  "meta": {"degraded": false, "degraded_reason": null}
+}
+
+// DeepSeek 降级
+{
+  "code": 0, "message": "success",
+  "data": {"schedule_code": "GS20260623012", "mode": "ai", ...},
+  "meta": {"degraded": true, "degraded_reason": "DeepSeek API 调用超时（30秒）"}
+}
+```
+
+**DeepSeek 降级策略**：
+
+| 失败场景 | 处理方式 | `degraded` |
+|---------|---------|:-:|
+| API Key 未配置 | 使用默认算法参数完成调度 | `true` |
+| 网络超时（30s） | fallback 默认参数 | `true` |
+| HTTP 错误（4xx/5xx） | fallback 默认参数 | `true` |
+| 返回格式无法解析 | fallback 默认参数 | `true` |
+| 调用成功 | 使用 DeepSeek 返回参数 | `false` |
+
+> ⚠️ **关键原则**：DeepSeek 调用失败时使用默认参数完成调度，绝不伪造 AI 成功结果。前端需在 `meta.degraded === true` 时提示用户当前使用了默认参数。
+
+**错误码**：
+
+| code | HTTP | 说明 |
+|------|------|------|
+| 0 | 200 | 成功 |
+| 40000 | 400 | 参数校验失败 |
+| 40001 | 200 | 全局调度/节点调度/路径规划业务失败 |
+| 40300 | 403 | 无权限（manager 角色） |
+| 50000 | 500 | 服务器内部错误 |
 
 ## 统一响应格式
 
@@ -679,6 +807,14 @@ alembic downgrade -1
 2. **重规划仅调度 exception 状态实体**：`is_replan=True` 标记传入各服务层，仅对 `exception` 状态的订单/包裹进行调度，正常配送中的实体不受影响。
 3. **reroute 不修改状态**：与 redispatch 不同，reroute 不重置订单/货物/包裹为 exception，仅生成新路线记录。原路线保留用于对比。
 4. **repack_at_l1 精确匹配修复**：修复 `.first()` 改为 `.all()` + `order_code` 精确匹配，解决多订单同路线场景下包裹错误复用导致遗漏的 BUG。
+
+### 阶段 8 设计决策
+
+1. **三步模型解耦**：`_resolve_params`（参数来源）→ 执行目标判定（新建/重规划）→ `_execute_*`（调度链路），三层独立可测。
+2. **AI 重规划走 ReplanService**：AI 驱动的重规划复用 `ReplanService.redispatch()`，与异常驱动的重规划共享版本链逻辑。差异：AI 重规划不传 `event` 参数 → 自动重置货物状态为 `pending_pack` → `demo_mode=true` 完成全链路。
+3. **hybrid 模式权重合并**：DeepSeek 参数作为基础，手动 `weights` 覆盖匹配的 section 字段，支持部分覆盖。
+4. **系统上下文最小化**：DeepSeek 提示词注入待分配订单数 + 可用车辆数 + 历史方案指标（距离/时间/货物数/评分），不泄露车辆编号等敏感细节。
+5. **所有参数模式统一接口**：单一 `POST /api/ai/parse` 支持 AI/手动/混合/默认 四种参数来源 × 新建/重规划 两种执行目标 × 执行/dry-run 两种 write 模式，前端无需多接口调用。
 
 ### 演示数据规模
 
@@ -867,6 +1003,43 @@ alembic downgrade -1
 | 权限 | dispatcher 可触发重规划、manager 返回 403 | ✅ |
 | 数据完整性 | exception_events 表所有字段正常写入、状态流转正确 | ✅ |
 
+### 阶段 8 自测（AI 助手与收尾 F014）
+
+测试时间：2026-06-23，结果：**全部通过**
+
+#### AI 解析与调度测试
+
+| # | 场景 | 模式 | 耗时 | degraded | 全链路 | 结果 |
+|---|------|------|------|----------|--------|------|
+| T1 | dry-run（仅 AI 解析参数） | ai | 7.1s | ❌ false | N/A | ✅ |
+| T2 | AI 重规划 `GS20260623008` | ai+replan | 28.2s | ❌ false | ✅ | ✅ |
+| T3 | 手动权重重规划 `GS20260623001` | manual+replan | 2.3s | ❌ false | ✅ | ✅ |
+
+#### T2 全链路验证（AI 重规划）
+
+| 步骤 | 数据 | 状态 |
+|------|------|------|
+| F007 全局调度 | `GS20260623010` v2 (parent=GS20260623008) | ✅ |
+| F021 打包 | `PKG202606230015` (L0→L1), `PKG202606230016` (L1→L2) | ✅ |
+| F005 节点调度 | `BATCH20260623005` completed, L0→L1=1, L1→L2=1 | ✅ |
+| F005 派车 | `DISP20260623007` (phase=0), `DISP20260623008` (phase=1) | ✅ |
+| F006 路径规划 | `ROUTE20260623003` (22.15km), `ROUTE20260623004` (25.49km) | ✅ |
+
+#### 自测验收清单
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| AI 解析 | DeepSeek 自然语言 → 算法参数 JSON（含上下文注入） | ✅ |
+| AI 重规划 | 自然语言驱动版本化重规划（F007→F021→F005→F006） | ✅ |
+| 手动权重 | 纯手动参数（不走 DeepSeek）正确调度 | ✅ |
+| dry-run | `execute=false` 仅返回参数不写库 | ✅ |
+| DeepSeek 埋点 | 每次调用记录到 `log_events` | ✅ |
+| DeepSeek 降级 | API 失败 → fallback 默认参数 → `meta.degraded=true` | ✅ |
+| 批量重规划 | `schedule_codes` 多条逐条生成新版本 | ✅ |
+| P1 占位 | `/explain`、`/review`、`/analyze-exception` 返回 501 | ✅ |
+| 权限 | dispatcher 可调用、manager 返回 403 | ✅ |
+| 版本链 | 重规划后 version+1、parent_id 正确、is_replan=true | ✅ |
+
 ## 相关文档
 
 - [项目宪章](../../.codebuddy/CODEBUDDY.md)
@@ -884,3 +1057,4 @@ alembic downgrade -1
 - [阶段 5 API 契约文档](../../docs/api-contract/api-contract-phase5.md)（V1.0）
 - [阶段 7 开发文档](../../My_doc/阶段7开发文档.md)（V3.0）
 - [阶段 7 API 契约文档](../../docs/api-contract/api-contract-phase7.md)（V1.0）
+- [阶段 8 API 契约文档](../../docs/api-contract/api-contract-phase8.md)（V1.0）

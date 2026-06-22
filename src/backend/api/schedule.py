@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from services.schedule_service import ScheduleService
 from services.dispatch_service import DispatchService
+from services.log_service import LogService, build_global_schedule_event_data
 from schemas.dispatch import NodeDispatchRequest, DispatchBatchListResponse, DispatchBatchResponse
 from config.database import get_db
 from api.dependencies import get_current_user, require_dispatcher
@@ -47,19 +48,35 @@ async def create_global_schedule(
 ):
     """
     触发全局调度（F007 + F021）
-
+    
     需要角色：dispatcher
-
+    
     流程：
     1. F007 全局调度算法：为每票货物规划 L0 → L1 → L2 路径
     2. F021 打包算法：生成 L0→L1 和 L1→L2 包裹
     3. 单事务写入数据库并更新订单/货物状态
     """
-    return await ScheduleService.create_global_schedule(
+    result = await ScheduleService.create_global_schedule(
         order_codes=body.order_codes,
         algorithm=body.algorithm,
         db=db,
     )
+    
+    # 记录埋点
+    if result.get("code") == 0:  # 成功
+        LogService.log_event(
+            event_name="global_schedule",
+            user_id=current_user.id,
+            role=current_user.role,
+            event_data=build_global_schedule_event_data(
+                schedule_code=result["data"]["schedule_code"],
+                order_count=len(result["data"].get("order_codes", [])),
+                algorithm_type=body.algorithm
+            ),
+            db=db
+        )
+    
+    return result
 
 
 @router.get("/global")
@@ -115,11 +132,29 @@ async def create_node_dispatch(
     1. F005 节点调度算法：分配车辆与司机（L0→L1 和 L1→L2）
     2. 单事务写入数据库并更新包裹/货物/车辆/司机状态
     """
-    return await DispatchService.create_node_dispatch(
+    result = await DispatchService.create_node_dispatch(
         schedule_code=body.schedule_code,
         demo_mode=body.demo_mode,
         db=db,
     )
+    
+    # 记录埋点
+    if result.get("code") == 0:  # 成功
+        from services.log_service import build_node_dispatch_event_data
+        LogService.log_event(
+            event_name="node_dispatch",
+            user_id=current_user.id,
+            role=current_user.role,
+            event_data=build_node_dispatch_event_data(
+                batch_code=result["data"]["batch_code"],
+                package_count=result["data"].get("package_count", 0),
+                vehicle_count=result["data"].get("vehicle_count", 0),
+                algorithm_type="traditional"
+            ),
+            db=db
+        )
+    
+    return result
 
 
 @router.get("/batches")

@@ -35,6 +35,7 @@ class ScheduleService:
         db: Session,
         excluded_nodes: Optional[List[str]] = None,
         is_replan: bool = False,
+        custom_weights: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         编排 F007 → F021 → 写库（单事务）
@@ -52,6 +53,7 @@ class ScheduleService:
             db: 数据库会话
             excluded_nodes: 排除的节点编码列表（重规划时使用）
             is_replan: 是否为重规划模式（True=处理exception状态，False=处理pending状态）
+            custom_weights: 自定义权重参数（可选，优先级高于 algorithm_config.json）
 
         Returns:
             统一响应格式 dict
@@ -62,6 +64,7 @@ class ScheduleService:
                 order_codes, algorithm, db,
                 excluded_nodes=excluded_nodes,
                 is_replan=is_replan,
+                custom_weights=custom_weights,
             )
 
             # ── 2. F021 打包（纯计算，暂不传 schedule_id） ──

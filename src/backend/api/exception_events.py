@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from services.exception_service import ExceptionService
+from services.log_service import LogService, build_replan_event_data
 from schemas.exception_event import (
     CreateExceptionEventRequest,
     TriggerReplanRequest,
@@ -119,19 +120,35 @@ async def trigger_replan(
 ):
     """
     触发重规划（redispatch 或 reroute）
-
+    
     需要角色：dispatcher
-
+    
     根据请求体中的 action 选择重规划类型：
     - redispatch: 重新执行 F007→F021→F005→F006
     - reroute: 重新执行 F006 路径规划
     """
-    return await ExceptionService.trigger_replan(
+    result = await ExceptionService.trigger_replan(
         db=db,
         event_code=event_code,
         action=body.action,
         replan_reason=body.reason,
     )
+    
+    # 记录埋点
+    if result.get("code") == 0:  # 成功
+        LogService.log_event(
+            event_name="replan",
+            user_id=current_user.id,
+            role=current_user.role,
+            event_data=build_replan_event_data(
+                event_code=event_code,
+                reason=body.reason,
+                new_schedule_code=result["data"].get("schedule_code") if result.get("data") else None
+            ),
+            db=db
+        )
+    
+    return result
 
 
 @router.put("/{event_code}")

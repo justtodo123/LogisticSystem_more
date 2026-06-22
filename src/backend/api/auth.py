@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,7 @@ from services.auth_service import (
     create_access_token,
     authenticate_user,
 )
+from services.log_service import LogService, build_login_event_data
 from api.dependencies import get_current_user
 from models.user import User
 from models.log_event import LogEvent
@@ -17,7 +18,7 @@ security = HTTPBearer()
 
 
 @router.post("/login")
-async def login(credentials: UserLoginRequest, db: Session = Depends(get_db)):
+async def login(credentials: UserLoginRequest, request: Request, db: Session = Depends(get_db)):
     """登录接口"""
     user = authenticate_user(db, credentials.username, credentials.password)
     if not user:
@@ -37,6 +38,18 @@ async def login(credentials: UserLoginRequest, db: Session = Depends(get_db)):
         }
 
     access_token = create_access_token(username=user.username, role=user.role)
+    
+    # 记录登录埋点
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    LogService.log_event(
+        event_name="login",
+        user_id=user.id,
+        role=user.role,
+        event_data=build_login_event_data(ip=client_ip, user_agent=user_agent),
+        db=db
+    )
+    
     return {
         "code": 0,
         "message": "success",
