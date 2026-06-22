@@ -4,8 +4,8 @@
 
 ## 项目状态
 
-**当前阶段**：阶段 5（路径规划与可视化 F006）已完成  
-**下一阶段**：阶段 6（模拟送达 F013-1）
+**当前阶段**：阶段 6（模拟送达 F013-1）已完成  
+**下一阶段**：阶段 7（异常与重规划 F013）
 
 **阶段4最新更新**：
 - **阶段4实现范围**：仅完整实现 `demo_mode=true`，`demo_mode=false` 完整流程推迟到阶段6
@@ -21,6 +21,12 @@
 - ✅ **API层测试** (`tests/test_routes_api.py`)：6/6 通过，测试路径规划 API 端点
 - ✅ **集成测试** (`tests/test_routes_integration.py`)：4/4 通过，测试完整路径规划流程
 - ✅ **测试覆盖完整**：从算法层到服务层、API层再到集成测试，确保阶段5功能正确性
+
+**阶段6最新更新** (2026-06-18)：
+- ✅ **模拟送达功能完成**：实现状态流转逻辑，包括 L0→L1 和 L1→L2 送达
+- ✅ **功能边界清理**：移除自动触发逻辑（重新打包/F005/重新调度），模拟送达仅负责状态流转
+- ✅ **状态流转修复**：模拟送达第一次后货物状态从 `in_transit` → `packed`（F021 已生成 L1→L2 包裹，无需重新打包）
+- ✅ **单元测试完成**：7/7 测试通过，验证状态流转正确性
 
 ## 技术栈
 
@@ -273,12 +279,19 @@ src/backend/
 | `GET` | `/api/routes/{code}` | 路线详情（含 route_segments） | Bearer Token |
 | `GET` | `/api/routes/by-vehicle/{code}/coordinates` | 车辆路线坐标（供可视化） | Bearer Token |
 
-### 规划中（阶段 6-8）
+#### 模拟送达（阶段 6）
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| `POST` | `/api/simulation/deliver` | 模拟送达，驱动状态流转 | Bearer Token (dispatcher) |
+| `GET` | `/api/simulation/status/{batch_code}` | 查询送达状态和待重新打包货物（P1） | Bearer Token (dispatcher/manager) |
+| `POST` | `/api/simulation/deliver-batch` | 批量送达同一批次所有车辆（P1） | Bearer Token (dispatcher) |
+
+### 规划中（阶段 7-8）
 
 详见 `docs/` 目录下的 MVP 开发计划。核心接口包括：
 
 - **异常**：`GET/POST /api/exceptions`、`POST /api/exceptions/{code}/replan`
-- **模拟**：`POST /api/simulation/deliver`
 - **AI**：`POST /api/ai/parse`
 
 ## 统一响应格式
@@ -452,6 +465,20 @@ alembic downgrade -1
 ### 阶段 5 自测（路径规划 F006）
 
 测试时间：2026-06-14，更新：2026-06-18，结果：**35/35 通过（100%）**
+
+### 阶段 6 自测（模拟送达 F013-1）
+
+测试时间：2026-06-18，结果：**7/7 通过（100%）**
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| 模拟送达 | test_deliver_by_vehicle_success：按车辆送达 | ✅ |
+| 模拟送达 | test_deliver_by_package_success：按包裹送达 | ✅ |
+| 模拟送达 | test_deliver_all_success：全部送达 | ✅ |
+| 模拟送达 | test_deliver_no_packages_in_transit：无可送达包裹 | ✅ |
+| 模拟送达 | test_deliver_package_not_in_transit：包裹状态错误 | ✅ |
+| 模拟送达 | test_deliver_vehicle_not_busy：车辆状态无效 | ✅ |
+| 模拟送达 | test_deliver_nonexistent_vehicle：不存在的车辆 | ✅ |
 
 #### 算法层测试 (12/12)
 

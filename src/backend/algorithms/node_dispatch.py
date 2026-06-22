@@ -201,11 +201,13 @@ def _calculate_vehicle_score(
     return score
 
 
-def _dispatch_level(
+def dispatch_level(
     db: Session,
     schedule_id: int,
     level_phase: int,
-    config: dict
+    config: dict,
+    package_codes: Optional[List[str]] = None,
+    batch_id: Optional[int] = None
 ) -> Tuple[List[Dict[str, Any]], List[Package], List[Package]]:
     """
     执行一次节点调度（L0→L1 或 L1→L2）
@@ -217,6 +219,8 @@ def _dispatch_level(
         schedule_id: 全局调度方案ID
         level_phase: 层级阶段（0: L0→L1, 1: L1→L2）
         config: 算法配置
+        package_codes: 可选，指定要调度的包裹编码列表。如果提供，只调度这些包裹；否则调度所有符合条件的包裹
+        batch_id: 可选，如果提供，则自动将调度明细写入数据库（调用_write_dispatches）
     
     Returns:
         (dispatch_list, updated_packages, unallocated_packages)
@@ -236,10 +240,16 @@ def _dispatch_level(
         # AND to_node.sorting_center.level=1 AND packages.status='packed'
         
         # 简化查询：使用 relationships
-        packages = db.query(Package).filter(
+        query = db.query(Package).filter(
             Package.status == 'packed',
             Package.schedule_id == schedule_id
-        ).all()
+        )
+        
+        # 如果指定了package_codes，只查询这些包裹
+        if package_codes:
+            query = query.filter(Package.package_code.in_(package_codes))
+        
+        packages = query.all()
         
         # 在 Python 中过滤（更可靠）
         filtered_packages = []
@@ -264,7 +274,7 @@ def _dispatch_level(
         # L1→L2: from_node.node_type='sorting_center' AND from_node.sorting_center.level=1 
         # AND to_node.node_type='sorting_center' AND to_node.sorting_center.level=0 
         # AND packages.status='packed'
-        packages = (
+        query = (
             db.query(Package)
             .join(Node, Package.from_node_id == Node.id)
             .join(SortingCenter, Node.id == SortingCenter.node_id)
@@ -278,8 +288,13 @@ def _dispatch_level(
                 Package.status == 'packed',
                 Package.schedule_id == schedule_id
             )
-            .all()
         )
+        
+        # 如果指定了package_codes，只查询这些包裹
+        if package_codes:
+            query = query.filter(Package.package_code.in_(package_codes))
+        
+        packages = query.all()
     
     if not packages:
         return [], [], []  # dispatch_list, updated_packages, unallocated_packages
@@ -445,6 +460,10 @@ def _dispatch_level(
             elif retry_packages:
                 unallocated_packages.extend(retry_packages)
     
+    # 如果提供了batch_id，自动写入调度明细
+    if batch_id is not None:
+        _write_dispatches(db, batch_id, dispatch_list, level_phase)
+    
     return dispatch_list, updated_packages, unallocated_packages
 
 
@@ -590,7 +609,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
         raise ValueError("L0→L1没有可调度的包裹")
     
     try:
-        l0_l1_dispatches, _, unallocated_l0_l1 = _dispatch_level(db, schedule.id, 0, config)
+        l0_l1_dispatches, _, unallocated_l0_l1 = dispatch_level(db, schedule.id, 0, config)
     except Exception as e:
         raise ValueError(f"L0→L1调度失败：{str(e)}")
     
@@ -655,7 +674,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
     
     # 6. 执行 L1→L2 调度
     try:
-        l1_l2_dispatches, _, unallocated_l1_l2 = _dispatch_level(db, schedule.id, 1, config)
+        l1_l2_dispatches, _, unallocated_l1_l2 = dispatch_level(db, schedule.id, 1, config)
     except Exception as e:
         raise ValueError(f"L1→L2调度失败：{str(e)}")
     
@@ -683,7 +702,19 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
         "batch_code": batch.batch_code,
         "status": batch.status,
         "dispatches": l0_l1_dispatches + l1_l2_dispatches,
-        "unallocated_packages": [pkg.package_code for pkg in unallocated_l0_l1 + unallocated_l1_l2]
+        "unallocated_packages": [pkg.package_code for pkg in unallocated_l0_l1 + unallocated_l1_l2],
+        "level_info": {
+            "l0_to_l1": {
+                "dispatches": l0_l1_dispatches,
+                "unallocated_packages": [pkg.package_code for pkg in unallocated_l0_l1],
+                "has_unallocated": len(unallocated_l0_l1) > 0
+            },
+            "l1_to_l2": {
+                "dispatches": l1_l2_dispatches,
+                "unallocated_packages": [pkg.package_code for pkg in unallocated_l1_l2],
+                "has_unallocated": len(unallocated_l1_l2) > 0
+            }
+        }
     }
 
 
@@ -701,7 +732,7 @@ def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any
     """
     # 1. 执行 L0→L1 调度
     try:
-        l0_l1_dispatches, _, unallocated_l0_l1 = _dispatch_level(db, schedule.id, 0, config)
+        l0_l1_dispatches, _, unallocated_l0_l1 = dispatch_level(db, schedule.id, 0, config)
     except Exception as e:
         raise ValueError(f"L0→L1调度失败：{str(e)}")
     
@@ -735,6 +766,13 @@ def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any
         "status": batch.status,
         "dispatches": l0_l1_dispatches,
         "unallocated_packages": [pkg.package_code for pkg in unallocated_l0_l1],
+        "level_info": {
+            "l0_to_l1": {
+                "dispatches": l0_l1_dispatches,
+                "unallocated_packages": [pkg.package_code for pkg in unallocated_l0_l1],
+                "has_unallocated": len(unallocated_l0_l1) > 0
+            }
+        },
         "message": "L0→L1调度完成，请等待模拟送达后再次调用以执行L1→L2"
     }
 
@@ -754,7 +792,7 @@ def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict) 
     """
     # 1. 执行 L1→L2 调度
     try:
-        l1_l2_dispatches, _, unallocated_l1_l2 = _dispatch_level(db, schedule.id, 1, config)
+        l1_l2_dispatches, _, unallocated_l1_l2 = dispatch_level(db, schedule.id, 1, config)
     except Exception as e:
         raise ValueError(f"L1→L2调度失败：{str(e)}")
     
@@ -776,6 +814,13 @@ def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict) 
         "status": existing_batch.status,
         "dispatches": l1_l2_dispatches,
         "unallocated_packages": [pkg.package_code for pkg in unallocated_l1_l2],
+        "level_info": {
+            "l1_to_l2": {
+                "dispatches": l1_l2_dispatches,
+                "unallocated_packages": [pkg.package_code for pkg in unallocated_l1_l2],
+                "has_unallocated": len(unallocated_l1_l2) > 0
+            }
+        },
         "message": "L1→L2调度完成，整个节点调度流程结束"
     }
 
@@ -824,3 +869,6 @@ _batch_seq: int = 0
 _batch_date: str = ""
 _dispatch_seq: int = 0
 _dispatch_date: str = ""
+
+# 导出公共函数
+__all__ = ['run_node_dispatch', 'dispatch_level', 'update_state_after_f005', 'simulate_delivery_l0_to_l1', 'simulate_delivery_l1_to_l2']

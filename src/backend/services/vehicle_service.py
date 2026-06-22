@@ -179,6 +179,11 @@ class VehicleService:
                 vehicle.vehicle_type = vehicle_update.vehicle_type
             if vehicle_update.capability_tags is not None:
                 vehicle.capability_tags = vehicle_update.capability_tags
+            if vehicle_update.node_code is not None:
+                node = db.query(Node).filter(Node.node_code == vehicle_update.node_code).first()
+                if not node:
+                    return {"code": CODE_NODE_NOT_FOUND, "message": "节点不存在", "data": None}
+                vehicle.node_id = node.id
             if vehicle_update.last_arrived_node_code is not None:
                 last_arrived_node = db.query(Node).filter(Node.node_code == vehicle_update.last_arrived_node_code).first()
                 if not last_arrived_node:

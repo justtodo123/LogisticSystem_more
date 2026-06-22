@@ -12,7 +12,8 @@ from .global_schedule import GlobalSchedule
 from .dispatch_batch import DispatchBatch
 from .node_dispatch import NodeDispatch
 from .route import Route
+from .exception_event import ExceptionEvent
 
 __all__ = ["User", "LogEvent", "Node", "StorageCenter", "SortingCenter",
            "Order", "Goods", "Package", "Vehicle", "Driver", "GlobalSchedule",
-           "DispatchBatch", "NodeDispatch", "Route"]
+           "DispatchBatch", "NodeDispatch", "Route", "ExceptionEvent"]

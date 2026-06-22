@@ -132,7 +132,7 @@ def repack_at_l1(
     l1_node_code: str,
     l2_node_code: str,
     schedule_id: int = None
-) -> List[Package]:
+) -> Dict[str, Any]:
     """
     在L1分拣中心重新打包
     
@@ -148,7 +148,7 @@ def repack_at_l1(
         schedule_id: 全局调度方案ID（可选）
     
     Returns:
-        新创建的包裹列表
+        字典，包含新创建的包裹列表和层级信息
     """
     from datetime import datetime
     
@@ -173,60 +173,113 @@ def repack_at_l1(
     if not l1_node or not l2_node:
         return []
     
-    # 4. 计算总重量和总体积
-    total_weight = sum(float(g.weight) for g in goods_list)
-    total_volume = sum(float(g.volume) for g in goods_list)
+    # 4. 检查是否已有F021生成的L1→L2包裹（重用，避免重复）
+    existing_package = None
+    if schedule_id:
+        existing_package = db.query(Package).filter(
+            Package.schedule_id == schedule_id,
+            Package.status == 'packed',
+            Package.from_node_id == l1_node.id,
+            Package.to_node_id == l2_node.id
+        ).first()
     
-    # 5. 生成包裹编号
-    today_str = datetime.now().strftime("%Y%m%d")
-    prefix = f"PKG{today_str}"
-    
-    max_record = (
-        db.query(Package.package_code)
-        .filter(Package.package_code.like(f"{prefix}%"))
-        .order_by(Package.package_code.desc())
-        .first()
-    )
-    
-    if max_record and max_record[0]:
-        seq = int(max_record[0][-4:]) + 1
+    if existing_package:
+        # 重用现有包裹：更新goods_items和重量体积
+        existing_goods_items = existing_package.goods_items
+        if isinstance(existing_goods_items, str):
+            existing_goods_items = json.loads(existing_goods_items)
+        
+        # 添加新的货物到现有包裹
+        new_goods_items = existing_goods_items + [
+            {"goods_code": g.goods_code, "order_code": order_code}
+            for g in goods_list
+        ]
+        existing_package.goods_items = new_goods_items
+        
+        # 更新重量和体积
+        total_weight = sum(float(g.weight) for g in goods_list)
+        total_volume = sum(float(g.volume) for g in goods_list)
+        existing_package.weight = round(float(existing_package.weight) + total_weight, 3)
+        existing_package.volume = round(float(existing_package.volume) + total_volume, 3)
+        
+        db.flush()
+        
+        # 更新货物状态
+        for goods in goods_list:
+            goods.status = 'packed'
+        
+        db.flush()
+        
+        # 返回结果（包含层级信息）
+        return {
+            "new_packages": [existing_package],
+            "level_info": {
+                "level_phase": 1,  # L1→L2
+                "description": "L1→L2重新打包（重用现有包裹）"
+            }
+        }
     else:
-        seq = 1
-    
-    package_code = f"{prefix}{seq:04d}"
-    
-    # 6. 创建goods_items
-    goods_items = [
-        {"goods_code": g.goods_code, "order_code": order_code}
-        for g in goods_list
-    ]
-    
-    # 7. 创建新包裹
-    new_package = Package(
-        package_code=package_code,
-        weight=round(total_weight, 3),
-        volume=round(total_volume, 3),
-        status="packed",
-        from_node_id=l1_node.id,
-        to_node_id=l2_node.id,
-        from_longitude=l1_node.longitude,
-        from_latitude=l1_node.latitude,
-        to_longitude=l2_node.longitude,
-        to_latitude=l2_node.latitude,
-        goods_items=goods_items,
-        schedule_id=schedule_id,
-    )
-    
-    db.add(new_package)
-    db.flush()
-    
-    # 8. 更新货物状态
-    for goods in goods_list:
-        goods.status = 'packed'
-    
-    db.flush()
-    
-    return [new_package]
+        # 5. 计算总重量和总体积
+        total_weight = sum(float(g.weight) for g in goods_list)
+        total_volume = sum(float(g.volume) for g in goods_list)
+        
+        # 6. 生成包裹编号
+        today_str = datetime.now().strftime("%Y%m%d")
+        prefix = f"PKG{today_str}"
+        
+        max_record = (
+            db.query(Package.package_code)
+            .filter(Package.package_code.like(f"{prefix}%"))
+            .order_by(Package.package_code.desc())
+            .first()
+        )
+        
+        if max_record and max_record[0]:
+            seq = int(max_record[0][-4:]) + 1
+        else:
+            seq = 1
+        
+        package_code = f"{prefix}{seq:04d}"
+        
+        # 7. 创建goods_items
+        goods_items = [
+            {"goods_code": g.goods_code, "order_code": order_code}
+            for g in goods_list
+        ]
+        
+        # 8. 创建新包裹
+        new_package = Package(
+            package_code=package_code,
+            weight=round(total_weight, 3),
+            volume=round(total_volume, 3),
+            status="packed",
+            from_node_id=l1_node.id,
+            to_node_id=l2_node.id,
+            from_longitude=l1_node.longitude,
+            from_latitude=l1_node.latitude,
+            to_longitude=l2_node.longitude,
+            to_latitude=l2_node.latitude,
+            goods_items=goods_items,
+            schedule_id=schedule_id,
+        )
+        
+        db.add(new_package)
+        db.flush()
+        
+        # 9. 更新货物状态
+        for goods in goods_list:
+            goods.status = 'packed'
+        
+        db.flush()
+        
+        # 10. 返回结果（包含层级信息）
+        return {
+            "new_packages": [new_package],
+            "level_info": {
+                "level_phase": 1,  # L1→L2
+                "description": "L1→L2重新打包"
+            }
+        }
 
 
 def simulate_delivery_l1_to_l2(

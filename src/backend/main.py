@@ -13,6 +13,8 @@ from api.drivers import router as drivers_router
 from api.nodes import router as nodes_router
 from api.schedule import router as schedule_router
 from api.routes import router as routes_router
+from api.simulation import router as simulation_router
+from api.exception_events import router as exceptions_router
 from utils.response import error_response
 
 
@@ -62,6 +64,10 @@ app.include_router(schedule_router)
 
 # 注册路径规划路由
 app.include_router(routes_router)
+app.include_router(simulation_router)
+
+# 注册异常管理路由
+app.include_router(exceptions_router)
 
 
 # ─── 全局异常处理器 ───────────────────────────────────────────────
