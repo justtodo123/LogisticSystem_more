@@ -1,18 +1,21 @@
 import request from './request'
+import type { ApiListParams, PaginatedResult } from '@/types/common'
 import type {
   RouteCoordinates,
   RouteDetailResponse,
   GetVehicleRouteOptions,
+  RouteListItem,
   RoutePlanResult,
 } from '@/types/route'
 import { useMockRoutes } from '@/utils/env'
 import { buildMockRouteCoordinates } from '@/utils/mock-route-builder'
 import { normalizeFromRouteDetail } from '@/utils/route-normalize'
+import { listMockRoutes } from '@/utils/mock-exception-store'
 
 let staticMockCache: Record<string, RouteCoordinates> | null = null
 
 interface RouteListResponse {
-  items: Array<{ route_code: string }>
+  items: RouteListItem[]
   total: number
 }
 
@@ -25,6 +28,17 @@ async function loadStaticMockCache(): Promise<Record<string, RouteCoordinates>> 
   }
   staticMockCache = (await res.json()) as Record<string, RouteCoordinates>
   return staticMockCache
+}
+
+export async function listRoutes(
+  params: ApiListParams & { batch_code?: string; vehicle_code?: string } = {},
+): Promise<PaginatedResult<RouteListItem>> {
+  if (useMockRoutes()) {
+    return listMockRoutes(params)
+  }
+
+  const { data } = await request.get<RouteListResponse>('/routes', { params })
+  return data
 }
 
 export async function getRouteDetail(routeCode: string): Promise<RouteDetailResponse> {

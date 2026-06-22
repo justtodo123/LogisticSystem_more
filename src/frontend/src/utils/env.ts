@@ -21,3 +21,7 @@ export function useMockRoutes(): boolean {
 export function useMockSimulation(): boolean {
   return import.meta.env.VITE_USE_MOCK_SIMULATION === 'true'
 }
+
+export function useMockExceptions(): boolean {
+  return import.meta.env.VITE_USE_MOCK_EXCEPTIONS === 'true'
+}

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import DispatchBatchPanel from '@/components/schedule/DispatchBatchPanel.vue'
 import GoodsPathTable from '@/components/schedule/GoodsPathTable.vue'
@@ -11,8 +12,10 @@ import { useGlobalSchedule } from '@/composables/useGlobalSchedule'
 import { useNodeDispatch } from '@/composables/useNodeDispatch'
 import { useRouteVisualization } from '@/composables/useRouteVisualization'
 import { useSimulationDelivery } from '@/composables/useSimulationDelivery'
+import type { GlobalScheduleSummary } from '@/types/schedule'
 
 const authStore = useAuthStore()
+const route = useRoute()
 
 const {
   schedules,
@@ -64,8 +67,25 @@ const {
   onSuccess: refreshDispatch,
 })
 
+function scheduleOptionLabel(item: GlobalScheduleSummary): string {
+  const parts: string[] = [item.schedule_code]
+  if (item.version != null) {
+    parts.push(`v${item.version}`)
+  }
+  if (item.is_replan) {
+    parts.push('重规划')
+  }
+  if (item.created_at) {
+    parts.push(item.created_at)
+  }
+  return parts.join(' · ')
+}
+
 onMounted(() => {
-  void loadSchedules()
+  const scheduleFromQuery = route.query.schedule
+  const code =
+    typeof scheduleFromQuery === 'string' ? scheduleFromQuery : undefined
+  void loadSchedules(code)
 })
 </script>
 
@@ -95,15 +115,31 @@ onMounted(() => {
           clearable
           filterable
           :loading="listLoading"
-          style="width: 240px"
+          style="width: 320px"
           :disabled="!schedules.length"
         >
           <el-option
             v-for="item in schedules"
             :key="item.schedule_code"
-            :label="`${item.schedule_code}（${item.created_at ?? ''}）`"
+            :label="scheduleOptionLabel(item)"
             :value="item.schedule_code"
-          />
+          >
+            <span>{{ item.schedule_code }}</span>
+            <el-tag
+              v-if="item.is_replan"
+              type="warning"
+              size="small"
+              style="margin-left: 8px"
+            >
+              重规划
+            </el-tag>
+            <span
+              v-if="item.version != null"
+              style="margin-left: 6px; color: #909399; font-size: 12px"
+            >
+              v{{ item.version }}
+            </span>
+          </el-option>
         </el-select>
       </div>
     </div>
