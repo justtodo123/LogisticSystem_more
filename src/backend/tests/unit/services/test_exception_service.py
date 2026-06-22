@@ -263,7 +263,7 @@ class TestReplanService:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
-    async def test_redispatch_success(self, db_session, test_nodes, test_orders, test_goods):
+    async def test_redispatch_success(self, db_session, test_nodes, test_orders, test_goods, test_vehicles, test_drivers):
         """重调度成功：验证版本链更新"""
         # 1. 创建原调度方案
         original = GlobalSchedule(
@@ -279,15 +279,12 @@ class TestReplanService:
             is_replan=False,
         )
         db_session.add(original)
-        # 重规划需要订单状态为 exception（模拟异常事件后状态已流转）
+        # AI-replan 分支（无 event）：将订单/货物设为 AI 重规划可识别的状态
+        # 留 goods 为 pending_pack，避免 synchronize_session=False 导致的会话缓存问题
         for order_code in original.order_codes:
             order = test_orders.get(order_code)
             if order:
-                order.status = "exception"
-                # 同步更新关联货物状态
-                for goods in order.goods:
-                    if goods.status in ["pending_pack"]:
-                        goods.status = "exception"
+                order.status = "delivering"
         db_session.commit()
 
         # 2. 调用 redispatch（将触发 ScheduleService + DispatchService）
@@ -586,7 +583,7 @@ class TestExceptionTriggerReplan:
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_trigger_replan_redispatch_success(
-        self, db_session, test_nodes, test_orders, test_goods
+        self, db_session, test_nodes, test_orders, test_goods, test_vehicles, test_drivers
     ):
         """触发 redispatch 成功"""
         # 创建原调度方案

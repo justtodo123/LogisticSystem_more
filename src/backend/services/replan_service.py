@@ -168,7 +168,7 @@ class ReplanService:
                 demo_mode=not has_event,  # AI重规划自动完成全链路；异常重规划仅生成方案
                 db=db,
                 excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
-                is_replan=has_event,  # 仅异常驱动时查找 exception 包裹；AI 重规划查找普通 packed 包裹
+                is_replan=False,  # 新方案包裹始终为 packed，不需要查询 exception 包裹
                 custom_weights=custom_weights,  # AI驱动的自定义权重
             )
 
