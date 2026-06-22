@@ -15,7 +15,12 @@ from sqlalchemy import desc
 from models.exception_event import ExceptionEvent
 from models.global_schedule import GlobalSchedule
 from models.node import Node
+from models.node_dispatch import NodeDispatch
 from models.route import Route
+from models.order import Order
+from models.goods import Goods
+from models.package import Package
+from models.vehicle import Vehicle
 from schemas.exception_event import (
     CreateExceptionEventRequest,
     ExceptionEventResponse,
@@ -149,6 +154,50 @@ class ExceptionService:
                     for pkg in packages:
                         if pkg.status in ["packed", "in_transit"]:
                             pkg.status = "exception"
+
+            # 5.5 处理车辆异常（如果 target_type 是 vehicle）
+            if data.target_type == "vehicle" and data.target_code:
+                vehicle = db.query(Vehicle).filter(
+                    Vehicle.vehicle_code == data.target_code
+                ).first()
+                if vehicle:
+                    # 将车辆状态设为 disabled
+                    vehicle.status = "disabled"
+
+                    # 查询该车辆关联的所有调度明细（dispatch_id 列表）
+                    dispatches = db.query(NodeDispatch).filter(
+                        NodeDispatch.vehicle_id == vehicle.id
+                    ).all()
+                    dispatch_ids = [d.id for d in dispatches]
+
+                    if dispatch_ids:
+                        # 批量查询关联包裹，避免 N+1
+                        packages = db.query(Package).filter(
+                            Package.dispatch_id.in_(dispatch_ids)
+                        ).all()
+
+                        # 收集需要更新的货物编码
+                        all_goods_items = []
+                        for pkg in packages:
+                            if pkg.status in ["packed", "in_transit"]:
+                                pkg.status = "exception"
+                                if pkg.goods_items:
+                                    all_goods_items.extend(pkg.goods_items)
+
+                        # 批量更新关联货物状态
+                        if all_goods_items:
+                            goods_codes = [
+                                item.get("goods_code")
+                                for item in all_goods_items
+                                if item.get("goods_code")
+                            ]
+                            if goods_codes:
+                                affected_goods = db.query(Goods).filter(
+                                    Goods.goods_code.in_(goods_codes),
+                                    Goods.status.in_(["packed", "in_transit"]),
+                                ).all()
+                                for goods in affected_goods:
+                                    goods.status = "exception"
 
             # 7. 写入数据库
             event = ExceptionEvent(

@@ -105,14 +105,17 @@ def global_schedule(
     algorithm: str,
     db: Session,
     excluded_nodes: Optional[List[str]] = None,
+    is_replan: bool = False,
 ) -> Dict[str, Any]:
     """
     F007 全局调度算法
 
     Args:
-        order_codes: 订单编号列表（可选，None 则处理所有 pending 订单）
+        order_codes: 订单编号列表（可选，None 则处理所有 pending/exception 订单）
         algorithm: 算法类型（"traditional" 或 "deepseek"，阶段3仅实现 traditional）
         db: 数据库会话
+        excluded_nodes: 排除的节点编码列表（重规划时使用）
+        is_replan: 是否为重规划模式（True=只调度exception订单，False=只调度pending订单）
 
     Returns:
         dict: {
@@ -139,10 +142,12 @@ def global_schedule(
     w3 = weights["w3_packages"]
 
     # ── 1. 查询订单 ──
-    # 允许 pending 和 exception 状态的订单参与调度
-    # - pending: 正常待调度订单
-    # - exception: 异常重规划时需要重新调度的订单
-    query = db.query(Order).filter(Order.status.in_(["pending", "exception"]))
+    # 正常调度：只处理 pending 订单
+    # 重规划调度：只处理 exception 订单
+    if is_replan:
+        query = db.query(Order).filter(Order.status == "exception")
+    else:
+        query = db.query(Order).filter(Order.status == "pending")
     if order_codes:
         query = query.filter(Order.order_code.in_(order_codes))
     orders = query.all()

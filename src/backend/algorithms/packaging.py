@@ -67,6 +67,7 @@ def packaging(
     schedule_result: Dict[str, Any],
     schedule_id: int,
     db: Session,
+    is_replan: bool = False,
 ) -> List[Package]:
     """
     F021 打包算法
@@ -79,6 +80,7 @@ def packaging(
         schedule_result: F007 输出的调度结果，必须包含 "goods_schedules"
         schedule_id: 关联的 global_schedules.id（可为 None，由调用方后续赋值）
         db: 数据库会话
+        is_replan: 是否为重规划模式（True=允许打包 exception 状态货物，False=只打包 pending_pack 货物）
 
     Returns:
         Package 对象列表（未写入数据库，由调用方统一写入）
@@ -93,13 +95,14 @@ def packaging(
     packages: List[Package] = []
 
     # 预加载 goods_code → Goods 映射（避免逐个查询）
-    # 只加载待打包状态的货物，防止已打包/运输中/已送达的货物被重复打包
+    # 正常模式：只加载待打包状态的货物，防止已打包/运输中/已送达的货物被重复打包
+    # 重规划模式：加载异常状态的货物
     all_goods_codes = [gs["goods_code"] for gs in goods_schedules]
     goods_map: Dict[str, Goods] = {}
     for gc in all_goods_codes:
         goods = db.query(Goods).filter(
             Goods.goods_code == gc,
-            Goods.status == "pending_pack"  # 只允许待打包状态的货物
+            Goods.status == ("exception" if is_replan else "pending_pack")
         ).first()
         if goods:
             goods_map[gc] = goods

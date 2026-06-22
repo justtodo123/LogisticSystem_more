@@ -277,6 +277,15 @@ class TestReplanService:
             is_replan=False,
         )
         db_session.add(original)
+        # 重规划需要订单状态为 exception（模拟异常事件后状态已流转）
+        for order_code in original.order_codes:
+            order = test_orders.get(order_code)
+            if order:
+                order.status = "exception"
+                # 同步更新关联货物状态
+                for goods in order.goods:
+                    if goods.status in ["pending_pack"]:
+                        goods.status = "exception"
         db_session.commit()
 
         # 2. 调用 redispatch（将触发 ScheduleService + DispatchService）
@@ -592,6 +601,14 @@ class TestExceptionTriggerReplan:
             is_replan=False,
         )
         db_session.add(original)
+        # 重规划需要订单状态为 exception（模拟异常事件后状态已流转）
+        for order_code in original.order_codes:
+            order = test_orders.get(order_code)
+            if order:
+                order.status = "exception"
+                for goods in order.goods:
+                    if goods.status in ["pending_pack"]:
+                        goods.status = "exception"
         db_session.commit()
 
         # 创建异常事件

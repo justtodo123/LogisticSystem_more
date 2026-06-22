@@ -34,6 +34,7 @@ class ScheduleService:
         algorithm: str,
         db: Session,
         excluded_nodes: Optional[List[str]] = None,
+        is_replan: bool = False,
     ) -> Dict[str, Any]:
         """
         编排 F007 → F021 → 写库（单事务）
@@ -41,14 +42,16 @@ class ScheduleService:
         流程（与 API 契约 api-contract-phase3.md §3.2 一致）：
         1. 调用 F007 全局调度算法（纯计算，不写状态）
         2. 调用 F021 打包算法（纯计算，生成 pending_pack 包裹）
-        3a. F007 完成 → 写入 global_schedule + 订单 pending → delivering
-        3b. F021 完成 → 写入 packages(pending_pack→packed) + 货物 pending_pack → packed
+        3a. F007 完成 → 写入 global_schedule + 订单 pending/exception → delivering
+        3b. F021 完成 → 写入 packages(pending_pack/exception→packed) + 货物 pending_pack/exception → packed
         4. db.commit() 单事务提交
 
         Args:
             order_codes: 订单编号列表（可选）
             algorithm: 算法类型
             db: 数据库会话
+            excluded_nodes: 排除的节点编码列表（重规划时使用）
+            is_replan: 是否为重规划模式（True=处理exception状态，False=处理pending状态）
 
         Returns:
             统一响应格式 dict
@@ -57,11 +60,12 @@ class ScheduleService:
             # ── 1. F007 全局调度（纯计算） ──
             schedule_result = global_schedule(
                 order_codes, algorithm, db,
-                excluded_nodes=excluded_nodes
+                excluded_nodes=excluded_nodes,
+                is_replan=is_replan,
             )
 
             # ── 2. F021 打包（纯计算，暂不传 schedule_id） ──
-            packages = packaging(schedule_result, None, db)
+            packages = packaging(schedule_result, None, db, is_replan=is_replan)
 
             # ── 3. 单事务写入 ──
             global_schedule_obj = GlobalSchedule(
@@ -74,12 +78,12 @@ class ScheduleService:
                 score=schedule_result["score"],
                 algorithm_type=algorithm,
                 version=1,
-                is_replan=False,
+                is_replan=is_replan,
             )
             db.add(global_schedule_obj)
             db.flush()  # 获取 global_schedule_obj.id
 
-            # ── 3a. F007 完成 → 更新订单状态：pending → delivering ──
+            # ── 3a. F007 完成 → 更新订单状态：pending→delivering（正常）或 exception→delivering（重规划） ──
             for order_code in schedule_result["order_codes"]:
                 order = db.query(Order).filter(Order.order_code == order_code).first()
                 if order:
@@ -88,10 +92,10 @@ class ScheduleService:
             # ── 3b. 写入 packages + F021 完成 → 更新货物和包裹状态 ──
             for pkg in packages:
                 pkg.schedule_id = global_schedule_obj.id
-                pkg.status = "packed"  # F021 打包完成：pending_pack → packed
+                pkg.status = "packed"  # F021 打包完成：pending_pack/exception → packed
                 db.add(pkg)
 
-            # F021 完成后更新货物状态：pending_pack → packed
+            # F021 完成后更新货物状态：pending_pack→packed（正常）或 exception→packed（重规划）
             # 从生成的包裹中提取货物代码，只更新真正被打包的货物（防御性编程）
             packed_goods_codes = set()
             for pkg in packages:
@@ -100,8 +104,12 @@ class ScheduleService:
             
             for gc in packed_goods_codes:
                 goods = db.query(Goods).filter(Goods.goods_code == gc).first()
-                if goods and goods.status == "pending_pack":  # 双重保险
-                    goods.status = "packed"
+                if goods:
+                    # 正常调度时只更新 pending_pack 货物，重规划时只更新 exception 货物
+                    if is_replan and goods.status == "exception":
+                        goods.status = "packed"
+                    elif not is_replan and goods.status == "pending_pack":
+                        goods.status = "packed"
 
             db.commit()
 
@@ -113,7 +121,7 @@ class ScheduleService:
                 "score": schedule_result["score"],
                 "package_count": len(packages),
                 "version": 1,
-                "is_replan": False,
+                "is_replan": is_replan,
             })
 
         except ValueError as e:

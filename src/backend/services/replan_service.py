@@ -8,9 +8,10 @@
 
 阶段7新增。
 """
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 
+from models.exception_event import ExceptionEvent
 from models.global_schedule import GlobalSchedule
 from models.route import Route
 from models.node_dispatch import NodeDispatch
@@ -78,6 +79,7 @@ class ReplanService:
                 algorithm=algorithm,
                 db=db,
                 excluded_nodes=excluded_nodes if excluded_nodes else None,
+                is_replan=True,  # 重规划模式：只调度 exception 订单
             )
 
             # 检查调度是否成功
@@ -99,13 +101,14 @@ class ReplanService:
                 db.commit()
 
             # 5. 继续调用节点调度（获取该方案的完整结果）
-            #    注：节点调度可能因多种原因失败，这里只做 best-effort
+            #    注：重规划只生成方案，不走 demo_mode 自动送达
             from services.dispatch_service import DispatchService
 
             dispatch_result = await DispatchService.create_node_dispatch(
                 schedule_code=new_schedule_code,
-                demo_mode=True,  # 重规划使用 demo_mode 跳过送达等待
+                demo_mode=False,  # 重规划只生成方案，不模拟送达
                 db=db,
+                is_replan=True,  # 重规划模式：只调度 exception 包裹
             )
 
             # 提取批次编码（节点调度可能失败，不影响主结果）
