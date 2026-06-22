@@ -132,11 +132,29 @@ async def create_node_dispatch(
     1. F005 节点调度算法：分配车辆与司机（L0→L1 和 L1→L2）
     2. 单事务写入数据库并更新包裹/货物/车辆/司机状态
     """
-    return await DispatchService.create_node_dispatch(
+    result = await DispatchService.create_node_dispatch(
         schedule_code=body.schedule_code,
         demo_mode=body.demo_mode,
         db=db,
     )
+    
+    # 记录埋点
+    if result.get("code") == 0:  # 成功
+        from services.log_service import build_node_dispatch_event_data
+        LogService.log_event(
+            event_name="node_dispatch",
+            user_id=current_user.id,
+            role=current_user.role,
+            event_data=build_node_dispatch_event_data(
+                batch_code=result["data"]["batch_code"],
+                package_count=result["data"].get("package_count", 0),
+                vehicle_count=result["data"].get("vehicle_count", 0),
+                algorithm_type="traditional"
+            ),
+            db=db
+        )
+    
+    return result
 
 
 @router.get("/batches")
