@@ -86,6 +86,7 @@ export function useNodeDispatch(selectedCode: Ref<string>) {
       })
       await loadBatches(selectedCode.value)
       selectedBatchCode.value = result.batch_code
+      await loadBatchDetail(result.batch_code)
       ElMessage.success(
         `节点间调度已生成：L0→L1 ${result.l0_l1_dispatch_count} 辆，L1→L2 ${result.l1_l2_dispatch_count} 辆`,
       )
