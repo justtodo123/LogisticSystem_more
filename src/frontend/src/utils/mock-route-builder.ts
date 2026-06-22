@@ -1,5 +1,6 @@
 import type { NodeDispatchItem } from '@/types/dispatch'
-import type { RouteCoordinates, RouteNodePoint, RoutePackagePoint, RouteSegment } from '@/types/route'
+import type { RouteCoordinates, RouteSegment } from '@/types/route'
+import { buildRouteOverlayFromSegments } from '@/utils/route-normalize'
 
 /** 武汉演示区域节点坐标（与 init_demo_data 量级一致） */
 const NODE_COORDS: Record<string, { lat: number; lng: number }> = {
@@ -51,8 +52,6 @@ export function buildMockRouteCoordinates(
   vehicleCode: string,
   dispatch: NodeDispatchItem,
 ): RouteCoordinates {
-  const nodeMap = new Map<string, RouteNodePoint>()
-  const packages: RoutePackagePoint[] = []
   const segments: RouteSegment[] = []
   let totalDistance = 0
 
@@ -62,23 +61,6 @@ export function buildMockRouteCoordinates(
     const from = resolveNodeCoord(task.from_node_code)
     const to = resolveNodeCoord(task.to_node_code)
 
-    if (!nodeMap.has(task.from_node_code)) {
-      nodeMap.set(task.from_node_code, {
-        node_code: task.from_node_code,
-        latitude: from.lat,
-        longitude: from.lng,
-        role: task.from_node_code.startsWith('SC') ? 'depot' : 'hub',
-      })
-    }
-    if (!nodeMap.has(task.to_node_code)) {
-      nodeMap.set(task.to_node_code, {
-        node_code: task.to_node_code,
-        latitude: to.lat,
-        longitude: to.lng,
-        role: task.to_node_code.startsWith('L2') ? 'destination' : 'hub',
-      })
-    }
-
     segments.push({
       road_name: '虚拟路段',
       start_lng: from.lng,
@@ -87,21 +69,15 @@ export function buildMockRouteCoordinates(
       end_lat: to.lat,
     })
     totalDistance += haversineKm(from.lat, from.lng, to.lat, to.lng)
-
-    for (const pkg of task.package_codes) {
-      packages.push({
-        package_code: pkg,
-        latitude: to.lat + 0.002,
-        longitude: to.lng + 0.002,
-      })
-    }
   }
+
+  const overlay = buildRouteOverlayFromSegments(segments, dispatch)
 
   return {
     vehicle_code: vehicleCode,
     route_code: `RT-MOCK-${dispatch.dispatch_code}`,
-    nodes: [...nodeMap.values()],
-    packages,
+    nodes: overlay.nodes,
+    packages: overlay.packages,
     segments,
     total_distance: Math.round(totalDistance * 10) / 10,
     total_time: Math.round((totalDistance / 40) * 60),

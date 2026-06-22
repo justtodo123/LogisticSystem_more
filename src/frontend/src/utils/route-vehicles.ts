@@ -1,8 +1,6 @@
 import type { DispatchBatchDetail } from '@/types/dispatch'
 import type { NodeDispatchItem } from '@/types/dispatch'
 
-export const MAX_ROUTE_VEHICLES = 10
-
 export interface RouteVehicleOption {
   vehicle_code: string
   dispatch: NodeDispatchItem

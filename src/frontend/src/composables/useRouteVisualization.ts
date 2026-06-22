@@ -7,7 +7,6 @@ import type { RouteCoordinates, RoutePackagePoint, SelectedPackageDetail } from 
 import { useMockRoutes } from '@/utils/env'
 import {
   listRouteVehicles,
-  MAX_ROUTE_VEHICLES,
   type RouteVehicleOption,
 } from '@/utils/route-vehicles'
 
@@ -33,13 +32,7 @@ export function useRouteVisualization(batchDetail: Ref<DispatchBatchDetail | nul
   }
 
   function syncVehicles(): void {
-    const list = listRouteVehicles(batchDetail.value)
-    if (list.length > MAX_ROUTE_VEHICLES) {
-      ElMessage.warning(`最多展示 ${MAX_ROUTE_VEHICLES} 辆车的路线，已截断`)
-      vehicles.value = list.slice(0, MAX_ROUTE_VEHICLES)
-    } else {
-      vehicles.value = list
-    }
+    vehicles.value = listRouteVehicles(batchDetail.value)
     resetRouteState()
     if (vehicles.value.length > 0) {
       void selectVehicle(vehicles.value[0].vehicle_code, 0)

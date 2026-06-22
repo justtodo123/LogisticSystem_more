@@ -48,8 +48,45 @@ const panY = ref(0)
 const dragging = ref(false)
 const lastPointer = { x: 0, y: 0 }
 
+const NODE_RADIUS = 8
+const ARROW_INSET = 10
+
+function clipSegmentEndpoints(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): { x1: number; y1: number; x2: number; y2: number } | null {
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const len = Math.hypot(dx, dy)
+  if (len < 1) return null
+
+  const ux = dx / len
+  const uy = dy / len
+  const startPad = Math.min(NODE_RADIUS, len / 2 - 1)
+  const endPad = Math.min(ARROW_INSET, len / 2 - 1)
+
+  return {
+    x1: x1 + ux * startPad,
+    y1: y1 + uy * startPad,
+    x2: x2 - ux * endPad,
+    y2: y2 - uy * endPad,
+  }
+}
+
 const viewTransform = computed(
   () => `translate(${panX.value} ${panY.value}) scale(${scale.value})`,
+)
+
+const drawableSegments = computed(() =>
+  props.projected.segments
+    .map((seg) => {
+      const clipped = clipSegmentEndpoints(seg.x1, seg.y1, seg.x2, seg.y2)
+      if (!clipped) return null
+      return { ...seg, ...clipped }
+    })
+    .filter((seg): seg is NonNullable<typeof seg> => seg !== null),
 )
 
 function clampScale(value: number): number {
@@ -128,20 +165,20 @@ onBeforeUnmount(() => {
       <defs>
         <marker
           :id="markerId"
-          markerWidth="8"
-          markerHeight="8"
-          refX="7"
-          refY="4"
+          markerWidth="10"
+          markerHeight="10"
+          refX="9"
+          refY="5"
           orient="auto"
-          markerUnits="strokeWidth"
+          markerUnits="userSpaceOnUse"
         >
-          <path d="M0,0 L8,4 L0,8 Z" :fill="strokeColor" />
+          <path d="M0,0 L10,5 L0,10 Z" :fill="strokeColor" />
         </marker>
       </defs>
 
       <g :transform="viewTransform">
         <line
-          v-for="(seg, idx) in projected.segments"
+          v-for="(seg, idx) in drawableSegments"
           :key="`seg-${idx}`"
           :x1="seg.x1"
           :y1="seg.y1"

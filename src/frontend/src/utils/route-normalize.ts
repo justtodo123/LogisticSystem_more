@@ -78,6 +78,77 @@ export function buildRouteOverlayFromDispatch(
   return { nodes: [...nodeMap.values()], packages }
 }
 
+function nodeRole(nodeCode: string): string | undefined {
+  if (nodeCode.startsWith('SC')) return 'depot'
+  if (nodeCode.startsWith('L2')) return 'destination'
+  if (nodeCode.startsWith('L1') || nodeCode.startsWith('SO')) return 'hub'
+  return undefined
+}
+
+function upsertNode(
+  nodeMap: Map<string, RouteNodePoint>,
+  nodeCode: string,
+  lat: number,
+  lng: number,
+): void {
+  const existing = nodeMap.get(nodeCode)
+  if (existing) {
+    existing.latitude = lat
+    existing.longitude = lng
+    return
+  }
+  nodeMap.set(nodeCode, {
+    node_code: nodeCode,
+    latitude: lat,
+    longitude: lng,
+    role: nodeRole(nodeCode),
+  })
+}
+
+/** 从 route_segments 与 dispatch tasks 推导节点/包裹，坐标与折线端点对齐 */
+export function buildRouteOverlayFromSegments(
+  segments: RouteSegment[],
+  dispatch?: NodeDispatchItem | null,
+): { nodes: RouteNodePoint[]; packages: RoutePackagePoint[] } {
+  const nodeMap = new Map<string, RouteNodePoint>()
+  const packages: RoutePackagePoint[] = []
+  const tasks = dispatch?.tasks?.filter((t) => !t.is_return) ?? []
+
+  segments.forEach((seg, index) => {
+    const task = tasks[index]
+    const fromCode = task?.from_node_code ?? `N${index}S`
+    const toCode = task?.to_node_code ?? `N${index}E`
+
+    upsertNode(nodeMap, fromCode, seg.start_lat, seg.start_lng)
+    upsertNode(nodeMap, toCode, seg.end_lat, seg.end_lng)
+
+    if (task) {
+      for (const pkg of task.package_codes) {
+        packages.push({
+          package_code: pkg,
+          latitude: seg.end_lat + 0.002,
+          longitude: seg.end_lng + 0.002,
+        })
+      }
+    }
+  })
+
+  return { nodes: [...nodeMap.values()], packages }
+}
+
+function buildRouteOverlay(
+  segments: RouteSegment[],
+  dispatch?: NodeDispatchItem | null,
+): { nodes: RouteNodePoint[]; packages: RoutePackagePoint[] } {
+  if (segments.length > 0) {
+    return buildRouteOverlayFromSegments(segments, dispatch)
+  }
+  if (dispatch?.tasks?.length) {
+    return buildRouteOverlayFromDispatch(dispatch)
+  }
+  return { nodes: [], packages: [] }
+}
+
 export function segmentsFromRouteDetail(
   routeSegments: RouteDetailResponse['route_segments'],
 ): RouteSegment[] {
@@ -130,9 +201,7 @@ export function normalizeFromRouteDetail(
       ? segmentsFromRouteDetail(detail.route_segments)
       : []
 
-  const overlay = dispatch?.tasks?.length
-    ? buildRouteOverlayFromDispatch(dispatch)
-    : { nodes: [] as RouteNodePoint[], packages: [] as RoutePackagePoint[] }
+  const overlay = buildRouteOverlay(segments, dispatch)
 
   return {
     vehicle_code: vehicleCode,
@@ -161,9 +230,7 @@ export function normalizeRouteCoordinates(
       ? segmentsFromRouteDetail(detail.route_segments)
       : segmentsFromPolyline(route.coordinates)
 
-  const overlay = dispatch?.tasks?.length
-    ? buildRouteOverlayFromDispatch(dispatch)
-    : { nodes: [] as RouteNodePoint[], packages: [] as RoutePackagePoint[] }
+  const overlay = buildRouteOverlay(segments, dispatch)
 
   return {
     vehicle_code: vehicleCode,
