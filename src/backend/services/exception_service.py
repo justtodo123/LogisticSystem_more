@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 import time
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -20,6 +21,10 @@ from schemas.exception_event import (
     ExceptionEventResponse,
 )
 from utils.response import success_response, error_response
+
+# 允许的枚举值
+ALLOWED_EXCEPTION_TYPES = {"road", "package", "node"}
+ALLOWED_ACTIONS = {"redispatch", "reroute"}
 
 
 class ExceptionService:
@@ -81,6 +86,13 @@ class ExceptionService:
         3. 生成 event_code
         4. 写入数据库
         """
+        # 0. 校验 exception_type（在 try 之前，避免被 except 捕获）
+        if data.exception_type not in ALLOWED_EXCEPTION_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"无效的异常类型: {data.exception_type}，允许值: {', '.join(sorted(ALLOWED_EXCEPTION_TYPES))}",
+            )
+
         try:
             # 1. 验证 related_schedule_code
             if data.related_schedule_code:
@@ -114,7 +126,31 @@ class ExceptionService:
             # 4. 生成 event_code
             event_code = ExceptionService._generate_event_code()
 
-            # 5. 写入数据库
+            # 5. 重置关联订单/货物/包裹状态为 exception
+            if data.related_schedule_code:
+                # 重新查询调度方案（确保会话活跃）
+                schedule = db.query(GlobalSchedule).filter(
+                    GlobalSchedule.schedule_code == data.related_schedule_code
+                ).first()
+                if schedule:
+                    # 重置订单状态：delivering → exception
+                    for order_code in schedule.order_codes:
+                        order = db.query(Order).filter(Order.order_code == order_code).first()
+                        if order and order.status == "delivering":
+                            order.status = "exception"
+                            # 重置货物状态
+                            for goods in order.goods:
+                                if goods.status in ["packed", "in_transit"]:
+                                    goods.status = "exception"
+                    # 重置包裹状态
+                    packages = db.query(Package).filter(
+                        Package.schedule_id == schedule.id
+                    ).all()
+                    for pkg in packages:
+                        if pkg.status in ["packed", "in_transit"]:
+                            pkg.status = "exception"
+
+            # 7. 写入数据库
             event = ExceptionEvent(
                 event_code=event_code,
                 exception_type=data.exception_type,
@@ -206,6 +242,43 @@ class ExceptionService:
         )
 
     @staticmethod
+    async def update_exception(
+        db: Session,
+        event_code: str,
+        status: Optional[str] = None,
+        resolution_note: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        更新异常事件
+
+        支持更新 status 和 resolution_note。
+        当 status 设为 resolved 时，自动记录 resolved_at。
+        """
+        event = db.query(ExceptionEvent).filter(
+            ExceptionEvent.event_code == event_code
+        ).first()
+
+        if not event:
+            return error_response(
+                code=40401,
+                message=f"异常事件不存在: {event_code}",
+            )
+
+        if status:
+            event.status = status
+            if status == "resolved":
+                event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        if resolution_note is not None:
+            event.resolution_note = resolution_note
+
+        db.commit()
+        db.refresh(event)
+
+        return success_response(
+            data=ExceptionService._to_response(event, db).model_dump()
+        )
+
+    @staticmethod
     async def resolve_exception(
         db: Session,
         event_code: str,
@@ -249,6 +322,7 @@ class ExceptionService:
     async def trigger_replan(
         db: Session,
         event_code: str,
+        action: str,
         replan_reason: str,
     ) -> Dict[str, Any]:
         """
@@ -256,12 +330,20 @@ class ExceptionService:
 
         流程：
         1. 查询异常事件
-        2. 根据 recommended_action 调用不同的重规划服务：
+        2. 校验 action 合法性
+        3. 根据 action 调用不同的重规划服务：
            - redispatch → ReplanService.redispatch()
            - reroute → ReplanService.reroute()
-        3. 更新 exception_event.replan_batch_code
-        4. 返回新调度方案编码
+        4. 更新 exception_event.replan_batch_code
+        5. 返回新调度方案编码
         """
+        # 校验 action
+        if action not in ALLOWED_ACTIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"无效的重规划动作: {action}，允许值: {', '.join(sorted(ALLOWED_ACTIONS))}",
+            )
+
         event = db.query(ExceptionEvent).filter(
             ExceptionEvent.event_code == event_code
         ).first()
@@ -282,7 +364,7 @@ class ExceptionService:
         from services.replan_service import ReplanService
 
         try:
-            if event.recommended_action == "redispatch":
+            if action == "redispatch":
                 if not event.related_schedule_code:
                     return error_response(
                         code=40001,
@@ -294,7 +376,7 @@ class ExceptionService:
                     replan_reason=replan_reason,
                 )
 
-            elif event.recommended_action == "reroute":
+            elif action == "reroute":
                 # 通过 related_route_id（FK）查找关联路线编码
                 if event.related_route_id:
                     route = db.query(Route).filter(
@@ -318,7 +400,7 @@ class ExceptionService:
             else:
                 return error_response(
                     code=40001,
-                    message=f"不支持的重规划类型: {event.recommended_action}",
+                    message=f"不支持的重规划类型: {action}",
                 )
 
             # 更新 exception_event.replan_batch_code

@@ -138,14 +138,16 @@ def global_schedule(
     w3 = weights["w3_packages"]
 
     # ── 1. 查询订单 ──
-    # 始终只允许 pending 状态的订单参与调度，防止已完成的订单被重复调度
-    query = db.query(Order).filter(Order.status == "pending")
+    # 允许 pending 和 exception 状态的订单参与调度
+    # - pending: 正常待调度订单
+    # - exception: 异常重规划时需要重新调度的订单
+    query = db.query(Order).filter(Order.status.in_(["pending", "exception"]))
     if order_codes:
         query = query.filter(Order.order_code.in_(order_codes))
     orders = query.all()
 
     if not orders:
-        raise ValueError("没有找到符合条件的订单（status=pending）")
+        raise ValueError("没有找到符合条件的订单（status=pending 或 status=exception）")
 
     # ── 2. 预加载 L1 节点（含 sorting_center 属性） ──
     l1_nodes = (
