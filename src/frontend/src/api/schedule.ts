@@ -5,13 +5,36 @@ import type {
   GlobalScheduleDetail,
   GlobalScheduleSummary,
 } from '@/types/schedule'
-import { useMockSchedule } from '@/utils/env'
+import type {
+  DispatchBatchDetail,
+  DispatchBatchSummary,
+  NodeDispatchCreatePayload,
+  NodeDispatchResult,
+} from '@/types/dispatch'
+import { useMockSchedule, useMockNodeDispatch } from '@/utils/env'
 import { filterAndPaginate } from '@/utils/mock'
 import {
   createMockGlobalSchedule,
+  createMockNodeDispatch,
+  getMockBatchDetail,
+  getMockBatches,
   getMockScheduleDetail,
   getMockSchedules,
+  registerMockScheduleDetail,
 } from '@/utils/mock-store'
+
+/** 节点间调度 Mock 需要方案详情；全局调度走真实 API 时从后端拉取并缓存 */
+async function ensureScheduleCachedForMockDispatch(
+  scheduleCode: string,
+): Promise<void> {
+  if (await getMockScheduleDetail(scheduleCode)) {
+    return
+  }
+  const { data } = await request.get<GlobalScheduleDetail>(
+    `/schedule/global/${scheduleCode}`,
+  )
+  await registerMockScheduleDetail(data)
+}
 
 export async function createGlobalSchedule(
   payload: GlobalScheduleCreatePayload = {},
@@ -33,6 +56,17 @@ export async function createGlobalSchedule(
     },
     { timeout: 30000 },
   )
+  if (useMockNodeDispatch()) {
+    try {
+      await ensureScheduleCachedForMockDispatch(data.schedule_code)
+    } catch {
+      await registerMockScheduleDetail({
+        ...data,
+        goods_schedules: [],
+        algorithm_type: 'traditional',
+      })
+    }
+  }
   return data
 }
 
@@ -64,6 +98,63 @@ export async function getGlobalSchedule(
 
   const { data } = await request.get<GlobalScheduleDetail>(
     `/schedule/global/${scheduleCode}`,
+  )
+  return data
+}
+
+export async function createNodeDispatch(
+  payload: NodeDispatchCreatePayload,
+): Promise<NodeDispatchResult> {
+  if (useMockNodeDispatch()) {
+    if (!useMockSchedule()) {
+      await ensureScheduleCachedForMockDispatch(payload.schedule_code)
+    }
+    return createMockNodeDispatch(payload)
+  }
+
+  const { data } = await request.post<NodeDispatchResult>(
+    '/schedule/node-dispatch',
+    {
+      schedule_code: payload.schedule_code,
+      demo_mode: payload.demo_mode ?? false,
+    },
+    { timeout: 30000 },
+  )
+  return data
+}
+
+export async function listDispatchBatches(
+  params: ApiListParams = {},
+): Promise<PaginatedResult<DispatchBatchSummary>> {
+  if (useMockNodeDispatch()) {
+    const batches = await getMockBatches()
+    return filterAndPaginate(batches, params, (item, p) => {
+      const code = p.schedule_code as string | undefined
+      if (code && item.schedule_code !== code) return false
+      return true
+    })
+  }
+
+  const { data } = await request.get<PaginatedResult<DispatchBatchSummary>>(
+    '/schedule/batches',
+    { params },
+  )
+  return data
+}
+
+export async function getDispatchBatch(
+  batchCode: string,
+): Promise<DispatchBatchDetail> {
+  if (useMockNodeDispatch()) {
+    const detail = await getMockBatchDetail(batchCode)
+    if (!detail) {
+      throw new Error('调度批次不存在')
+    }
+    return detail
+  }
+
+  const { data } = await request.get<DispatchBatchDetail>(
+    `/schedule/batches/${batchCode}`,
   )
   return data
 }
