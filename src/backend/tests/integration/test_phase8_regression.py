@@ -70,7 +70,9 @@ async def test_ai_parse_with_mock(async_client, test_users):
         raise_for_status=AsyncMock()
     )
     
-    with patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
+    # Mock DEEPSPEEK_API_KEY 使其不为None，这样才会调用httpx.AsyncClient
+    with patch("services.deepseek_service.settings.DEEPSEEK_API_KEY", "fake-api-key"), \
+         patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
         # 配置__aenter__返回mock_client
         mock_client_class.return_value.__aenter__.return_value = mock_client
         
@@ -150,7 +152,7 @@ async def test_deepseek_degradation(async_client, test_users):
 
 
 @pytest.mark.asyncio
-async def test_log_events_recording(async_client, db_session):
+async def test_log_events_recording(async_client, test_users, test_db):
     """
     测试log_events记录
     
@@ -167,17 +169,25 @@ async def test_log_events_recording(async_client, db_session):
     })
     assert login_resp.status_code == 200
     
-    # 查询log_events表
-    logs = db_session.query(LogEvent).filter(
-        LogEvent.event_name == "login"
-    ).all()
+    # 使用测试数据库的会话来查询log_events
+    from models.log_event import LogEvent
+    engine, TestingSessionLocal = test_db
+    session = TestingSessionLocal()
     
-    # 验证埋点记录
-    assert len(logs) > 0
-    latest_log = logs[-1]
-    assert latest_log.event_name == "login"
-    assert latest_log.role == "dispatcher"
-    assert "ip" in latest_log.event_data or "user_agent" in latest_log.event_data
+    try:
+        # 查询log_events表
+        logs = session.query(LogEvent).filter(
+            LogEvent.event_name == "login"
+        ).all()
+        
+        # 验证埋点记录
+        assert len(logs) > 0
+        latest_log = logs[-1]
+        assert latest_log.event_name == "login"
+        assert latest_log.role == "dispatcher"
+        assert "ip" in latest_log.event_data or "user_agent" in latest_log.event_data
+    finally:
+        session.close()
 
 
 @pytest.mark.asyncio
