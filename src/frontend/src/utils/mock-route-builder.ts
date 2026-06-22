@@ -1,6 +1,6 @@
 import type { NodeDispatchItem } from '@/types/dispatch'
 import type { RouteCoordinates, RouteSegment } from '@/types/route'
-import { buildRouteOverlayFromSegments } from '@/utils/route-normalize'
+import { buildRouteOverlayFromSegments, computeCargoRouteMetrics } from '@/utils/route-normalize'
 
 /** 武汉演示区域节点坐标（与 init_demo_data 量级一致） */
 const NODE_COORDS: Record<string, { lat: number; lng: number }> = {
@@ -31,29 +31,12 @@ function resolveNodeCoord(nodeCode: string): { lat: number; lng: number } {
   }
 }
 
-function haversineKm(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number,
-): number {
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const R = 6371
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
 /** 从节点间调度明细动态生成 Mock 路线坐标 */
 export function buildMockRouteCoordinates(
   vehicleCode: string,
   dispatch: NodeDispatchItem,
 ): RouteCoordinates {
   const segments: RouteSegment[] = []
-  let totalDistance = 0
 
   const tasks = dispatch.tasks.filter((t) => !t.is_return)
 
@@ -68,10 +51,10 @@ export function buildMockRouteCoordinates(
       end_lng: to.lng,
       end_lat: to.lat,
     })
-    totalDistance += haversineKm(from.lat, from.lng, to.lat, to.lng)
   }
 
   const overlay = buildRouteOverlayFromSegments(segments, dispatch)
+  const metrics = computeCargoRouteMetrics(segments)
 
   return {
     vehicle_code: vehicleCode,
@@ -79,8 +62,8 @@ export function buildMockRouteCoordinates(
     nodes: overlay.nodes,
     packages: overlay.packages,
     segments,
-    total_distance: Math.round(totalDistance * 10) / 10,
-    total_time: Math.round((totalDistance / 40) * 60),
+    total_distance: metrics.distance,
+    total_time: metrics.time,
   }
 }
 

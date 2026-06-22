@@ -1,4 +1,4 @@
-import type { NodeDispatchItem } from '@/types/dispatch'
+import type { DispatchTask, NodeDispatchItem } from '@/types/dispatch'
 import type {
   BackendRouteCoordinate,
   BackendRouteCoordinatesResponse,
@@ -105,24 +105,77 @@ function upsertNode(
   })
 }
 
-/** 从 route_segments 与 dispatch tasks 推导节点/包裹，坐标与折线端点对齐 */
+function haversineKm(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const R = 6371
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+/** segment 与 dispatch.tasks 同索引；仅保留带货 task 对应的段 */
+export function cargoSegmentTaskPairs(
+  segments: RouteSegment[],
+  dispatch?: NodeDispatchItem | null,
+): Array<{ seg: RouteSegment; task: DispatchTask | undefined }> {
+  const tasks = dispatch?.tasks
+  if (!tasks?.length) {
+    return segments.map((seg) => ({ seg, task: undefined }))
+  }
+  return segments
+    .map((seg, index) => ({ seg, task: tasks[index] }))
+    .filter(({ task }) => !task?.is_return)
+}
+
+export function filterCargoSegments(
+  segments: RouteSegment[],
+  dispatch?: NodeDispatchItem | null,
+): RouteSegment[] {
+  return cargoSegmentTaskPairs(segments, dispatch).map((p) => p.seg)
+}
+
+export function computeCargoRouteMetrics(cargoSegments: RouteSegment[]): {
+  distance: number
+  time: number
+} {
+  let distance = 0
+  for (const seg of cargoSegments) {
+    distance += haversineKm(
+      seg.start_lat,
+      seg.start_lng,
+      seg.end_lat,
+      seg.end_lng,
+    )
+  }
+  distance = Math.round(distance * 10) / 10
+  const time = Math.round((distance / 60) * 60)
+  return { distance, time }
+}
+
+/** 从 route_segments 与 dispatch tasks 推导节点/包裹，坐标与折线端点对齐（仅带货段） */
 export function buildRouteOverlayFromSegments(
   segments: RouteSegment[],
   dispatch?: NodeDispatchItem | null,
 ): { nodes: RouteNodePoint[]; packages: RoutePackagePoint[] } {
   const nodeMap = new Map<string, RouteNodePoint>()
   const packages: RoutePackagePoint[] = []
-  const tasks = dispatch?.tasks?.filter((t) => !t.is_return) ?? []
 
-  segments.forEach((seg, index) => {
-    const task = tasks[index]
+  cargoSegmentTaskPairs(segments, dispatch).forEach(({ seg, task }, index) => {
     const fromCode = task?.from_node_code ?? `N${index}S`
     const toCode = task?.to_node_code ?? `N${index}E`
 
     upsertNode(nodeMap, fromCode, seg.start_lat, seg.start_lng)
     upsertNode(nodeMap, toCode, seg.end_lat, seg.end_lng)
 
-    if (task) {
+    if (task?.package_codes?.length) {
       for (const pkg of task.package_codes) {
         packages.push({
           package_code: pkg,
@@ -191,27 +244,43 @@ export function pickRouteForBatch(
   return data.routes[0]
 }
 
+function normalizeRouteData(
+  vehicleCode: string,
+  routeCode: string,
+  allSegments: RouteSegment[],
+  dispatch?: NodeDispatchItem | null,
+): RouteCoordinates {
+  const cargoSegments = filterCargoSegments(allSegments, dispatch)
+  const overlay = buildRouteOverlay(allSegments, dispatch)
+  const metrics = computeCargoRouteMetrics(cargoSegments)
+
+  return {
+    vehicle_code: vehicleCode,
+    route_code: routeCode,
+    nodes: overlay.nodes,
+    packages: overlay.packages,
+    segments: cargoSegments,
+    total_distance: metrics.distance,
+    total_time: metrics.time,
+  }
+}
+
 export function normalizeFromRouteDetail(
   vehicleCode: string,
   detail: RouteDetailResponse,
   dispatch?: NodeDispatchItem | null,
 ): RouteCoordinates {
-  const segments =
+  const allSegments =
     detail.route_segments?.length > 0
       ? segmentsFromRouteDetail(detail.route_segments)
       : []
 
-  const overlay = buildRouteOverlay(segments, dispatch)
-
-  return {
-    vehicle_code: vehicleCode,
-    route_code: detail.route_code,
-    nodes: overlay.nodes,
-    packages: overlay.packages,
-    segments,
-    total_distance: detail.total_distance,
-    total_time: detail.total_time,
-  }
+  return normalizeRouteData(
+    vehicleCode,
+    detail.route_code,
+    allSegments,
+    dispatch,
+  )
 }
 
 export function normalizeRouteCoordinates(
@@ -225,20 +294,15 @@ export function normalizeRouteCoordinates(
     throw new Error('该车辆暂无路线，请先完成路径规划')
   }
 
-  const segments =
+  const allSegments =
     detail.route_segments?.length > 0
       ? segmentsFromRouteDetail(detail.route_segments)
       : segmentsFromPolyline(route.coordinates)
 
-  const overlay = buildRouteOverlay(segments, dispatch)
-
-  return {
-    vehicle_code: vehicleCode,
-    route_code: route.route_code,
-    nodes: overlay.nodes,
-    packages: overlay.packages,
-    segments,
-    total_distance: detail.total_distance ?? route.total_distance,
-    total_time: detail.total_time ?? 0,
-  }
+  return normalizeRouteData(
+    vehicleCode,
+    route.route_code,
+    allSegments,
+    dispatch,
+  )
 }

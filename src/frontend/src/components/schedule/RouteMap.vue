@@ -148,12 +148,12 @@ function onFullscreenOpened(): void {
 
       <div v-if="data" class="route-map-meta">
         <span>路线 {{ data.route_code }}</span>
-        <span>距离 {{ data.total_distance.toFixed(1) }} km</span>
-        <span>时间 {{ data.total_time.toFixed(0) }} min</span>
+        <span>带货距离 {{ data.total_distance.toFixed(1) }} km</span>
+        <span>带货时间 {{ data.total_time.toFixed(0) }} min</span>
         <span class="route-map-legend">
           <i class="legend-dot legend-node" />节点
           <i class="legend-dot legend-pkg" />包裹
-          <i class="legend-arrow" />行驶方向
+          <i class="legend-arrow" />带货路段方向
         </span>
       </div>
     </template>
@@ -178,8 +178,8 @@ function onFullscreenOpened(): void {
       />
       <div v-if="data" class="route-map-meta route-map-meta--dialog">
         <span>路线 {{ data.route_code }}</span>
-        <span>距离 {{ data.total_distance.toFixed(1) }} km</span>
-        <span>时间 {{ data.total_time.toFixed(0) }} min</span>
+        <span>带货距离 {{ data.total_distance.toFixed(1) }} km</span>
+        <span>带货时间 {{ data.total_time.toFixed(0) }} min</span>
       </div>
     </el-dialog>
   </div>
