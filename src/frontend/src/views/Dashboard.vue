@@ -257,13 +257,6 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
         @package-click="onPackageClick"
       />
 
-      <AiAssistantPanel
-        v-if="authStore.isDispatcher"
-        :schedules="schedules"
-        :selected-schedule-code="selectedCode"
-        @executed="onAiExecuted"
-      />
-
       <el-drawer
         v-model="packageDrawerVisible"
         title="包裹详情"
@@ -303,6 +296,13 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
         </div>
       </el-drawer>
     </template>
+
+    <AiAssistantPanel
+      v-if="authStore.isDispatcher"
+      :schedules="schedules"
+      :selected-schedule-code="selectedCode"
+      @executed="onAiExecuted"
+    />
   </div>
 </template>
 
