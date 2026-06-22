@@ -29,4 +29,3 @@ class Route(Base):
     # 关联
     dispatch = relationship("NodeDispatch", back_populates="routes")
     vehicle = relationship("Vehicle", back_populates="routes")
-    exception_events = relationship("ExceptionEvent", back_populates="related_route")

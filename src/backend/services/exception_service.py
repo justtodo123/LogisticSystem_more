@@ -14,7 +14,6 @@ from sqlalchemy import desc
 
 from models.exception_event import ExceptionEvent
 from models.global_schedule import GlobalSchedule
-from models.node import Node
 from models.node_dispatch import NodeDispatch
 from models.route import Route
 from models.order import Order
@@ -46,31 +45,17 @@ class ExceptionService:
     @staticmethod
     def _to_response(event: ExceptionEvent, db: Session) -> ExceptionEventResponse:
         """将 ORM 对象转为响应模型"""
-        trigger_node_code = None
-        if event.trigger_node_id:
-            node = db.query(Node).filter(Node.id == event.trigger_node_id).first()
-            trigger_node_code = node.node_code if node else None
-
-        related_route_code = None
-        if event.related_route_id:
-            route = db.query(Route).filter(Route.id == event.related_route_id).first()
-            related_route_code = route.route_code if route else None
-
         return ExceptionEventResponse(
             event_code=event.event_code,
             exception_type=event.exception_type,
             exception_subtype=event.exception_subtype,
             target_type=event.target_type,
             target_code=event.target_code,
-            severity=event.severity,
             recommended_action=event.recommended_action,
-            trigger_node_code=trigger_node_code,
-            related_route_code=related_route_code,
             related_schedule_code=event.related_schedule_code,
             replan_batch_code=event.replan_batch_code,
             description=event.description,
             status=event.status,
-            resolution_note=event.resolution_note,
             resolved_at=event.resolved_at,
             created_at=event.created_at,
         )
@@ -87,9 +72,8 @@ class ExceptionService:
 
         流程：
         1. 验证 related_schedule_code 是否存在
-        2. 解析 trigger_node_code / related_route_code 为内部 ID
-        3. 生成 event_code
-        4. 写入数据库
+        2. 生成 event_code
+        3. 写入数据库
         """
         # 0. 校验 exception_type（在 try 之前，避免被 except 捕获）
         if data.exception_type not in ALLOWED_EXCEPTION_TYPES:
@@ -110,28 +94,10 @@ class ExceptionService:
                         message=f"关联调度方案不存在: {data.related_schedule_code}",
                     )
 
-            # 2. 解析 trigger_node_code → trigger_node_id
-            trigger_node_id = None
-            if data.trigger_node_code:
-                node = db.query(Node).filter(
-                    Node.node_code == data.trigger_node_code
-                ).first()
-                if node:
-                    trigger_node_id = node.id
-
-            # 3. 解析 related_route_code → related_route_id
-            related_route_id = None
-            if data.related_route_code:
-                route = db.query(Route).filter(
-                    Route.route_code == data.related_route_code
-                ).first()
-                if route:
-                    related_route_id = route.id
-
-            # 4. 生成 event_code
+            # 2. 生成 event_code
             event_code = ExceptionService._generate_event_code()
 
-            # 5. 重置关联订单/货物/包裹状态为 exception
+            # 3. 重置关联订单/货物/包裹状态为 exception
             if data.related_schedule_code:
                 # 重新查询调度方案（确保会话活跃）
                 schedule = db.query(GlobalSchedule).filter(
@@ -155,7 +121,7 @@ class ExceptionService:
                         if pkg.status in ["packed", "in_transit"]:
                             pkg.status = "exception"
 
-            # 5.5 处理车辆异常（如果 target_type 是 vehicle）
+            # 4. 处理车辆异常（如果 target_type 是 vehicle）
             if data.target_type == "vehicle" and data.target_code:
                 vehicle = db.query(Vehicle).filter(
                     Vehicle.vehicle_code == data.target_code
@@ -199,17 +165,14 @@ class ExceptionService:
                                 for goods in affected_goods:
                                     goods.status = "exception"
 
-            # 7. 写入数据库
+            # 5. 写入数据库
             event = ExceptionEvent(
                 event_code=event_code,
                 exception_type=data.exception_type,
                 exception_subtype=data.exception_subtype,
                 target_type=data.target_type,
                 target_code=data.target_code,
-                severity=data.severity or "medium",
                 recommended_action=data.recommended_action,
-                trigger_node_id=trigger_node_id,
-                related_route_id=related_route_id,
                 related_schedule_code=data.related_schedule_code,
                 description=data.description,
                 status="open",
@@ -300,8 +263,7 @@ class ExceptionService:
         """
         更新异常事件
 
-        支持更新 status 和 resolution_note。
-        当 status 设为 resolved 时，自动记录 resolved_at。
+        支持更新 status。当 status 设为 resolved 时，自动记录 resolved_at。
         """
         event = db.query(ExceptionEvent).filter(
             ExceptionEvent.event_code == event_code
@@ -317,8 +279,6 @@ class ExceptionService:
             event.status = status
             if status == "resolved":
                 event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        if resolution_note is not None:
-            event.resolution_note = resolution_note
 
         db.commit()
         db.refresh(event)
@@ -339,7 +299,7 @@ class ExceptionService:
         流程：
         1. 查询异常事件
         2. 更新 status → resolved
-        3. 记录 resolution_note 和 resolved_at
+        3. 记录 resolved_at
         """
         event = db.query(ExceptionEvent).filter(
             ExceptionEvent.event_code == event_code
@@ -358,7 +318,6 @@ class ExceptionService:
             )
 
         event.status = "resolved"
-        event.resolution_note = resolution_note
         event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
         db.refresh(event)
@@ -427,41 +386,38 @@ class ExceptionService:
                 )
 
             elif action == "reroute":
-                # 通过 related_route_id（FK）查找关联路线编码
-                if event.related_route_id:
+                # 通过 target_type=route + target_code 查找关联路线
+                route = None
+                if event.target_type == "route" and event.target_code:
                     route = db.query(Route).filter(
-                        Route.id == event.related_route_id
+                        Route.route_code == event.target_code
                     ).first()
-                    if not route:
-                        return error_response(
-                            code=40001,
-                            message="重路径规划需要关联路线",
-                        )
-                    
-                    # 提取排除车辆参数
-                    excluded_vehicles = []
-                    if route.dispatch_id:
-                        dispatch = db.query(NodeDispatch).filter(
-                            NodeDispatch.id == route.dispatch_id
-                        ).first()
-                        if dispatch and dispatch.vehicle_id:
-                            vehicle = db.query(Vehicle).filter(
-                                Vehicle.id == dispatch.vehicle_id
-                            ).first()
-                            if vehicle:
-                                excluded_vehicles.append(vehicle.vehicle_code)
-                    
-                    result = await ReplanService.reroute(
-                        db=db,
-                        original_route_code=route.route_code,
-                        replan_reason=replan_reason,
-                        excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
-                    )
-                else:
+                
+                if not route:
                     return error_response(
                         code=40001,
-                        message="重路径规划需要关联路线",
+                        message="重路径规划需要关联路线(target_type=route, target_code=路线编码)",
                     )
+                
+                # 提取排除车辆参数
+                excluded_vehicles = []
+                if route.dispatch_id:
+                    dispatch = db.query(NodeDispatch).filter(
+                        NodeDispatch.id == route.dispatch_id
+                    ).first()
+                    if dispatch and dispatch.vehicle_id:
+                        vehicle = db.query(Vehicle).filter(
+                            Vehicle.id == dispatch.vehicle_id
+                        ).first()
+                        if vehicle:
+                            excluded_vehicles.append(vehicle.vehicle_code)
+                
+                result = await ReplanService.reroute(
+                    db=db,
+                    original_route_code=route.route_code,
+                    replan_reason=replan_reason,
+                    excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
+                )
             else:
                 return error_response(
                     code=40001,

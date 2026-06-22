@@ -244,7 +244,7 @@ def packaging(
             package_code=_generate_package_code(db, counter),
             weight=round(total_weight, 3),
             volume=round(total_volume, 3),
-            status="packed",
+            status="pending_pack",  # L1→L2包裹：货物尚在L0，需等货物到达L1后才能实际打包
             from_node_id=from_node.id,
             to_node_id=to_node.id,
             from_longitude=from_node.longitude,

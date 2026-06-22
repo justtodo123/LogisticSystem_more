@@ -719,96 +719,11 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict, excluded_vehi
     for dispatch_obj in l1_l2_dispatch_objs:
         simulate_delivery_l1_to_l2(db, batch, dispatch_obj, list(order_codes))
     
-    # ── 8b. 车辆不足场景：自动重试未分配包裹 ──
-    # 送达后车辆/司机恢复 idle，可复用继续运输剩余包裹
-    # 参考文献：常用指令集合.md §3 车辆不足场景（自动重新调度）
-    all_l0_l1_dispatches = list(l0_l1_dispatches)
-    all_l1_l2_dispatches = list(l1_l2_dispatches)
-    max_retries = 10
-    retry_count = 0
-    
-    while (unallocated_l0_l1 or unallocated_l1_l2) and retry_count < max_retries:
-        retry_count += 1
-        made_progress = False
-        
-        # 重试 L0→L1 未分配包裹（送达后车辆回到 L0，可用于再调度）
-        if unallocated_l0_l1:
-            pkg_codes = [p.package_code for p in unallocated_l0_l1]
-            retry_dispatches, _, still_unallocated = dispatch_level(
-                db, schedule.id, 0, config,
-                package_codes=pkg_codes,
-                batch_id=batch.id,
-                excluded_vehicles=excluded_vehicles,
-                is_replan=is_replan,
-            )
-            if retry_dispatches:
-                # 模拟 L0→L1 送达
-                retry_objs = (db.query(NodeDispatch)
-                    .filter(NodeDispatch.dispatch_batch_id == batch.id,
-                            NodeDispatch.level_phase == 0)
-                    .order_by(NodeDispatch.id.desc())
-                    .limit(len(retry_dispatches)).all())
-                for dobj in retry_objs:
-                    simulate_delivery_l0_to_l1(db, batch, dobj)
-                # 在 L1 重新打包（新送达货物的订单）
-                new_order_codes = set()
-                for dd in retry_dispatches:
-                    for task in dd["tasks"]:
-                        if not task["is_return"]:
-                            for pc in task["package_codes"]:
-                                pkg = db.query(Package).filter(Package.package_code == pc).first()
-                                if pkg and pkg.goods_items:
-                                    for item in pkg.goods_items:
-                                        oc = item.get("order_code")
-                                        if oc:
-                                            new_order_codes.add(oc)
-                for oc in new_order_codes:
-                    goods_schedules = schedule.goods_schedules if isinstance(schedule.goods_schedules, list) else json.loads(schedule.goods_schedules)
-                    for gs in goods_schedules:
-                        if gs.get("order_code") == oc:
-                            path = gs.get("path", [])
-                            if len(path) >= 3:
-                                repack_at_l1(db, oc, path[1], path[2], schedule.id)
-                                order_codes.add(oc)
-                                break
-                all_l0_l1_dispatches.extend(retry_dispatches)
-                unallocated_l0_l1 = still_unallocated
-                made_progress = True
-        
-        # 重试 L1→L2 未分配包裹（送达后车辆回到 L1，可用于再调度）
-        if unallocated_l1_l2:
-            pkg_codes = [p.package_code for p in unallocated_l1_l2]
-            retry_dispatches, _, still_unallocated = dispatch_level(
-                db, schedule.id, 1, config,
-                package_codes=pkg_codes,
-                batch_id=batch.id,
-                excluded_vehicles=excluded_vehicles,
-                is_replan=is_replan,
-            )
-            if retry_dispatches:
-                # 模拟 L1→L2 送达
-                retry_objs = (db.query(NodeDispatch)
-                    .filter(NodeDispatch.dispatch_batch_id == batch.id,
-                            NodeDispatch.level_phase == 1)
-                    .order_by(NodeDispatch.id.desc())
-                    .limit(len(retry_dispatches)).all())
-                for dobj in retry_objs:
-                    simulate_delivery_l1_to_l2(db, batch, dobj, list(order_codes))
-                all_l1_l2_dispatches.extend(retry_dispatches)
-                unallocated_l1_l2 = still_unallocated
-                made_progress = True
-        
-        if not made_progress:
-            break  # 无进展，放弃（车辆容量均不足）
-    
-    l0_l1_dispatches = all_l0_l1_dispatches
-    l1_l2_dispatches = all_l1_l2_dispatches
-    
-    # 9. 更新批次状态（全部完成或有未分配）
-    all_unallocated = unallocated_l0_l1 + unallocated_l1_l2 if (unallocated_l0_l1 or unallocated_l1_l2) else []
-    batch.status = "completed" if not all_unallocated else "l0_l1_done"
-    batch.l0_l1_dispatch_count = len(l0_l1_dispatches)
+    # 9. 更新批次状态为 completed
+    batch.status = 'completed'
     batch.l1_l2_dispatch_count = len(l1_l2_dispatches)
+    # 保存完整的 unallocated_packages
+    all_unallocated = unallocated_l0_l1 + unallocated_l1_l2 if (unallocated_l0_l1 or unallocated_l1_l2) else []
     batch.unallocated_packages = json.dumps([pkg.package_code for pkg in all_unallocated], ensure_ascii=False) if all_unallocated else None
     
     # 10. 返回结果
@@ -816,7 +731,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict, excluded_vehi
         "batch_code": batch.batch_code,
         "status": batch.status,
         "dispatches": l0_l1_dispatches + l1_l2_dispatches,
-        "unallocated_packages": [pkg.package_code for pkg in all_unallocated],
+        "unallocated_packages": [pkg.package_code for pkg in unallocated_l0_l1 + unallocated_l1_l2],
         "level_info": {
             "l0_to_l1": {
                 "dispatches": l0_l1_dispatches,

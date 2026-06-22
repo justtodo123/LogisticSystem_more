@@ -89,10 +89,12 @@ class ScheduleService:
                 if order:
                     order.status = "delivering"
 
-            # ── 3b. 写入 packages + F021 完成 → 更新货物和包裹状态 ──
+            # ── 3b. 写入 packages ──
+            # 包裹状态由 packaging() 算法决定：
+            #   L0→L1 包裹: packed（货物与包裹在同一节点，可立即发运）
+            #   L1→L2 包裹: pending_pack（货物尚在L0，需等货物到达L1后重新打包）
             for pkg in packages:
                 pkg.schedule_id = global_schedule_obj.id
-                pkg.status = "packed"  # F021 打包完成：pending_pack/exception → packed
                 db.add(pkg)
 
             # F021 完成后更新货物状态：pending_pack→packed（正常）或 exception→packed（重规划）

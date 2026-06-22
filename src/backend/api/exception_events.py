@@ -19,7 +19,6 @@ from schemas.exception_event import (
     CreateExceptionEventRequest,
     TriggerReplanRequest,
     UpdateExceptionRequest,
-    ResolveExceptionRequest,
 )
 from config.database import get_db
 from api.dependencies import get_current_user, require_dispatcher
@@ -132,20 +131,18 @@ async def update_exception(
 
     需要角色：dispatcher
 
-    可更新 status 和 resolution_note。
+    可更新 status。
     """
     return await ExceptionService.update_exception(
         db=db,
         event_code=event_code,
         status=body.status,
-        resolution_note=body.resolution_note,
     )
 
 
 @router.put("/{event_code}/resolve")
 async def resolve_exception(
     event_code: str,
-    body: ResolveExceptionRequest = ResolveExceptionRequest(),
     current_user: User = Depends(require_dispatcher),
     db: Session = Depends(get_db),
 ):
@@ -154,10 +151,9 @@ async def resolve_exception(
 
     需要角色：dispatcher
 
-    将异常状态从 open 改为 resolved，可选添加解决备注。
+    将异常状态从 open 改为 resolved，自动记录 resolved_at。
     """
     return await ExceptionService.resolve_exception(
         db=db,
         event_code=event_code,
-        resolution_note=body.resolution_note,
     )

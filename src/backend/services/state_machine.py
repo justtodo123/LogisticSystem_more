@@ -174,37 +174,25 @@ def repack_at_l1(
         return []
     
     # 4. 检查是否已有F021生成的L1→L2包裹（重用，避免重复）
+    # F021生成的L1→L2包裹状态为 pending_pack（货物尚在L0），
+    # 但为兼容旧数据也检查 packed 状态（重规划等场景可能已有packed包裹）
     existing_package = None
     if schedule_id:
         existing_package = db.query(Package).filter(
             Package.schedule_id == schedule_id,
-            Package.status == 'packed',
+            Package.status.in_(['packed', 'pending_pack']),
             Package.from_node_id == l1_node.id,
             Package.to_node_id == l2_node.id
         ).first()
     
     if existing_package:
-        # 重用现有包裹：更新goods_items和重量体积
-        existing_goods_items = existing_package.goods_items
-        if isinstance(existing_goods_items, str):
-            existing_goods_items = json.loads(existing_goods_items)
-        
-        # 添加新的货物到现有包裹
-        new_goods_items = existing_goods_items + [
-            {"goods_code": g.goods_code, "order_code": order_code}
-            for g in goods_list
-        ]
-        existing_package.goods_items = new_goods_items
-        
-        # 更新重量和体积
-        total_weight = sum(float(g.weight) for g in goods_list)
-        total_volume = sum(float(g.volume) for g in goods_list)
-        existing_package.weight = round(float(existing_package.weight) + total_weight, 3)
-        existing_package.volume = round(float(existing_package.volume) + total_volume, 3)
+        # 重用现有包裹：F021已正确设置了goods_items，只需更新状态和货物状态
+        # existing_package.goods_items 在F021中已包含该订单的所有货物，无需重复添加
+        existing_package.status = 'packed'  # L1重新打包完成：pending_pack → packed
         
         db.flush()
         
-        # 更新货物状态
+        # 更新货物状态：pending_pack → packed
         for goods in goods_list:
             goods.status = 'packed'
         
@@ -215,7 +203,7 @@ def repack_at_l1(
             "new_packages": [existing_package],
             "level_info": {
                 "level_phase": 1,  # L1→L2
-                "description": "L1→L2重新打包（重用现有包裹）"
+                "description": "L1→L2重新打包（重用F021包裹）"
             }
         }
     else:
