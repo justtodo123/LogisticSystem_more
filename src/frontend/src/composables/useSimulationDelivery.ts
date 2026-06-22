@@ -1,9 +1,11 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { listPackages } from '@/api/packages'
 import { simulateDeliver } from '@/api/simulation'
 import type { DispatchBatchDetail } from '@/types/dispatch'
 import { useMockSimulation } from '@/utils/env'
 import { countInTransitPackagesInBatch } from '@/utils/mock-simulation'
+import { collectAllCargoPackageCodes } from '@/utils/simulation-batch-utils'
 
 export function useSimulationDelivery(options: {
   batchDetail: Ref<DispatchBatchDetail | null>
@@ -15,23 +17,38 @@ export function useSimulationDelivery(options: {
 
   const canDeliver = computed(() => {
     const batch = options.batchDetail.value
-    if (!batch || batch.status === 'completed' || batch.status === 'failed') {
+    if (!batch || batch.status === 'failed') {
       return false
     }
-    if (useMockSimulation()) {
-      return inTransitCount.value > 0
-    }
-    return batch.dispatches.length > 0
+    return inTransitCount.value > 0
   })
 
   async function refreshInTransitCount(): Promise<void> {
-    if (!useMockSimulation()) {
-      inTransitCount.value = options.batchDetail.value ? 1 : 0
+    const batch = options.batchDetail.value
+    if (!batch || batch.status === 'failed') {
+      inTransitCount.value = 0
       return
     }
-    inTransitCount.value = await countInTransitPackagesInBatch(
-      options.batchDetail.value,
-    )
+
+    if (useMockSimulation()) {
+      inTransitCount.value = await countInTransitPackagesInBatch(batch)
+      return
+    }
+
+    const batchCodes = new Set(collectAllCargoPackageCodes(batch))
+    if (!batchCodes.size) {
+      inTransitCount.value = 0
+      return
+    }
+
+    const result = await listPackages({
+      status: 'in_transit',
+      page: 1,
+      page_size: 500,
+    })
+    inTransitCount.value = result.items.filter((p) =>
+      batchCodes.has(p.package_code),
+    ).length
   }
 
   watch(

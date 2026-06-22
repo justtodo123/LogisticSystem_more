@@ -1,8 +1,14 @@
-import type { DispatchBatchDetail, NodeDispatchItem } from '@/types/dispatch'
+import type { DispatchBatchDetail } from '@/types/dispatch'
 import type {
   SimulationDeliverPayload,
   SimulationDeliverResult,
 } from '@/types/simulation'
+import {
+  collectAllCargoPackageCodes,
+  filterInTransitCodes,
+  resolveActiveDeliveryPhase,
+  resolveTargetPackageCodes,
+} from '@/utils/simulation-batch-utils'
 import {
   getMockBatchDetail,
   getMockBatches,
@@ -14,57 +20,22 @@ import {
   updateMockBatchSummary,
 } from '@/utils/mock-store'
 
-function collectCargoPackageCodes(
-  dispatches: NodeDispatchItem[],
-  levelPhase: 0 | 1,
-): string[] {
-  const codes = new Set<string>()
-  for (const d of dispatches) {
-    if (d.level_phase !== levelPhase) continue
-    for (const task of d.tasks) {
-      if (task.is_return) continue
-      for (const pkg of task.package_codes) {
-        codes.add(pkg)
-      }
-    }
-  }
-  return [...codes]
-}
-
-function collectPackagesByVehicle(
-  dispatches: NodeDispatchItem[],
-  vehicleCode: string,
-): string[] {
-  const codes = new Set<string>()
-  const dispatch = dispatches.find((d) => d.vehicle_code === vehicleCode)
-  if (!dispatch) return []
-  for (const task of dispatch.tasks) {
-    if (task.is_return) continue
-    for (const pkg of task.package_codes) {
-      codes.add(pkg)
-    }
-  }
-  return [...codes]
-}
-
-function resolveTargetPackageCodes(
-  batch: DispatchBatchDetail,
+async function resolveMockBatchCode(
   payload: SimulationDeliverPayload,
-): string[] {
-  const levelPhase: 0 | 1 = batch.status === 'pending' ? 0 : 1
-  let codes = collectCargoPackageCodes(batch.dispatches, levelPhase)
-
-  if (payload.package_code) {
-    codes = codes.filter((c) => c === payload.package_code)
-  } else if (payload.vehicle_code) {
-    const vehicleCodes = collectPackagesByVehicle(
-      batch.dispatches,
-      payload.vehicle_code,
-    )
-    codes = codes.filter((c) => vehicleCodes.includes(c))
+): Promise<string | null> {
+  if (payload.batch_code) {
+    return payload.batch_code
   }
-
-  return codes
+  const batches = await getMockBatches()
+  for (const summary of batches) {
+    const detail = await getMockBatchDetail(summary.batch_code)
+    if (!detail) continue
+    const count = await countInTransitPackagesInBatch(detail)
+    if (count > 0) {
+      return summary.batch_code
+    }
+  }
+  return batches[0]?.batch_code ?? null
 }
 
 async function applyL0Delivery(
@@ -110,7 +81,9 @@ async function applyL0Delivery(
     }
   }
 
-  batch.status = 'l0_l1_done'
+  if (batch.status === 'pending') {
+    batch.status = 'l0_l1_done'
+  }
   return count
 }
 
@@ -164,10 +137,7 @@ async function applyL1Delivery(
 export async function simulateDeliverMock(
   payload: SimulationDeliverPayload = {},
 ): Promise<SimulationDeliverResult> {
-  const batches = await getMockBatches()
-  const batchCode =
-    payload.batch_code ??
-    batches.find((b) => b.status !== 'completed')?.batch_code
+  const batchCode = await resolveMockBatchCode(payload)
 
   if (!batchCode) {
     throw new Error('无可用调度批次，请先生成节点间调度')
@@ -177,28 +147,28 @@ export async function simulateDeliverMock(
   if (!batch) {
     throw new Error('调度批次不存在')
   }
-  if (batch.status === 'completed') {
-    throw new Error('该批次已完成，无需模拟送达')
-  }
 
-  const targetCodes = resolveTargetPackageCodes(batch, payload)
   const packages = await getMockPackages()
-  const deliverable = targetCodes.filter((code) => {
-    const pkg = packages.find((p) => p.package_code === code)
-    return pkg?.status === 'in_transit'
-  })
+  const isInTransit = (code: string): boolean =>
+    packages.find((p) => p.package_code === code)?.status === 'in_transit'
+
+  const targetCodes = resolveTargetPackageCodes(batch, payload, isInTransit)
+  const deliverable = filterInTransitCodes(targetCodes, isInTransit)
 
   if (!deliverable.length) {
     throw new Error('无运输中包裹可送达')
   }
 
+  const phase = resolveActiveDeliveryPhase(batch, isInTransit)
+  if (phase === null) {
+    throw new Error('无运输中包裹可送达')
+  }
+
   let count = 0
-  if (batch.status === 'pending') {
+  if (phase === 0) {
     count = await applyL0Delivery(batch, deliverable)
-  } else if (batch.status === 'l0_l1_done') {
-    count = await applyL1Delivery(batch, deliverable)
   } else {
-    throw new Error('当前批次状态不支持模拟送达')
+    count = await applyL1Delivery(batch, deliverable)
   }
 
   await updateMockBatchDetail(batch)
@@ -214,12 +184,12 @@ export async function simulateDeliverMock(
 export async function countInTransitPackagesInBatch(
   batch: DispatchBatchDetail | null,
 ): Promise<number> {
-  if (!batch || batch.status === 'completed') return 0
-  const levelPhase: 0 | 1 = batch.status === 'pending' ? 0 : 1
-  const codes = collectCargoPackageCodes(batch.dispatches, levelPhase)
+  if (!batch || batch.status === 'failed') return 0
+
   const packages = await getMockPackages()
-  return codes.filter((code) => {
-    const pkg = packages.find((p) => p.package_code === code)
-    return pkg?.status === 'in_transit'
-  }).length
+  const isInTransit = (code: string): boolean =>
+    packages.find((p) => p.package_code === code)?.status === 'in_transit'
+
+  const codes = collectAllCargoPackageCodes(batch)
+  return filterInTransitCodes(codes, isInTransit).length
 }
