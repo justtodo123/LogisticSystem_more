@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import DispatchBatchPanel from '@/components/schedule/DispatchBatchPanel.vue'
 import GoodsPathTable from '@/components/schedule/GoodsPathTable.vue'
 import ScheduleSummaryCards from '@/components/schedule/ScheduleSummaryCards.vue'
+import VehicleTaskTable from '@/components/schedule/VehicleTaskTable.vue'
 import { useGlobalSchedule } from '@/composables/useGlobalSchedule'
+import { useNodeDispatch } from '@/composables/useNodeDispatch'
 
 const authStore = useAuthStore()
 
@@ -18,6 +21,17 @@ const {
   loadSchedules,
   generateSchedule,
 } = useGlobalSchedule()
+
+const {
+  demoMode,
+  batches,
+  selectedBatchCode,
+  batchDetail,
+  batchListLoading,
+  batchDetailLoading,
+  dispatching,
+  createDispatch,
+} = useNodeDispatch(selectedCode)
 
 onMounted(() => {
   void loadSchedules()
@@ -79,6 +93,36 @@ onMounted(() => {
           :loading="detailLoading"
         />
       </div>
+
+      <el-divider content-position="left">节点间调度</el-divider>
+
+      <div v-if="authStore.isDispatcher" class="dispatch-toolbar">
+        <el-tooltip content="课堂演示：跳过 L1 等待，一次看到 L0→L1 与 L1→L2 任务">
+          <div class="demo-switch">
+            <span>demo_mode</span>
+            <el-switch v-model="demoMode" />
+          </div>
+        </el-tooltip>
+        <el-button
+          type="success"
+          :loading="dispatching"
+          :disabled="dispatching || !selectedCode"
+          @click="createDispatch"
+        >
+          生成节点间调度
+        </el-button>
+      </div>
+
+      <DispatchBatchPanel
+        v-model:selected-batch-code="selectedBatchCode"
+        :batches="batches"
+        :loading="batchListLoading"
+      />
+
+      <VehicleTaskTable
+        :detail="batchDetail"
+        :loading="batchDetailLoading"
+      />
     </template>
   </div>
 </template>
@@ -119,5 +163,21 @@ onMounted(() => {
 
 .dashboard-body {
   margin-top: 20px;
+}
+
+.dispatch-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.demo-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #606266;
 }
 </style>

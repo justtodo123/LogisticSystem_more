@@ -67,7 +67,6 @@ export function useGlobalSchedule() {
     ElMessage.info('调度计算中，请稍候（最长约 10 秒）')
     try {
       const created = await createGlobalSchedule({
-        order_codes: [],
         algorithm: 'traditional',
       })
       await loadSchedules(created.schedule_code)
