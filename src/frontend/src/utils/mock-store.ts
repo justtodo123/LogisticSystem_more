@@ -15,6 +15,7 @@ import type {
   NodeDispatchResult,
 } from '@/types/dispatch'
 import { useMockScheduleFail } from '@/utils/env'
+import { normalizeBatchDetail } from '@/utils/dispatch-normalize'
 import { nextCode } from '@/utils/mock'
 
 let nodesData: NodeItem[] | null = null
@@ -270,7 +271,7 @@ function buildMockDispatchDetail(
   ).size
   const now = new Date().toISOString().slice(0, 19)
 
-  return {
+  return normalizeBatchDetail({
     batch_code: batchCode,
     schedule_code: scheduleCode,
     status: 'completed',
@@ -280,7 +281,7 @@ function buildMockDispatchDetail(
     route_codes: ['RT001', 'RT002'],
     created_at: now,
     dispatches,
-  }
+  })
 }
 
 export async function createMockNodeDispatch(

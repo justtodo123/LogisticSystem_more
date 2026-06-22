@@ -12,15 +12,28 @@ export interface NodeDispatchResult {
   l0_l1_dispatch_count: number
   l1_l2_dispatch_count: number
   route_codes?: string[]
+  unallocated_packages?: string[]
+}
+
+/** 后端 API 返回的单车调度明细（扁平结构） */
+export interface NodeDispatchItem {
+  dispatch_code: string
+  vehicle_code: string
+  driver_code?: string | null
+  level_phase: 0 | 1
+  tasks: DispatchTask[]
+  total_distance: number
+  total_time?: number
 }
 
 export interface DispatchBatchSummary {
   batch_code: string
   schedule_code: string
   status: BatchStatus
-  vehicle_count: number
+  vehicle_count?: number
   l0_l1_dispatch_count?: number
   l1_l2_dispatch_count?: number
+  demo_mode?: boolean
   created_at?: string
 }
 
@@ -46,5 +59,7 @@ export interface NodeDispatchPhase {
 
 export interface DispatchBatchDetail extends DispatchBatchSummary {
   route_codes?: string[]
-  dispatches: NodeDispatchPhase[]
+  unallocated_packages?: string[]
+  /** API 为扁平列表；Mock 可在 normalize 前为分组结构 */
+  dispatches: NodeDispatchItem[]
 }

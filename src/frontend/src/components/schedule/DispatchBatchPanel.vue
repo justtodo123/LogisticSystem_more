@@ -54,7 +54,7 @@ const STATUS_TYPE: Record<BatchStatus, 'info' | 'warning' | 'success' | 'danger'
         <el-option
           v-for="item in batches"
           :key="item.batch_code"
-          :label="`${item.batch_code}（${item.vehicle_count} 辆车）`"
+          :label="`${item.batch_code}（${(item.vehicle_count ?? (item.l0_l1_dispatch_count ?? 0) + (item.l1_l2_dispatch_count ?? 0))} 辆车）`"
           :value="item.batch_code"
         />
       </el-select>
@@ -65,7 +65,12 @@ const STATUS_TYPE: Record<BatchStatus, 'info' | 'warning' | 'success' | 'danger'
             {{ STATUS_LABEL[current.status] }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="车辆数">{{ current.vehicle_count }}</el-descriptions-item>
+        <el-descriptions-item label="车辆数">
+          {{
+            current.vehicle_count ??
+            (current.l0_l1_dispatch_count ?? 0) + (current.l1_l2_dispatch_count ?? 0)
+          }}
+        </el-descriptions-item>
         <el-descriptions-item v-if="current.l0_l1_dispatch_count != null" label="L0→L1 车辆">
           {{ current.l0_l1_dispatch_count }}
         </el-descriptions-item>

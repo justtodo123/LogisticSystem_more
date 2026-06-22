@@ -14,6 +14,11 @@ import type {
 import { useMockSchedule, useMockNodeDispatch } from '@/utils/env'
 import { filterAndPaginate } from '@/utils/mock'
 import {
+  normalizeBatchDetail,
+  normalizeBatchSummary,
+  normalizeNodeDispatchResult,
+} from '@/utils/dispatch-normalize'
+import {
   createMockGlobalSchedule,
   createMockNodeDispatch,
   getMockBatchDetail,
@@ -120,7 +125,7 @@ export async function createNodeDispatch(
     },
     { timeout: 30000 },
   )
-  return data
+  return normalizeNodeDispatchResult(data)
 }
 
 export async function listDispatchBatches(
@@ -128,18 +133,25 @@ export async function listDispatchBatches(
 ): Promise<PaginatedResult<DispatchBatchSummary>> {
   if (useMockNodeDispatch()) {
     const batches = await getMockBatches()
-    return filterAndPaginate(batches, params, (item, p) => {
+    const result = filterAndPaginate(batches, params, (item, p) => {
       const code = p.schedule_code as string | undefined
       if (code && item.schedule_code !== code) return false
       return true
     })
+    return {
+      ...result,
+      items: result.items.map((item) => normalizeBatchSummary(item)),
+    }
   }
 
   const { data } = await request.get<PaginatedResult<DispatchBatchSummary>>(
     '/schedule/batches',
     { params },
   )
-  return data
+  return {
+    ...data,
+    items: data.items.map((item) => normalizeBatchSummary(item)),
+  }
 }
 
 export async function getDispatchBatch(
@@ -150,11 +162,11 @@ export async function getDispatchBatch(
     if (!detail) {
       throw new Error('调度批次不存在')
     }
-    return detail
+    return normalizeBatchDetail(detail)
   }
 
   const { data } = await request.get<DispatchBatchDetail>(
     `/schedule/batches/${batchCode}`,
   )
-  return data
+  return normalizeBatchDetail(data)
 }
