@@ -86,6 +86,8 @@ const scheduleOptions = ref<GlobalScheduleSummary[]>([])
 const nodeOptions = ref<NodeItem[]>([])
 const routeOptions = ref<RouteListItem[]>([])
 const selectedBatchCode = ref('')
+const routesLoading = ref(false)
+const hasBatchForSchedule = ref(false)
 
 const form = reactive<CreateExceptionPayload>({
   exception_type: 'node',
@@ -135,6 +137,7 @@ function resetForm(): void {
   form.description = ''
   selectedBatchCode.value = ''
   routeOptions.value = []
+  hasBatchForSchedule.value = false
 }
 
 function applyTypeDefaults(type: ExceptionType): void {
@@ -157,14 +160,15 @@ watch(
   },
 )
 
-watch(
-  () => form.related_schedule_code,
-  async (code) => {
-    form.target_code = ''
-    routeOptions.value = []
-    selectedBatchCode.value = ''
-    if (!code || form.recommended_action !== 'reroute') return
+async function loadRouteOptionsForSchedule(code: string): Promise<void> {
+  form.target_code = ''
+  routeOptions.value = []
+  selectedBatchCode.value = ''
+  hasBatchForSchedule.value = false
+  if (!code || form.recommended_action !== 'reroute') return
 
+  routesLoading.value = true
+  try {
     const batches = await listDispatchBatches({
       schedule_code: code,
       page: 1,
@@ -172,7 +176,10 @@ watch(
     })
     const batch = batches.items[0]
     if (!batch) return
+    hasBatchForSchedule.value = true
     selectedBatchCode.value = batch.batch_code
+
+    // MVP：路线在 F006 路径规划后才有（Dashboard 手动触发）；节点间调度暂不写 routes 表（见联调反馈 P2）
     const routes = await listRoutes({
       batch_code: batch.batch_code,
       page: 1,
@@ -182,6 +189,26 @@ watch(
     if (routes.items.length === 1) {
       form.target_code = routes.items[0].route_code
     }
+  } catch (err) {
+    ElMessage.warning(
+      err instanceof Error ? err.message : '加载路线列表失败',
+    )
+  } finally {
+    routesLoading.value = false
+  }
+}
+
+watch(
+  () =>
+    [form.related_schedule_code, form.recommended_action, form.exception_type] as const,
+  async ([code, action]) => {
+    if (!code || action !== 'reroute') {
+      routeOptions.value = []
+      selectedBatchCode.value = ''
+      hasBatchForSchedule.value = false
+      return
+    }
+    await loadRouteOptionsForSchedule(code)
   },
 )
 
@@ -435,9 +462,10 @@ function statusInfo(status: ExceptionStatus) {
           <el-select
             v-model="form.target_code"
             filterable
-            placeholder="先选方案并确保已有路线"
+            :loading="routesLoading"
+            placeholder="选择路线（需已完成节点间调度）"
             style="width: 100%"
-            :disabled="!routeOptions.length"
+            :disabled="routesLoading || !routeOptions.length"
           >
             <el-option
               v-for="route in routeOptions"
@@ -446,8 +474,16 @@ function statusInfo(status: ExceptionStatus) {
               :value="route.route_code"
             />
           </el-select>
-          <p v-if="form.related_schedule_code && !routeOptions.length" class="form-hint">
-            该方案暂无路线，请先在调度工作台完成节点间调度
+          <p
+            v-if="form.related_schedule_code && !routesLoading && !routeOptions.length"
+            class="form-hint"
+          >
+            <template v-if="!hasBatchForSchedule">
+              该方案尚无调度批次，请先在调度工作台完成节点间调度
+            </template>
+            <template v-else>
+              请先在调度工作台对该批次点击「路径规划」生成路线（MVP 暂不在节点间调度时自动产线）
+            </template>
           </p>
         </el-form-item>
         <el-form-item label="异常描述" prop="description">
