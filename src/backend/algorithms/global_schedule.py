@@ -151,18 +151,18 @@ def global_schedule(
         w3 = weights["w3_packages"]
 
     # ── 1. 查询订单 ──
-    # 正常调度：只处理 pending 订单
-    # 重规划调度：只处理 exception 订单
-    if is_replan:
+    # order_codes 显式提供：信任调用方，按编码查询（不限状态，支持 AI 权重重规划）
+    # order_codes 为空：按状态自动筛选
+    if order_codes:
+        query = db.query(Order).filter(Order.order_code.in_(order_codes))
+    elif is_replan:
         query = db.query(Order).filter(Order.status == "exception")
     else:
         query = db.query(Order).filter(Order.status == "pending")
-    if order_codes:
-        query = query.filter(Order.order_code.in_(order_codes))
     orders = query.all()
 
     if not orders:
-        raise ValueError("没有找到符合条件的订单（status=pending 或 status=exception）")
+        raise ValueError("没有找到符合条件的订单（请确认订单存在且状态为 pending/exception，或提供了有效的 order_codes）")
 
     # ── 2. 预加载 L1 节点（含 sorting_center 属性） ──
     l1_nodes = (

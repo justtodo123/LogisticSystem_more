@@ -266,3 +266,64 @@ async def test_ai_parse_response_format(async_client, test_users):
             assert "meta" in result
             assert "degraded" in result["meta"]
             assert "degraded_reason" in result["meta"]
+
+
+@pytest.mark.asyncio
+async def test_ai_parse_dry_run(async_client, test_users):
+    """
+    测试 AI 解析接口 dry-run 模式（execute=false）
+
+    验证：
+    1. 不调用调度链路 mock（证明未执行）
+    2. 返回 executed=false
+    3. 返回解析出的 algorithm_params 和 mode
+    """
+    # Mock DeepSeek API 响应
+    mock_response = {
+        "choices": [{
+            "message": {
+                "content": '{"global_schedule": {"algorithm": "traditional", "weights": {"distance": 0.7, "time": 0.2, "package_count": 0.1}}}'
+            }
+        }]
+    }
+    mock_response_obj = Mock()
+    mock_response_obj.status_code = 200
+    mock_response_obj.json = Mock(return_value=mock_response)
+    mock_response_obj.raise_for_status = Mock()
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response_obj)
+
+    # 注意：dry-run 模式下不应 mock _execute_new_schedule（它根本不应被调用）
+    with patch("services.deepseek_service.settings.DEEPSEEK_API_KEY", "fake-api-key"), \
+         patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
+        mock_client_class.return_value.__aenter__.return_value = mock_client
+
+        client = async_client
+        login_resp = await client.post("/api/auth/login", json={
+            "username": "dispatcher",
+            "password": "123456"
+        })
+        token = login_resp.json()["data"]["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        ai_resp = await client.post(
+            "/api/ai/parse",
+            headers=headers,
+            json={
+                "message": "优先缩短距离",
+                "execute": False
+            }
+        )
+
+        result = ai_resp.json()
+        assert result["code"] == 0
+        assert "dry-run" in result["message"]
+        assert result["data"]["executed"] == False
+        assert result["data"]["mode"] == "ai"
+        assert "algorithm_params" in result["data"]
+        assert result["data"]["algorithm_params"]["global_schedule"]["weights"]["distance"] == 0.7
+        # 确认为 dry-run 模式（不应有 schedule_code）
+        assert "schedule_code" not in result["data"]
+
+

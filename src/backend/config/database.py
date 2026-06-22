@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     # DeepSeek 配置
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_API_BASE: str = "https://api.deepseek.com"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
     
     class Config:
         env_file = ".env"

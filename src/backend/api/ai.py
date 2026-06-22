@@ -37,6 +37,7 @@ async def parse_natural_language(
     1. 确定参数来源 → AI解析 / 手动权重 / 混合 / 默认
     2. 确定执行目标 → schedule_codes 非空=重规划 / 空=新建
     3. 执行调度链路 → F007 → F021 → F005 → F006
+       （execute=false 时跳过步骤3，仅返回解析参数）
     """
     try:
         has_message = bool(request.message and request.message.strip())
@@ -56,6 +57,20 @@ async def parse_natural_language(
             reference_codes = request.schedule_codes
 
         # ── 步骤3：执行 ──
+        if not request.execute:
+            # dry-run 模式：仅返回解析出的参数，不执行调度链路
+            return {
+                "code": 0, "message": "success (dry-run)",
+                "data": {
+                    "algorithm_params": algorithm_params,
+                    "mode": mode,
+                    "is_replan": bool(request.schedule_codes),
+                    "executed": False,
+                    "reference_codes": reference_codes,
+                },
+                "meta": {"degraded": degraded, "degraded_reason": degraded_reason},
+            }
+
         is_replan = bool(request.schedule_codes)
         if is_replan:
             # 重规划模式：逐条对指定方案执行版本化重规划
@@ -85,6 +100,7 @@ async def parse_natural_language(
                     "algorithm_params": algorithm_params,
                     "mode": mode,
                     "is_replan": True,
+                    "executed": True,
                     "reference_codes": reference_codes,
                 },
                 "meta": {"degraded": degraded, "degraded_reason": degraded_reason},
@@ -101,6 +117,7 @@ async def parse_natural_language(
                     "algorithm_params": algorithm_params,
                     "mode": mode,
                     "is_replan": False,
+                    "executed": True,
                     "reference_codes": reference_codes,
                 },
                 "meta": {"degraded": degraded, "degraded_reason": degraded_reason},

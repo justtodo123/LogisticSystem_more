@@ -84,11 +84,14 @@ def build_user_prompt(user_message: str, system_context: Dict) -> str:
     pending_orders = system_context.get("pending_orders", [])
     
     # 构建订单描述（最多10个）
+    # 注意：pending_orders 来自 API 响应 items，是 dict 而非 ORM 对象
     orders_desc = "无待分配订单"
     if pending_orders:
         orders_desc = "\n".join([
-            f"- 订单{order.order_code}: 目的地{order.destination_node_id}, 时效{order.time_window}"
-            for order in pending_orders[:10]
+            f"- 订单{o.get('order_code', '?')}: "
+            f"目的地{o.get('destination_node_code', o.get('destination_node_id', '?'))}, "
+            f"时效{o.get('time_window', '?')}"
+            for o in pending_orders[:10]
         ])
     
     # 构建参考方案描述
@@ -136,7 +139,39 @@ def build_user_prompt(user_message: str, system_context: Dict) -> str:
 
 
 class DeepSeekService:
-    """DeepSeek API 调用服务"""
+    """DeepSeek API 调用服务（统一 OpenAI /chat/completions 格式，兼容官方 & 火山引擎）"""
+
+    @staticmethod
+    def _build_request_body(user_prompt: str) -> Dict:
+        """
+        构建请求体 — 统一使用 OpenAI /chat/completions 格式
+
+        火山引擎 ARK 和 DeepSeek 官方均兼容此格式，响应结构稳定可预测：
+            {"model": "...", "messages": [{"role":"system",...}, {"role":"user",...}], "temperature":0.1}
+        """
+        return {
+            "model": settings.DEEPSEEK_MODEL,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.1,
+        }
+
+    @staticmethod
+    def _extract_response_content(result: Dict) -> str:
+        """
+        解析响应内容 — 统一 OpenAI /chat/completions 格式
+
+        result["choices"][0]["message"]["content"]
+        """
+        return result["choices"][0]["message"]["content"]
+
+    @staticmethod
+    def _build_api_url() -> str:
+        """构建完整的 API 端点 URL — 统一 /chat/completions"""
+        base = settings.DEEPSEEK_API_BASE.rstrip("/")
+        return f"{base}/chat/completions"
     
     @staticmethod
     async def parse_natural_language(user_message: str, system_context: Dict) -> Dict:
@@ -168,28 +203,24 @@ class DeepSeekService:
             # 1. 构建提示词
             user_prompt = build_user_prompt(user_message, system_context)
             
-            # 2. 调用 DeepSeek API
+            # 2. 调用 API（自动适配 OpenAI / 火山引擎 格式）
+            request_body = DeepSeekService._build_request_body(user_prompt)
+            api_url = DeepSeekService._build_api_url()
+
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{settings.DEEPSEEK_API_BASE}/chat/completions",
+                    api_url,
                     headers={
                         "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
                         "Content-Type": "application/json"
                     },
-                    json={
-                        "model": "deepseek-chat",
-                        "messages": [
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user", "content": user_prompt}
-                        ],
-                        "temperature": 0.1,  # 低温度，确保输出稳定
-                    }
+                    json=request_body
                 )
                 response.raise_for_status()
-            
+
             # 3. 解析响应
             result = response.json()
-            content = result["choices"][0]["message"]["content"]
+            content = DeepSeekService._extract_response_content(result)
             
             # 4. 提取 JSON（可能包含在```json ```中）
             algorithm_params = DeepSeekService._extract_json(content)

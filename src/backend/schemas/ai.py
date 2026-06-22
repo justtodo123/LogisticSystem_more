@@ -34,32 +34,83 @@ class AiParseRequest(BaseModel):
                                                                        └─ 有 → 重规划
     ```
 
-    ── 速查示例 ──
+    ── 速查示例（阶段8）──
 
-    ① 裸 AI（最常见）
-    { "message": "优先缩短距离，多用电车" }
+    ① AI 重规划（最常用：对已有方案重新调度，AI 解析自然语言）
+    {
+      "message": "优先缩短距离，多用电车",
+      "schedule_codes": ["GS20260622001"]
+    }
 
-    ② 带权重
-    { "message": "优先时效",
-      "weights": {"global_schedule": {"weights": {"time": 0.7}}} }
+    ② AI 重规划 + 权重覆盖（DeepSeek 解析后手动覆盖部分参数）
+    {
+      "message": "优先时效",
+      "weights": {
+        "global_schedule": {
+          "weights": {
+            "time": 0.7
+          }
+        }
+      },
+      "schedule_codes": ["GS20260622001"]
+    }
 
-    ③ 纯手动权重
-    { "weights": {"global_schedule": {"weights": {"distance": 0.9, "time": 0.05, "package_count": 0.05}}} }
+    ③ 纯手动权重重规划（不调 DeepSeek，直接用指定权重）
+    {
+      "weights": {
+        "global_schedule": {
+          "weights": {
+            "distance": 0.9,
+            "time": 0.05,
+            "package_count": 0.05
+          }
+        }
+      },
+      "schedule_codes": ["GS20260622001"]
+    }
 
-    ④ 对单个方案重规划
-    { "message": "GS001 耗时太长，缩短时间",
-      "schedule_codes": ["GS20260622001"] }
+    ④ 默认参数重规划（无 message 无 weights，用 algorithm_config.json 默认值）
+    {
+      "schedule_codes": ["GS20260622001"]
+    }
 
-    ⑤ 批量重规划（AI 参考所有方案指标，逐条生成新版本）
-    { "message": "缩短距离",
-      "schedule_codes": ["GS001", "GS002", "GS003"] }
+    ⑤ 批量重规划（逐条生成新版本，AI 参考所有方案指标）
+    {
+      "message": "缩短距离",
+      "schedule_codes": [
+        "GS20260622001",
+        "GS20260622002",
+        "GS20260622003"
+      ]
+    }
 
-    ⑥ 默认参数重规划
-    { "schedule_codes": ["GS001"] }
+    ⑥ dry-run（仅查看解析参数，不执行调度、不写库）
+    {
+      "message": "优先缩短距离，多用电车",
+      "execute": false
+    }
+
+    ⑦ AI 新建调度（无 schedule_codes → 对全部 pending 订单创建新方案）
+    {
+      "message": "优先缩短距离，多用电车"
+    }
+
+    ⑧ 手动权重 dry-run（仅预览参数）
+    {
+      "weights": {
+        "global_schedule": {
+          "weights": {
+            "time": 0.7
+          }
+        }
+      },
+      "execute": false
+    }
     """
     message: Optional[str] = None           # 自然语言指令（空=跳过 DeepSeek）
     weights: Optional[Dict[str, Any]] = None  # 手动权重（结构与 algorithm_config.json 一致）
     schedule_codes: Optional[List[str]] = None  # 目标方案列表（非空=重规划，空=新建）
+    execute: bool = True                    # 是否执行完整调度链路（false=仅返回解析参数，不写库）
 
 
 class AiParseResponse(BaseModel):
