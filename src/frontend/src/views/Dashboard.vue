@@ -10,6 +10,7 @@ import RouteMap from '@/components/schedule/RouteMap.vue'
 import { useGlobalSchedule } from '@/composables/useGlobalSchedule'
 import { useNodeDispatch } from '@/composables/useNodeDispatch'
 import { useRouteVisualization } from '@/composables/useRouteVisualization'
+import { useSimulationDelivery } from '@/composables/useSimulationDelivery'
 
 const authStore = useAuthStore()
 
@@ -34,6 +35,7 @@ const {
   batchDetailLoading,
   dispatching,
   createDispatch,
+  refreshDispatch,
 } = useNodeDispatch(selectedCode)
 
 const {
@@ -49,6 +51,18 @@ const {
   onPackageClick,
   showPlanButton,
 } = useRouteVisualization(batchDetail)
+
+const {
+  delivering: simulationDelivering,
+  canDeliver,
+  deliverAll,
+  deliverVehicle,
+  deliverPackage,
+} = useSimulationDelivery({
+  batchDetail,
+  selectedVehicleCode,
+  onSuccess: refreshDispatch,
+})
 
 onMounted(() => {
   void loadSchedules()
@@ -141,6 +155,36 @@ onMounted(() => {
         :loading="batchDetailLoading"
       />
 
+      <div
+        v-if="authStore.isDispatcher && batchDetail"
+        class="simulation-toolbar"
+      >
+        <el-tooltip
+          content="demo_mode=false 时分阶段演示：L0→L1 调度与路径规划后模拟送达，再生成 L1→L2 调度并再次送达"
+          placement="top"
+        >
+          <span class="simulation-hint">模拟送达（F013-1）</span>
+        </el-tooltip>
+        <el-button
+          type="primary"
+          plain
+          :loading="simulationDelivering"
+          :disabled="simulationDelivering || !canDeliver"
+          @click="deliverAll"
+        >
+          全部送达
+        </el-button>
+        <el-button
+          type="primary"
+          plain
+          :loading="simulationDelivering"
+          :disabled="simulationDelivering || !canDeliver || !selectedVehicleCode"
+          @click="deliverVehicle()"
+        >
+          当前车辆送达
+        </el-button>
+      </div>
+
       <el-divider content-position="left">路线可视化</el-divider>
 
       <div
@@ -197,6 +241,17 @@ onMounted(() => {
             {{ selectedPackage.total_time.toFixed(0) }} min
           </el-descriptions-item>
         </el-descriptions>
+        <div v-if="authStore.isDispatcher && selectedPackage" class="drawer-actions">
+          <el-button
+            type="primary"
+            plain
+            :loading="simulationDelivering"
+            :disabled="simulationDelivering || !canDeliver"
+            @click="deliverPackage(selectedPackage.package_code)"
+          >
+            模拟送达此包裹
+          </el-button>
+        </div>
       </el-drawer>
     </template>
   </div>
@@ -258,5 +313,22 @@ onMounted(() => {
 
 .route-toolbar {
   margin-bottom: 12px;
+}
+
+.simulation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.simulation-hint {
+  font-size: 13px;
+  color: #606266;
+}
+
+.drawer-actions {
+  margin-top: 16px;
 }
 </style>

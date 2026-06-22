@@ -17,3 +17,7 @@ export function useMockNodeDispatch(): boolean {
 export function useMockRoutes(): boolean {
   return import.meta.env.VITE_USE_MOCK_ROUTES === 'true'
 }
+
+export function useMockSimulation(): boolean {
+  return import.meta.env.VITE_USE_MOCK_SIMULATION === 'true'
+}

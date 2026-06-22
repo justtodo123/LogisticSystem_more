@@ -96,6 +96,13 @@ export function useNodeDispatch(selectedCode: Ref<string>) {
     }
   }
 
+  async function refreshDispatch(): Promise<void> {
+    await loadBatches(selectedCode.value)
+    if (selectedBatchCode.value) {
+      await loadBatchDetail(selectedBatchCode.value)
+    }
+  }
+
   watch(selectedCode, (code) => {
     void loadBatches(code)
   })
@@ -114,5 +121,6 @@ export function useNodeDispatch(selectedCode: Ref<string>) {
     dispatching,
     loadBatches,
     createDispatch,
+    refreshDispatch,
   }
 }
