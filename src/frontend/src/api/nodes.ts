@@ -1,6 +1,7 @@
 import request from './request'
 import type { ApiListParams, PaginatedResult } from '@/types/common'
 import type {
+  NodeDetail,
   NodeItem,
   NodeType,
   SortingCenterPayload,
@@ -31,6 +32,19 @@ export async function listNodes(
   const { data } = await request.get<PaginatedResult<NodeItem>>('/nodes', {
     params,
   })
+  return data
+}
+
+export async function getNode(nodeCode: string): Promise<NodeDetail> {
+  if (useMockBasicData()) {
+    const nodes = await getMockNodes()
+    const node = nodes.find((n) => n.node_code === nodeCode)
+    if (!node) throw new Error('节点不存在')
+    return { ...node }
+  }
+  const { data } = await request.get<NodeDetail>(
+    `/nodes/${encodeURIComponent(nodeCode)}`,
+  )
   return data
 }
 

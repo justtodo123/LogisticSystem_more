@@ -6,8 +6,22 @@ export interface Order {
   destination_node_name?: string
   time_window: string
   status: OrderStatus
+  goods_count?: number
   created_at: string
   updated_at?: string
+}
+
+export interface OrderGoodsItem {
+  goods_code: string
+  goods_name: string
+  goods_type: string
+  weight: number
+  volume: number
+  status: string
+}
+
+export interface OrderDetail extends Order {
+  goods: OrderGoodsItem[]
 }
 
 export interface OrderGoodsCreateItem {

@@ -13,9 +13,13 @@ import { listNodes } from '@/api/nodes'
 import { listRoutes } from '@/api/routes'
 import {
   createException,
+  getException,
   listExceptions,
   resolveException,
 } from '@/api/exceptions'
+import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
+import ExceptionDetailBody from '@/components/detail/ExceptionDetailBody.vue'
+import { useEntityDetail } from '@/composables/useEntityDetail'
 import { useAuthStore } from '@/stores/auth'
 import type {
   CreateExceptionPayload,
@@ -77,6 +81,14 @@ const {
 })
 
 const { replanningCode, runReplan } = useExceptionReplan(load)
+
+const {
+  visible: detailVisible,
+  loading: detailLoading,
+  data: detailData,
+  title: detailTitle,
+  open: openExceptionDetail,
+} = useEntityDetail<ExceptionEvent>((code) => getException(code))
 
 const resolvingCode = ref('')
 const dialogVisible = ref(false)
@@ -347,19 +359,27 @@ function statusInfo(status: ExceptionStatus) {
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column
+        prop="description"
+        label="描述"
+        min-width="160"
+        show-overflow-tooltip
+      />
       <el-table-column prop="created_at" label="创建时间" min-width="160">
         <template #default="{ row }">
           {{ formatDateTime(row.created_at) }}
         </template>
       </el-table-column>
-      <el-table-column
-        v-if="authStore.isDispatcher"
-        label="操作"
-        width="200"
-        fixed="right"
-      >
+      <el-table-column label="操作" width="260" fixed="right">
         <template #default="{ row }">
-          <template v-if="row.status === 'open'">
+          <el-button
+            type="primary"
+            link
+            @click="openExceptionDetail(row.event_code, `异常 · ${row.event_code}`)"
+          >
+            查看
+          </el-button>
+          <template v-if="authStore.isDispatcher && row.status === 'open'">
             <el-button
               type="primary"
               link
@@ -378,7 +398,6 @@ function statusInfo(status: ExceptionStatus) {
               标记已解决
             </el-button>
           </template>
-          <span v-else class="text-muted">—</span>
         </template>
       </el-table-column>
     </DataTable>
@@ -502,6 +521,14 @@ function statusInfo(status: ExceptionStatus) {
         </el-button>
       </template>
     </el-dialog>
+
+    <EntityDetailDrawer
+      v-model="detailVisible"
+      :title="detailTitle"
+      :loading="detailLoading"
+    >
+      <ExceptionDetailBody v-if="detailData" :data="detailData" />
+    </EntityDetailDrawer>
   </div>
 </template>
 

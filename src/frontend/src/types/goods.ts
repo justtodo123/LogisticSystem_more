@@ -12,7 +12,13 @@ export interface Goods {
   weight: number
   volume: number
   node_code: string
+  node_name?: string
   order_code: string
   status: GoodsStatus
   created_at?: string
+  updated_at?: string
+}
+
+export interface GoodsDetail extends Goods {
+  node_name: string
 }

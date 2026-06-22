@@ -8,8 +8,17 @@ export interface Vehicle {
   vehicle_type: string
   status: VehicleStatus
   node_code: string
+  node_name?: string
   last_arrived_node_code: string
+  last_arrived_node_name?: string
   created_at?: string
+  updated_at?: string
+}
+
+export interface VehicleDetail extends Vehicle {
+  node_name: string
+  last_arrived_node_name: string
+  capability_tags?: string[] | null
 }
 
 export interface VehiclePayload {

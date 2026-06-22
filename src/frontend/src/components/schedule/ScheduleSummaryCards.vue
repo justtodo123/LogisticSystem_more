@@ -49,6 +49,12 @@ defineProps<{
         </div>
       </el-card>
     </el-col>
+    <el-col :xs="12" :sm="6">
+      <el-card shadow="never" class="summary-card">
+        <div class="summary-label">包裹数</div>
+        <div class="summary-value">{{ summary?.package_count ?? '—' }}</div>
+      </el-card>
+    </el-col>
     </el-row>
   </div>
 </template>
@@ -62,12 +68,12 @@ defineProps<{
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: var(--section-gap, 12px);
 }
 
 .summary-version {
   font-size: 14px;
-  color: #606266;
+  color: var(--text-regular, #606266);
 }
 
 .summary-row {
@@ -76,17 +82,18 @@ defineProps<{
 
 .summary-card {
   text-align: center;
+  border-radius: var(--card-radius, 6px);
 }
 
 .summary-label {
   font-size: 13px;
-  color: #909399;
+  color: var(--text-secondary, #909399);
   margin-bottom: 8px;
 }
 
 .summary-value {
   font-size: 22px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary, #303133);
 }
 </style>

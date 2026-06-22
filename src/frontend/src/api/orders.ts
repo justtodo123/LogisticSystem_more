@@ -3,12 +3,13 @@ import type { ApiListParams, PaginatedResult } from '@/types/common'
 import type {
   Order,
   OrderCreatePayload,
+  OrderDetail,
   OrderImportResult,
   OrderUpdatePayload,
 } from '@/types/order'
 import { useMockBasicData } from '@/utils/env'
 import { filterAndPaginate, nextCode } from '@/utils/mock'
-import { getMockNodes, getMockOrders } from '@/utils/mock-store'
+import { getMockGoods, getMockNodes, getMockOrders } from '@/utils/mock-store'
 
 async function enrichOrder(order: Order): Promise<Order> {
   if (order.destination_node_name) return order
@@ -35,6 +36,34 @@ export async function listOrders(
   const { data } = await request.get<PaginatedResult<Order>>('/orders', {
     params,
   })
+  return data
+}
+
+export async function getOrder(orderCode: string): Promise<OrderDetail> {
+  if (useMockBasicData()) {
+    const orders = await getMockOrders()
+    const order = orders.find((o) => o.order_code === orderCode)
+    if (!order) throw new Error('订单不存在')
+    const enriched = await enrichOrder(order)
+    const goods = await getMockGoods()
+    return {
+      ...enriched,
+      updated_at: enriched.updated_at ?? enriched.created_at,
+      goods: goods
+        .filter((g) => g.order_code === orderCode)
+        .map((g) => ({
+          goods_code: g.goods_code,
+          goods_name: g.goods_name,
+          goods_type: g.goods_type,
+          weight: g.weight,
+          volume: g.volume,
+          status: g.status,
+        })),
+    }
+  }
+  const { data } = await request.get<OrderDetail>(
+    `/orders/${encodeURIComponent(orderCode)}`,
+  )
   return data
 }
 
