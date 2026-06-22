@@ -89,3 +89,10 @@ export interface RoutePlanResult {
   status: string
   routes: RoutePlanItem[]
 }
+
+export interface RouteListItem {
+  route_code: string
+  batch_code?: string | null
+  vehicle_code?: string
+  total_distance?: number
+}
