@@ -5,8 +5,11 @@ import DispatchBatchPanel from '@/components/schedule/DispatchBatchPanel.vue'
 import GoodsPathTable from '@/components/schedule/GoodsPathTable.vue'
 import ScheduleSummaryCards from '@/components/schedule/ScheduleSummaryCards.vue'
 import VehicleTaskTable from '@/components/schedule/VehicleTaskTable.vue'
+import VehicleRoutePicker from '@/components/schedule/VehicleRoutePicker.vue'
+import RouteMap from '@/components/schedule/RouteMap.vue'
 import { useGlobalSchedule } from '@/composables/useGlobalSchedule'
 import { useNodeDispatch } from '@/composables/useNodeDispatch'
+import { useRouteVisualization } from '@/composables/useRouteVisualization'
 
 const authStore = useAuthStore()
 
@@ -32,6 +35,17 @@ const {
   dispatching,
   createDispatch,
 } = useNodeDispatch(selectedCode)
+
+const {
+  vehicles: routeVehicles,
+  selectedVehicleCode,
+  coordinates: routeCoordinates,
+  loading: routeLoading,
+  strokeColor: routeStrokeColor,
+  drawerVisible: packageDrawerVisible,
+  selectedPackage,
+  onPackageClick,
+} = useRouteVisualization(batchDetail)
 
 onMounted(() => {
   void loadSchedules()
@@ -123,6 +137,49 @@ onMounted(() => {
         :detail="batchDetail"
         :loading="batchDetailLoading"
       />
+
+      <el-divider content-position="left">路线可视化</el-divider>
+
+      <VehicleRoutePicker
+        v-model:selected-vehicle-code="selectedVehicleCode"
+        :vehicles="routeVehicles"
+        :loading="routeLoading || batchDetailLoading"
+      />
+
+      <RouteMap
+        :data="routeCoordinates"
+        :loading="routeLoading"
+        :stroke-color="routeStrokeColor"
+        @package-click="onPackageClick"
+      />
+
+      <el-drawer
+        v-model="packageDrawerVisible"
+        title="包裹详情"
+        size="320px"
+        destroy-on-close
+      >
+        <el-descriptions v-if="selectedPackage" :column="1" border size="small">
+          <el-descriptions-item label="包裹编号">
+            {{ selectedPackage.package_code }}
+          </el-descriptions-item>
+          <el-descriptions-item label="路线编号">
+            {{ selectedPackage.route_code }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="selectedPackage.from_node_code" label="起点">
+            {{ selectedPackage.from_node_code }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="selectedPackage.to_node_code" label="终点">
+            {{ selectedPackage.to_node_code }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="selectedPackage.total_distance != null" label="总距离">
+            {{ selectedPackage.total_distance.toFixed(1) }} km
+          </el-descriptions-item>
+          <el-descriptions-item v-if="selectedPackage.total_time != null" label="总时间">
+            {{ selectedPackage.total_time.toFixed(0) }} min
+          </el-descriptions-item>
+        </el-descriptions>
+      </el-drawer>
     </template>
   </div>
 </template>

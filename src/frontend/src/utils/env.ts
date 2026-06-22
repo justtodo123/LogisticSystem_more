@@ -13,3 +13,7 @@ export function useMockScheduleFail(): boolean {
 export function useMockNodeDispatch(): boolean {
   return import.meta.env.VITE_USE_MOCK_NODE_DISPATCH === 'true'
 }
+
+export function useMockRoutes(): boolean {
+  return import.meta.env.VITE_USE_MOCK_ROUTES === 'true'
+}

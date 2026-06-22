@@ -1,0 +1,25 @@
+{
+  "VEHSC00101": {
+    "vehicle_code": "VEHSC00101",
+    "route_code": "RT20260614001",
+    "nodes": [
+      { "node_code": "SC001", "latitude": 30.5, "longitude": 114.4, "role": "depot" },
+      { "node_code": "L1001", "latitude": 30.52, "longitude": 114.35, "role": "hub" }
+    ],
+    "packages": [
+      { "package_code": "PKG001", "latitude": 30.522, "longitude": 114.352 },
+      { "package_code": "PKG002", "latitude": 30.521, "longitude": 114.351 }
+    ],
+    "segments": [
+      {
+        "road_name": "虚拟大道",
+        "start_lng": 114.4,
+        "start_lat": 30.5,
+        "end_lng": 114.35,
+        "end_lat": 30.52
+      }
+    ],
+    "total_distance": 12.5,
+    "total_time": 25
+  }
+}
