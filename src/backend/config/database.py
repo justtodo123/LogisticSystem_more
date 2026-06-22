@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "default-secret-key-change-in-env"
     JWT_EXPIRE_SECONDS: int = 86400
     
+    # DeepSeek 配置
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_API_BASE: str = "https://api.deepseek.com"
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
