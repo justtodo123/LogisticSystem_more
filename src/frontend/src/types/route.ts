@@ -71,3 +71,21 @@ export interface GetVehicleRouteOptions {
   batchCode?: string
   dispatch?: NodeDispatchItem | null
 }
+
+export interface RoutePlanRequest {
+  batch_code: string
+  dispatch_codes?: string[] | null
+}
+
+export interface RoutePlanItem {
+  route_code: string
+  vehicle_code: string
+  total_distance: number
+  total_time: number
+}
+
+export interface RoutePlanResult {
+  batch_code: string
+  status: string
+  routes: RoutePlanItem[]
+}

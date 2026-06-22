@@ -41,10 +41,13 @@ const {
   selectedVehicleCode,
   coordinates: routeCoordinates,
   loading: routeLoading,
+  planning: routePlanning,
   strokeColor: routeStrokeColor,
   drawerVisible: packageDrawerVisible,
   selectedPackage,
+  planRoutes,
   onPackageClick,
+  showPlanButton,
 } = useRouteVisualization(batchDetail)
 
 onMounted(() => {
@@ -139,6 +142,21 @@ onMounted(() => {
       />
 
       <el-divider content-position="left">路线可视化</el-divider>
+
+      <div
+        v-if="authStore.isDispatcher && showPlanButton"
+        class="route-toolbar"
+      >
+        <el-button
+          type="warning"
+          plain
+          :loading="routePlanning"
+          :disabled="routePlanning || !batchDetail?.batch_code || !routeVehicles.length"
+          @click="planRoutes"
+        >
+          路径规划
+        </el-button>
+      </div>
 
       <VehicleRoutePicker
         v-model:selected-vehicle-code="selectedVehicleCode"
@@ -236,5 +254,9 @@ onMounted(() => {
   gap: 8px;
   font-size: 14px;
   color: #606266;
+}
+
+.route-toolbar {
+  margin-bottom: 12px;
 }
 </style>

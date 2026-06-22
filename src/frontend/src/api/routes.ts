@@ -3,6 +3,7 @@ import type {
   RouteCoordinates,
   RouteDetailResponse,
   GetVehicleRouteOptions,
+  RoutePlanResult,
 } from '@/types/route'
 import { useMockRoutes } from '@/utils/env'
 import { buildMockRouteCoordinates } from '@/utils/mock-route-builder'
@@ -30,6 +31,13 @@ export async function getRouteDetail(routeCode: string): Promise<RouteDetailResp
   const { data } = await request.get<RouteDetailResponse>(
     `/routes/${encodeURIComponent(routeCode)}`,
   )
+  return data
+}
+
+export async function planRoutes(batchCode: string): Promise<RoutePlanResult> {
+  const { data } = await request.post<RoutePlanResult>('/routes/plan', {
+    batch_code: batchCode,
+  })
   return data
 }
 

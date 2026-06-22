@@ -1,9 +1,10 @@
 import { ref, watch, type Ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getVehicleRouteCoordinates } from '@/api/routes'
+import { getVehicleRouteCoordinates, planRoutes as planRoutesApi } from '@/api/routes'
 import { routeColorForIndex } from '@/constants/route-colors'
 import type { DispatchBatchDetail } from '@/types/dispatch'
 import type { RouteCoordinates, RoutePackagePoint, SelectedPackageDetail } from '@/types/route'
+import { useMockRoutes } from '@/utils/env'
 import {
   listRouteVehicles,
   MAX_ROUTE_VEHICLES,
@@ -15,6 +16,7 @@ export function useRouteVisualization(batchDetail: Ref<DispatchBatchDetail | nul
   const selectedVehicleCode = ref('')
   const coordinates = ref<RouteCoordinates | null>(null)
   const loading = ref(false)
+  const planning = ref(false)
   const selectedVehicleIndex = ref(0)
   const drawerVisible = ref(false)
   const selectedPackage = ref<SelectedPackageDetail | null>(null)
@@ -90,6 +92,30 @@ export function useRouteVisualization(batchDetail: Ref<DispatchBatchDetail | nul
     drawerVisible.value = true
   }
 
+  async function planRoutes(): Promise<void> {
+    const batchCode = batchDetail.value?.batch_code
+    if (!batchCode || !vehicles.value.length) {
+      ElMessage.warning('请先生成节点间调度')
+      return
+    }
+
+    planning.value = true
+    ElMessage.info('路径规划计算中，请稍候')
+    try {
+      const result = await planRoutesApi(batchCode)
+      ElMessage.success(`路径规划完成：${result.routes.length} 条路线`)
+      if (selectedVehicleCode.value) {
+        await selectVehicle(selectedVehicleCode.value, selectedVehicleIndex.value)
+      } else if (vehicles.value.length > 0) {
+        await selectVehicle(vehicles.value[0].vehicle_code, 0)
+      }
+    } catch (err) {
+      ElMessage.error(err instanceof Error ? err.message : '路径规划失败')
+    } finally {
+      planning.value = false
+    }
+  }
+
   watch(batchDetail, () => {
     syncVehicles()
   }, { immediate: true })
@@ -107,10 +133,13 @@ export function useRouteVisualization(batchDetail: Ref<DispatchBatchDetail | nul
     selectedVehicleCode,
     coordinates,
     loading,
+    planning,
     strokeColor,
     drawerVisible,
     selectedPackage,
     selectVehicle,
+    planRoutes,
     onPackageClick,
+    showPlanButton: !useMockRoutes(),
   }
 }
