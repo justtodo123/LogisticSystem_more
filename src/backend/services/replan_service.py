@@ -26,6 +26,7 @@ class ReplanService:
         db: Session,
         original_schedule_code: str,
         replan_reason: str,
+        event: Optional[ExceptionEvent] = None,
     ) -> Dict[str, Any]:
         """
         重调度（F007→F021→F005→F006）
@@ -33,15 +34,17 @@ class ReplanService:
         流程：
         1. 读取原调度方案（GlobalSchedule）
         2. 获取相关订单编号
-        3. 调用现有 ScheduleService.create_global_schedule()（不修改它）
-        4. 更新新版调度方案的版本链字段
-        5. 调用 DispatchService.create_node_dispatch() 执行节点调度
-        6. 返回新调度方案编码
+        3. 提取排除参数（excluded_nodes）
+        4. 调用现有 ScheduleService.create_global_schedule()（不修改它）
+        5. 更新新版调度方案的版本链字段
+        6. 调用 DispatchService.create_node_dispatch() 执行节点调度
+        7. 返回新调度方案编码
 
         Args:
             db: 数据库会话
             original_schedule_code: 原调度方案业务编号
             replan_reason: 重规划原因
+            event: 异常事件对象（可选，用于提取排除参数）
 
         Returns:
             统一响应格式 dict
@@ -62,13 +65,19 @@ class ReplanService:
             order_codes = original.order_codes
             algorithm = original.algorithm_type or "traditional"
 
-            # 3. 调用现有服务层（不修改它们）
+            # 3. 提取排除参数
+            excluded_nodes = []
+            if event and event.target_type == "node" and event.target_code:
+                excluded_nodes.append(event.target_code)
+
+            # 4. 调用现有服务层（不修改它们）
             from services.schedule_service import ScheduleService
 
             schedule_result = await ScheduleService.create_global_schedule(
                 order_codes=order_codes,
                 algorithm=algorithm,
                 db=db,
+                excluded_nodes=excluded_nodes if excluded_nodes else None,
             )
 
             # 检查调度是否成功
@@ -123,10 +132,11 @@ class ReplanService:
         db: Session,
         original_route_code: str,
         replan_reason: str,
+        excluded_vehicles: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         重路径规划（F006）
-
+        
         流程：
         1. 读取原路径规划（Route）
         2. 通过 dispatch_id 找到关联的 dispatch_batch
@@ -134,12 +144,13 @@ class ReplanService:
         4. 调用现有 RouteService.create_route_planning()（不修改它）
         5. 更新新路径规划的版本链字段
         6. 返回新路径规划编码
-
+        
         Args:
             db: 数据库会话
             original_route_code: 原路径规划业务编号
             replan_reason: 重规划原因
-
+            excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
+        
         Returns:
             统一响应格式 dict
         """
@@ -186,6 +197,7 @@ class ReplanService:
                 batch_code=batch.batch_code,
                 dispatch_codes=dispatch_codes,
                 db=db,
+                excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
             )
 
             # 检查路径规划是否成功

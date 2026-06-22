@@ -207,7 +207,8 @@ def dispatch_level(
     level_phase: int,
     config: dict,
     package_codes: Optional[List[str]] = None,
-    batch_id: Optional[int] = None
+    batch_id: Optional[int] = None,
+    excluded_vehicles: Optional[List[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Package], List[Package]]:
     """
     执行一次节点调度（L0→L1 或 L1→L2）
@@ -346,10 +347,20 @@ def dispatch_level(
             
             # 查询候选车辆：优先级 本节点空闲 > 本节点返程 > 跨节点空闲
             candidate_vehicles = _get_idle_vehicles_at_node(db, from_node.id)
+            
+            # 新增：排除异常车辆
+            if excluded_vehicles:
+                candidate_vehicles = [v for v in candidate_vehicles 
+                                        if v.vehicle_code not in excluded_vehicles]
+            
             used_cross_node = False
             
             if not candidate_vehicles:
                 candidate_vehicles = _get_return_vehicles_at_node(db, from_node.id)
+                # 排除异常车辆
+                if excluded_vehicles:
+                    candidate_vehicles = [v for v in candidate_vehicles 
+                                                if v.vehicle_code not in excluded_vehicles]
             
             # 跨节点后备：当本节点无可用车辆时，尝试同类型其他节点的空闲车辆
             if not candidate_vehicles:
@@ -357,6 +368,10 @@ def dispatch_level(
                     candidate_vehicles = _get_idle_vehicles_by_node_type(db, 'storage_center', from_node.id)
                 else:
                     candidate_vehicles = _get_idle_vehicles_at_l1_centers(db, from_node.id)
+                # 排除异常车辆
+                if excluded_vehicles:
+                    candidate_vehicles = [v for v in candidate_vehicles 
+                                                if v.vehicle_code not in excluded_vehicles]
                 used_cross_node = True
             
             if not candidate_vehicles:
@@ -509,7 +524,7 @@ def _check_packages_by_level(db: Session, schedule_id: int, level_phase: int) ->
     return False
 
 
-def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) -> Dict[str, Any]:
+def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False, excluded_vehicles: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     F005 节点间调度主函数
     
@@ -523,6 +538,7 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
         db: 数据库会话
         schedule_code: 全局调度方案编码
         demo_mode: 是否演示模式（跳过L1送达等待）
+        excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
     
     Returns:
         调度结果字典，包含 batch_code, status, dispatches
@@ -551,23 +567,23 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
     # 5. 根据 demo_mode、existing_batch 和包裹类型决定执行逻辑
     if demo_mode:
         # demo_mode=true：一次完成两次调度（L0→L1 + L1→L2）
-        return _run_dispatch_both_levels(db, schedule, config)
+        return _run_dispatch_both_levels(db, schedule, config, excluded_vehicles)
     
     else:
         # demo_mode=false：分阶段调度
         if existing_batch:
             # 已有批次，执行 L1→L2（第二次调用）
-            return _run_dispatch_l1_to_l2(db, schedule, existing_batch, config)
+            return _run_dispatch_l1_to_l2(db, schedule, existing_batch, config, excluded_vehicles)
         else:
             # 没有批次，判断是首次调用还是跳过 L0→L1
             if has_l0_l1 and has_l1_l2:
                 # 同时存在两个层级的包裹，优先执行 L0→L1
-                result = _run_dispatch_l0_to_l1(db, schedule, config)
+                result = _run_dispatch_l0_to_l1(db, schedule, config, excluded_vehicles)
                 result["message"] = "L0→L1调度完成，请再次调用以执行L1→L2"
                 return result
             elif has_l0_l1:
                 # 只有 L0→L1 包裹，执行首次调用
-                return _run_dispatch_l0_to_l1(db, schedule, config)
+                return _run_dispatch_l0_to_l1(db, schedule, config, excluded_vehicles)
             elif has_l1_l2:
                 # 只有 L1→L2 包裹，直接执行 L1→L2
                 # 需要先创建一个批次（模拟首次调用的批次）
@@ -581,12 +597,12 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
                 )
                 db.add(batch)
                 db.flush()
-                return _run_dispatch_l1_to_l2(db, schedule, batch, config)
+                return _run_dispatch_l1_to_l2(db, schedule, batch, config, excluded_vehicles)
             else:
                 raise ValueError("没有可调度的包裹")
 
 
-def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, Any]:
+def _run_dispatch_both_levels(db: Session, schedule, config: dict, excluded_vehicles: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     demo_mode=true 时的一次性调度（L0→L1 + L1→L2）
     
@@ -594,6 +610,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
         db: 数据库会话
         schedule: 全局调度方案对象
         config: 算法配置
+        excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
     
     Returns:
         调度结果字典
@@ -609,7 +626,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
         raise ValueError("L0→L1没有可调度的包裹")
     
     try:
-        l0_l1_dispatches, _, unallocated_l0_l1 = dispatch_level(db, schedule.id, 0, config)
+        l0_l1_dispatches, _, unallocated_l0_l1 = dispatch_level(db, schedule.id, 0, config, excluded_vehicles=excluded_vehicles)
     except Exception as e:
         raise ValueError(f"L0→L1调度失败：{str(e)}")
     
@@ -718,7 +735,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
     }
 
 
-def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any]:
+def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict, excluded_vehicles: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     demo_mode=false 时的首次调用（只执行 L0→L1）
     
@@ -726,13 +743,14 @@ def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any
         db: 数据库会话
         schedule: 全局调度方案对象
         config: 算法配置
+        excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
     
     Returns:
         调度结果字典
     """
     # 1. 执行 L0→L1 调度
     try:
-        l0_l1_dispatches, _, unallocated_l0_l1 = dispatch_level(db, schedule.id, 0, config)
+        l0_l1_dispatches, _, unallocated_l0_l1 = dispatch_level(db, schedule.id, 0, config, excluded_vehicles=excluded_vehicles)
     except Exception as e:
         raise ValueError(f"L0→L1调度失败：{str(e)}")
     
@@ -777,7 +795,7 @@ def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any
     }
 
 
-def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict) -> Dict[str, Any]:
+def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict, excluded_vehicles: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     demo_mode=false 时的第二次调用（只执行 L1→L2）
     
@@ -786,13 +804,14 @@ def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict) 
         schedule: 全局调度方案对象
         existing_batch: 已存在的调度批次（status=l0_l1_done）
         config: 算法配置
+        excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
     
     Returns:
         调度结果字典
     """
     # 1. 执行 L1→L2 调度
     try:
-        l1_l2_dispatches, _, unallocated_l1_l2 = dispatch_level(db, schedule.id, 1, config)
+        l1_l2_dispatches, _, unallocated_l1_l2 = dispatch_level(db, schedule.id, 1, config, excluded_vehicles=excluded_vehicles)
     except Exception as e:
         raise ValueError(f"L1→L2调度失败：{str(e)}")
     

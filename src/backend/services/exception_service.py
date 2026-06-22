@@ -374,6 +374,7 @@ class ExceptionService:
                     db=db,
                     original_schedule_code=event.related_schedule_code,
                     replan_reason=replan_reason,
+                    event=event,  # 传递异常事件以提取排除参数
                 )
 
             elif action == "reroute":
@@ -387,10 +388,25 @@ class ExceptionService:
                             code=40001,
                             message="重路径规划需要关联路线",
                         )
+                    
+                    # 提取排除车辆参数
+                    excluded_vehicles = []
+                    if route.dispatch_id:
+                        dispatch = db.query(NodeDispatch).filter(
+                            NodeDispatch.id == route.dispatch_id
+                        ).first()
+                        if dispatch and dispatch.vehicle_id:
+                            vehicle = db.query(Vehicle).filter(
+                                Vehicle.id == dispatch.vehicle_id
+                            ).first()
+                            if vehicle:
+                                excluded_vehicles.append(vehicle.vehicle_code)
+                    
                     result = await ReplanService.reroute(
                         db=db,
                         original_route_code=route.route_code,
                         replan_reason=replan_reason,
+                        excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
                     )
                 else:
                     return error_response(

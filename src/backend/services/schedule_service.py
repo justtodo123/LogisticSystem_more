@@ -33,6 +33,7 @@ class ScheduleService:
         order_codes: Optional[List[str]],
         algorithm: str,
         db: Session,
+        excluded_nodes: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         编排 F007 → F021 → 写库（单事务）
@@ -54,7 +55,10 @@ class ScheduleService:
         """
         try:
             # ── 1. F007 全局调度（纯计算） ──
-            schedule_result = global_schedule(order_codes, algorithm, db)
+            schedule_result = global_schedule(
+                order_codes, algorithm, db,
+                excluded_nodes=excluded_nodes
+            )
 
             # ── 2. F021 打包（纯计算，暂不传 schedule_id） ──
             packages = packaging(schedule_result, None, db)
