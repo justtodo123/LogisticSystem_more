@@ -25,3 +25,7 @@ export function useMockSimulation(): boolean {
 export function useMockExceptions(): boolean {
   return import.meta.env.VITE_USE_MOCK_EXCEPTIONS === 'true'
 }
+
+export function useMockAi(): boolean {
+  return import.meta.env.VITE_USE_MOCK_AI === 'true'
+}

@@ -8,6 +8,7 @@ import ScheduleSummaryCards from '@/components/schedule/ScheduleSummaryCards.vue
 import VehicleTaskTable from '@/components/schedule/VehicleTaskTable.vue'
 import VehicleRoutePicker from '@/components/schedule/VehicleRoutePicker.vue'
 import RouteMap from '@/components/schedule/RouteMap.vue'
+import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
 import { useGlobalSchedule } from '@/composables/useGlobalSchedule'
 import { useNodeDispatch } from '@/composables/useNodeDispatch'
 import { useRouteVisualization } from '@/composables/useRouteVisualization'
@@ -87,6 +88,11 @@ onMounted(() => {
     typeof scheduleFromQuery === 'string' ? scheduleFromQuery : undefined
   void loadSchedules(code)
 })
+
+async function onAiExecuted(scheduleCode?: string): Promise<void> {
+  await loadSchedules(scheduleCode)
+  await refreshDispatch()
+}
 </script>
 
 <template>
@@ -249,6 +255,13 @@ onMounted(() => {
         :loading="routeLoading"
         :stroke-color="routeStrokeColor"
         @package-click="onPackageClick"
+      />
+
+      <AiAssistantPanel
+        v-if="authStore.isDispatcher"
+        :schedules="schedules"
+        :selected-schedule-code="selectedCode"
+        @executed="onAiExecuted"
       />
 
       <el-drawer
