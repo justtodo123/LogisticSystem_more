@@ -35,13 +35,17 @@ async def test_ai_parse_with_mock():
         }]
     }
     
-    with patch("httpx.AsyncClient.post") as mock_post:
-        # 配置mock
-        mock_post.return_value = AsyncMock(
-            status_code=200,
-            json=AsyncMock(return_value=mock_response),
-            raise_for_status=AsyncMock()
-        )
+    # 正确Mock httpx.AsyncClient的异步上下文管理器
+    mock_client = AsyncMock()
+    mock_client.post.return_value = AsyncMock(
+        status_code=200,
+        json=AsyncMock(return_value=mock_response),
+        raise_for_status=AsyncMock()
+    )
+    
+    with patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
+        # 配置__aenter__返回mock_client
+        mock_client_class.return_value.__aenter__.return_value = mock_client
         
         # 调用API
         async with AsyncClient(app=app, base_url="http://test") as client:
@@ -82,9 +86,13 @@ async def test_deepseek_degradation():
     2. 调用POST /api/ai/parse
     3. 验证返回degraded=true
     """
-    with patch("httpx.AsyncClient.post") as mock_post:
-        # 模拟API调用失败
-        mock_post.side_effect = Exception("Connection failed")
+    # 正确Mock httpx.AsyncClient的异步上下文管理器
+    mock_client = AsyncMock()
+    mock_client.post.side_effect = Exception("Connection failed")
+    
+    with patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
+        # 配置__aenter__返回mock_client
+        mock_client_class.return_value.__aenter__.return_value = mock_client
         
         # 调用API
         async with AsyncClient(app=app, base_url="http://test") as client:
@@ -174,20 +182,26 @@ async def test_ai_parse_response_format():
     """
     测试AI解析接口响应格式符合统一规范
     """
-    with patch("httpx.AsyncClient.post") as mock_post:
-        # Mock DeepSeek API响应
-        mock_response = {
-            "choices": [{
-                "message": {
-                    "content": '{"global_schedule": {"algorithm": "traditional"}, "node_dispatch": {"algorithm": "traditional"}, "route_planning": {"algorithm": "traditional"}}'
-                }
-            }]
-        }
-        mock_post.return_value = AsyncMock(
-            status_code=200,
-            json=AsyncMock(return_value=mock_response),
-            raise_for_status=AsyncMock()
-        )
+    # Mock DeepSeek API响应
+    mock_response = {
+        "choices": [{
+            "message": {
+                "content": '{"global_schedule": {"algorithm": "traditional"}, "node_dispatch": {"algorithm": "traditional"}, "route_planning": {"algorithm": "traditional"}}'
+            }
+        }]
+    }
+    
+    # 正确Mock httpx.AsyncClient的异步上下文管理器
+    mock_client = AsyncMock()
+    mock_client.post.return_value = AsyncMock(
+        status_code=200,
+        json=AsyncMock(return_value=mock_response),
+        raise_for_status=AsyncMock()
+    )
+    
+    with patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
+        # 配置__aenter__返回mock_client
+        mock_client_class.return_value.__aenter__.return_value = mock_client
         
         async with AsyncClient(app=app, base_url="http://test") as client:
             # 先登录
