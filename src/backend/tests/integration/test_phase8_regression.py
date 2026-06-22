@@ -44,7 +44,7 @@ def async_client(test_db):
 
 
 @pytest.mark.asyncio
-async def test_ai_parse_with_mock(async_client):
+async def test_ai_parse_with_mock(async_client, test_users):
     """
     测试AI解析接口（Mock DeepSeek API）
     
@@ -104,7 +104,7 @@ async def test_ai_parse_with_mock(async_client):
 
 
 @pytest.mark.asyncio
-async def test_deepseek_degradation(async_client):
+async def test_deepseek_degradation(async_client, test_users):
     """
     测试DeepSeek降级场景
     
@@ -181,7 +181,7 @@ async def test_log_events_recording(async_client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_p1_placeholder_endpoints(async_client):
+async def test_p1_placeholder_endpoints(async_client, test_users):
     """
     测试P1占位接口返回501
     """
@@ -205,7 +205,7 @@ async def test_p1_placeholder_endpoints(async_client):
 
 
 @pytest.mark.asyncio
-async def test_ai_parse_response_format(async_client):
+async def test_ai_parse_response_format(async_client, test_users):
     """
     测试AI解析接口响应格式符合统一规范
     """
