@@ -4,10 +4,13 @@ import PageToolbar from '@/components/crud/PageToolbar.vue'
 import DataTable from '@/components/crud/DataTable.vue'
 import TablePagination from '@/components/crud/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
-import { listDrivers } from '@/api/drivers'
+import { listDrivers, getDriver } from '@/api/drivers'
+import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
+import DriverDetailBody from '@/components/detail/DriverDetailBody.vue'
+import { useEntityDetail } from '@/composables/useEntityDetail'
 import { listNodes } from '@/api/nodes'
 import { DRIVER_STATUS_MAP, DRIVER_STATUS_OPTIONS } from '@/constants/status'
-import type { Driver, DriverStatus } from '@/types/driver'
+import type { Driver, DriverDetail, DriverStatus } from '@/types/driver'
 import type { NodeItem } from '@/types/node'
 import { formatDateTime } from '@/utils/format'
 
@@ -25,6 +28,14 @@ const {
   status: '',
   node_code: '',
 })
+
+const {
+  visible: detailVisible,
+  loading: detailLoading,
+  data: detailData,
+  title: detailTitle,
+  open: openDriverDetail,
+} = useEntityDetail<DriverDetail>((code) => getDriver(code))
 
 const nodeOptions = ref<NodeItem[]>([])
 
@@ -99,6 +110,17 @@ function statusTag(status: DriverStatus): string {
           {{ formatDateTime(row.created_at) }}
         </template>
       </el-table-column>
+      <el-table-column label="操作" width="80" fixed="right">
+        <template #default="{ row }">
+          <el-button
+            type="primary"
+            link
+            @click="openDriverDetail(row.driver_code, `司机 · ${row.name}`)"
+          >
+            查看
+          </el-button>
+        </template>
+      </el-table-column>
     </DataTable>
 
     <TablePagination
@@ -108,6 +130,14 @@ function statusTag(status: DriverStatus): string {
       @update:page="onPageChange"
       @update:page-size="onSizeChange"
     />
+
+    <EntityDetailDrawer
+      v-model="detailVisible"
+      :title="detailTitle"
+      :loading="detailLoading"
+    >
+      <DriverDetailBody v-if="detailData" :data="detailData" />
+    </EntityDetailDrawer>
   </div>
 </template>
 

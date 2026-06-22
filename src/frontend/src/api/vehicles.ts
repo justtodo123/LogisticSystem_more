@@ -1,9 +1,9 @@
 import request from './request'
 import type { ApiListParams, PaginatedResult } from '@/types/common'
-import type { Vehicle, VehiclePayload } from '@/types/vehicle'
+import type { Vehicle, VehicleDetail, VehiclePayload } from '@/types/vehicle'
 import { useMockBasicData } from '@/utils/env'
 import { filterAndPaginate, nextCode } from '@/utils/mock'
-import { getMockVehicles } from '@/utils/mock-store'
+import { getMockNodes, getMockVehicles } from '@/utils/mock-store'
 
 export async function listVehicles(
   params: ApiListParams = {},
@@ -19,6 +19,27 @@ export async function listVehicles(
   const { data } = await request.get<PaginatedResult<Vehicle>>('/vehicles', {
     params,
   })
+  return data
+}
+
+export async function getVehicle(vehicleCode: string): Promise<VehicleDetail> {
+  if (useMockBasicData()) {
+    const vehicles = await getMockVehicles()
+    const vehicle = vehicles.find((v) => v.vehicle_code === vehicleCode)
+    if (!vehicle) throw new Error('车辆不存在')
+    const nodes = await getMockNodes()
+    const node = nodes.find((n) => n.node_code === vehicle.node_code)
+    const last = nodes.find((n) => n.node_code === vehicle.last_arrived_node_code)
+    return {
+      ...vehicle,
+      node_name: node?.name ?? vehicle.node_code,
+      last_arrived_node_name: last?.name ?? vehicle.last_arrived_node_code,
+      updated_at: vehicle.updated_at ?? vehicle.created_at,
+    }
+  }
+  const { data } = await request.get<VehicleDetail>(
+    `/vehicles/${encodeURIComponent(vehicleCode)}`,
+  )
   return data
 }
 

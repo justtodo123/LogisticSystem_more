@@ -12,16 +12,28 @@ import {
   createStorageCenter,
   deleteSortingCenter,
   deleteStorageCenter,
+  getNode,
   listNodes,
   updateSortingCenter,
   updateStorageCenter,
 } from '@/api/nodes'
+import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
+import NodeDetailBody from '@/components/detail/NodeDetailBody.vue'
+import { useEntityDetail } from '@/composables/useEntityDetail'
 import { useAuthStore } from '@/stores/auth'
-import type { NodeItem, NodeType } from '@/types/node'
+import type { NodeDetail, NodeItem, NodeType } from '@/types/node'
 import { formatDateTime } from '@/utils/format'
 
 const route = useRoute()
 const authStore = useAuthStore()
+
+const {
+  visible: detailVisible,
+  loading: detailLoading,
+  data: detailData,
+  title: detailTitle,
+  open: openNodeDetail,
+} = useEntityDetail<NodeDetail>((code) => getNode(code))
 
 const nodeType = computed(
   () => route.meta.nodeType as NodeType,
@@ -212,14 +224,22 @@ async function handleDelete(row: NodeItem): Promise<void> {
         </template>
       </el-table-column>
       <el-table-column
-        v-if="authStore.isDispatcher"
         label="操作"
-        width="140"
+        width="180"
         fixed="right"
       >
         <template #default="{ row }">
-          <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
-          <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+          <el-button
+            type="primary"
+            link
+            @click="openNodeDetail(row.node_code, `节点 · ${row.name}`)"
+          >
+            查看
+          </el-button>
+          <template v-if="authStore.isDispatcher">
+            <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
+            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+          </template>
         </template>
       </el-table-column>
     </DataTable>
@@ -288,6 +308,14 @@ async function handleDelete(row: NodeItem): Promise<void> {
         </el-button>
       </template>
     </el-dialog>
+
+    <EntityDetailDrawer
+      v-model="detailVisible"
+      :title="detailTitle"
+      :loading="detailLoading"
+    >
+      <NodeDetailBody v-if="detailData" :data="detailData" />
+    </EntityDetailDrawer>
   </div>
 </template>
 

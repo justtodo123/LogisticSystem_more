@@ -1,9 +1,9 @@
 import request from './request'
 import type { ApiListParams, PaginatedResult } from '@/types/common'
-import type { Goods } from '@/types/goods'
+import type { Goods, GoodsDetail } from '@/types/goods'
 import { useMockBasicData } from '@/utils/env'
 import { filterAndPaginate } from '@/utils/mock'
-import { getMockGoods } from '@/utils/mock-store'
+import { getMockGoods, getMockNodes } from '@/utils/mock-store'
 
 export async function listGoods(
   params: ApiListParams = {},
@@ -20,5 +20,24 @@ export async function listGoods(
   const { data } = await request.get<PaginatedResult<Goods>>('/goods', {
     params,
   })
+  return data
+}
+
+export async function getGoods(goodsCode: string): Promise<GoodsDetail> {
+  if (useMockBasicData()) {
+    const goods = await getMockGoods()
+    const item = goods.find((g) => g.goods_code === goodsCode)
+    if (!item) throw new Error('货物不存在')
+    const nodes = await getMockNodes()
+    const node = nodes.find((n) => n.node_code === item.node_code)
+    return {
+      ...item,
+      node_name: node?.name ?? item.node_code,
+      updated_at: item.updated_at ?? item.created_at,
+    }
+  }
+  const { data } = await request.get<GoodsDetail>(
+    `/goods/${encodeURIComponent(goodsCode)}`,
+  )
   return data
 }

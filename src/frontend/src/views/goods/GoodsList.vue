@@ -4,10 +4,13 @@ import PageToolbar from '@/components/crud/PageToolbar.vue'
 import DataTable from '@/components/crud/DataTable.vue'
 import TablePagination from '@/components/crud/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
-import { listGoods } from '@/api/goods'
+import { listGoods, getGoods } from '@/api/goods'
+import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
+import GoodsDetailBody from '@/components/detail/GoodsDetailBody.vue'
+import { useEntityDetail } from '@/composables/useEntityDetail'
 import { listNodes } from '@/api/nodes'
 import { GOODS_STATUS_MAP, GOODS_STATUS_OPTIONS } from '@/constants/status'
-import type { Goods, GoodsStatus } from '@/types/goods'
+import type { Goods, GoodsDetail, GoodsStatus } from '@/types/goods'
 import type { NodeItem } from '@/types/node'
 import { formatDateTime } from '@/utils/format'
 
@@ -26,6 +29,14 @@ const {
   order_code: '',
   node_code: '',
 })
+
+const {
+  visible: detailVisible,
+  loading: detailLoading,
+  data: detailData,
+  title: detailTitle,
+  open: openGoodsDetail,
+} = useEntityDetail<GoodsDetail>((code) => getGoods(code))
 
 const nodeOptions = ref<NodeItem[]>([])
 
@@ -112,6 +123,17 @@ function statusTag(status: GoodsStatus): string {
           {{ formatDateTime(row.created_at) }}
         </template>
       </el-table-column>
+      <el-table-column label="操作" width="80" fixed="right">
+        <template #default="{ row }">
+          <el-button
+            type="primary"
+            link
+            @click="openGoodsDetail(row.goods_code, `货物 · ${row.goods_code}`)"
+          >
+            查看
+          </el-button>
+        </template>
+      </el-table-column>
     </DataTable>
 
     <TablePagination
@@ -121,6 +143,14 @@ function statusTag(status: GoodsStatus): string {
       @update:page="onPageChange"
       @update:page-size="onSizeChange"
     />
+
+    <EntityDetailDrawer
+      v-model="detailVisible"
+      :title="detailTitle"
+      :loading="detailLoading"
+    >
+      <GoodsDetailBody v-if="detailData" :data="detailData" />
+    </EntityDetailDrawer>
   </div>
 </template>
 

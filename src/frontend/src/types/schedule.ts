@@ -1,3 +1,5 @@
+import type { PackageGoodsItem } from '@/types/package'
+
 export interface GlobalScheduleSummary {
   schedule_code: string
   total_distance: number
@@ -16,8 +18,19 @@ export interface GoodsScheduleItem {
   path: string[]
 }
 
+export interface SchedulePackageItem {
+  package_code: string
+  weight: number
+  volume: number
+  status: string
+  from_node_code?: string | null
+  to_node_code?: string | null
+  goods_items?: PackageGoodsItem[]
+}
+
 export interface GlobalScheduleDetail extends GlobalScheduleSummary {
   goods_schedules: GoodsScheduleItem[]
+  packages?: SchedulePackageItem[]
   order_codes?: string[]
   algorithm_type?: string
 }

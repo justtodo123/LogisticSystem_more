@@ -6,16 +6,27 @@ import DataTable from '@/components/crud/DataTable.vue'
 import TablePagination from '@/components/crud/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
 import { listNodes } from '@/api/nodes'
-import { listPackages } from '@/api/packages'
+import { listPackages, getPackage } from '@/api/packages'
+import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
+import PackageDetailBody from '@/components/detail/PackageDetailBody.vue'
+import { useEntityDetail } from '@/composables/useEntityDetail'
 import { simulateDeliver } from '@/api/simulation'
 import { useAuthStore } from '@/stores/auth'
 import { PACKAGE_STATUS_MAP, PACKAGE_STATUS_OPTIONS } from '@/constants/status'
 import type { NodeItem } from '@/types/node'
-import type { PackageGoodsItem, PackageItem, PackageStatus } from '@/types/package'
+import type { PackageDetail, PackageGoodsItem, PackageItem, PackageStatus } from '@/types/package'
 import { formatDateTime } from '@/utils/format'
 
 const authStore = useAuthStore()
 const deliveringCode = ref('')
+
+const {
+  visible: detailVisible,
+  loading: detailLoading,
+  data: detailData,
+  title: detailTitle,
+  open: openPackageDetail,
+} = useEntityDetail<PackageDetail>((code) => getPackage(code))
 
 const {
   items,
@@ -163,15 +174,17 @@ async function deliverPackage(row: PackageItem): Promise<void> {
           </span>
         </template>
       </el-table-column>
-      <el-table-column
-        v-if="authStore.isDispatcher"
-        label="操作"
-        width="110"
-        fixed="right"
-      >
+      <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
           <el-button
-            v-if="row.status === 'in_transit'"
+            type="primary"
+            link
+            @click="openPackageDetail(row.package_code, `包裹 · ${row.package_code}`)"
+          >
+            查看
+          </el-button>
+          <el-button
+            v-if="authStore.isDispatcher && row.status === 'in_transit'"
             type="primary"
             link
             :loading="deliveringCode === row.package_code"
@@ -190,6 +203,14 @@ async function deliverPackage(row: PackageItem): Promise<void> {
       @update:page="onPageChange"
       @update:page-size="onSizeChange"
     />
+
+    <EntityDetailDrawer
+      v-model="detailVisible"
+      :title="detailTitle"
+      :loading="detailLoading"
+    >
+      <PackageDetailBody v-if="detailData" :data="detailData" />
+    </EntityDetailDrawer>
   </div>
 </template>
 

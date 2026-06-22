@@ -1,0 +1,40 @@
+/* 详情抽屉与 Body 组件共用样式（仅本迭代新增模块引用） */
+
+.detail-sub {
+  color: var(--text-secondary, #909399);
+  font-size: 12px;
+}
+
+.detail-section-title {
+  margin: var(--section-gap, 12px) 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #303133);
+}
+
+.detail-empty {
+  padding: var(--section-gap, 12px) 0;
+}
+
+.enhance-panel {
+  margin: var(--block-margin-y, 16px) 0;
+}
+
+.enhance-panel-title {
+  font-weight: 600;
+  margin-right: 8px;
+  color: var(--text-primary, #303133);
+}
+
+.enhance-meta-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin: 8px 0 var(--section-gap, 12px);
+  padding: 10px 14px;
+  background: var(--meta-bg, #f5f7fa);
+  border: 1px solid var(--meta-border, #ebeef5);
+  border-radius: var(--radius-sm, 4px);
+  font-size: 13px;
+  color: var(--text-regular, #606266);
+}

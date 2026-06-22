@@ -8,6 +8,9 @@ import ScheduleSummaryCards from '@/components/schedule/ScheduleSummaryCards.vue
 import VehicleTaskTable from '@/components/schedule/VehicleTaskTable.vue'
 import VehicleRoutePicker from '@/components/schedule/VehicleRoutePicker.vue'
 import RouteMap from '@/components/schedule/RouteMap.vue'
+import RouteDetailMeta from '@/components/schedule/RouteDetailMeta.vue'
+import SchedulePackagesPanel from '@/components/schedule/SchedulePackagesPanel.vue'
+import UnallocatedAlert from '@/components/schedule/UnallocatedAlert.vue'
 import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
 import { useGlobalSchedule } from '@/composables/useGlobalSchedule'
 import { useNodeDispatch } from '@/composables/useNodeDispatch'
@@ -160,6 +163,10 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
         :summary="summary"
         :loading="detailLoading && !summary"
       />
+      <SchedulePackagesPanel
+        :packages="detail?.packages"
+        :loading="detailLoading"
+      />
       <div class="dashboard-body">
         <GoodsPathTable
           :items="detail?.goods_schedules ?? []"
@@ -196,6 +203,8 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
         :detail="batchDetail"
         :loading="batchDetailLoading"
       />
+
+      <UnallocatedAlert :codes="batchDetail?.unallocated_packages" />
 
       <div
         v-if="authStore.isDispatcher && batchDetail"
@@ -249,6 +258,8 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
         :vehicles="routeVehicles"
         :loading="routeLoading || batchDetailLoading"
       />
+
+      <RouteDetailMeta :coordinates="routeCoordinates" />
 
       <RouteMap
         :data="routeCoordinates"

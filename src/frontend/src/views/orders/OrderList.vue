@@ -10,14 +10,18 @@ import { listLevel0SortingCenters } from '@/api/nodes'
 import {
   createOrder,
   deleteOrder,
+  getOrder,
   importOrders,
   listOrders,
   updateOrder,
 } from '@/api/orders'
+import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
+import OrderDetailBody from '@/components/detail/OrderDetailBody.vue'
+import { useEntityDetail } from '@/composables/useEntityDetail'
 import { ORDER_STATUS_MAP, ORDER_STATUS_OPTIONS } from '@/constants/status'
 import { useAuthStore } from '@/stores/auth'
 import type { NodeItem } from '@/types/node'
-import type { Order, OrderCreatePayload, OrderGoodsCreateItem, OrderStatus } from '@/types/order'
+import type { Order, OrderCreatePayload, OrderDetail, OrderGoodsCreateItem, OrderStatus } from '@/types/order'
 import { formatDateTime } from '@/utils/format'
 
 const authStore = useAuthStore()
@@ -34,6 +38,14 @@ const {
   onSizeChange,
   applyFilters,
 } = usePagedList<Order>((params) => listOrders(params), { status: '' })
+
+const {
+  visible: detailVisible,
+  loading: detailLoading,
+  data: detailData,
+  title: detailTitle,
+  open: openOrderDetail,
+} = useEntityDetail<OrderDetail>((code) => getOrder(code))
 
 const destinationOptions = ref<NodeItem[]>([])
 
@@ -259,17 +271,18 @@ function statusTag(status: OrderStatus): string {
         </template>
       </el-table-column>
       <el-table-column
-        v-if="authStore.isDispatcher"
         label="操作"
-        width="140"
+        width="180"
         fixed="right"
       >
         <template #default="{ row }">
-          <template v-if="row.status === 'pending'">
+          <el-button type="primary" link @click="openOrderDetail(row.order_code, `订单 · ${row.order_code}`)">
+            查看
+          </el-button>
+          <template v-if="authStore.isDispatcher && row.status === 'pending'">
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
-          <span v-else class="text-muted">—</span>
         </template>
       </el-table-column>
     </DataTable>
@@ -351,6 +364,14 @@ function statusTag(status: OrderStatus): string {
         </el-button>
       </template>
     </el-dialog>
+
+    <EntityDetailDrawer
+      v-model="detailVisible"
+      :title="detailTitle"
+      :loading="detailLoading"
+    >
+      <OrderDetailBody v-if="detailData" :data="detailData" />
+    </EntityDetailDrawer>
   </div>
 </template>
 

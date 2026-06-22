@@ -7,6 +7,12 @@ export interface Driver {
   license_type: string
   shift: string
   node_code: string
+  node_name?: string
   status: DriverStatus
   created_at?: string
+  updated_at?: string
+}
+
+export interface DriverDetail extends Driver {
+  node_name: string
 }
