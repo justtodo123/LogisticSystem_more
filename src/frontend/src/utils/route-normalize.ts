@@ -1,0 +1,177 @@
+import type { NodeDispatchItem } from '@/types/dispatch'
+import type {
+  BackendRouteCoordinate,
+  BackendRouteCoordinatesResponse,
+  RouteDetailResponse,
+  RouteCoordinates,
+  RouteNodePoint,
+  RoutePackagePoint,
+  RouteSegment,
+} from '@/types/route'
+
+/** 武汉演示区域节点坐标（与 init_demo_data / mock-route-builder 一致） */
+const NODE_COORDS: Record<string, { lat: number; lng: number }> = {
+  SC001: { lat: 30.5, lng: 114.4 },
+  SC002: { lat: 30.4, lng: 114.3 },
+  SC003: { lat: 30.45, lng: 114.35 },
+  SC004: { lat: 30.48, lng: 114.42 },
+  SC005: { lat: 30.42, lng: 114.38 },
+  L1001: { lat: 30.52, lng: 114.35 },
+  L1002: { lat: 30.46, lng: 114.32 },
+}
+
+function resolveNodeCoord(nodeCode: string): { lat: number; lng: number } {
+  if (NODE_COORDS[nodeCode]) {
+    return NODE_COORDS[nodeCode]
+  }
+  const prefix = nodeCode.slice(0, 2)
+  if (prefix === 'SC') return { lat: 30.48, lng: 114.36 }
+  if (prefix === 'L1') return { lat: 30.5, lng: 114.34 }
+  if (prefix === 'L2') return { lat: 30.47, lng: 114.33 }
+  let hash = 0
+  for (let i = 0; i < nodeCode.length; i++) {
+    hash = (hash + nodeCode.charCodeAt(i) * (i + 1)) % 997
+  }
+  return {
+    lat: 30.44 + (hash % 20) * 0.005,
+    lng: 114.28 + (hash % 25) * 0.004,
+  }
+}
+
+/** 从 dispatch tasks 推导节点与包裹坐标（后端 coordinates 接口不返回） */
+export function buildRouteOverlayFromDispatch(
+  dispatch: NodeDispatchItem,
+): { nodes: RouteNodePoint[]; packages: RoutePackagePoint[] } {
+  const nodeMap = new Map<string, RouteNodePoint>()
+  const packages: RoutePackagePoint[] = []
+
+  for (const task of dispatch.tasks.filter((t) => !t.is_return)) {
+    const from = resolveNodeCoord(task.from_node_code)
+    const to = resolveNodeCoord(task.to_node_code)
+
+    if (!nodeMap.has(task.from_node_code)) {
+      nodeMap.set(task.from_node_code, {
+        node_code: task.from_node_code,
+        latitude: from.lat,
+        longitude: from.lng,
+        role: task.from_node_code.startsWith('SC') ? 'depot' : 'hub',
+      })
+    }
+    if (!nodeMap.has(task.to_node_code)) {
+      nodeMap.set(task.to_node_code, {
+        node_code: task.to_node_code,
+        latitude: to.lat,
+        longitude: to.lng,
+        role: task.to_node_code.startsWith('L2') ? 'destination' : 'hub',
+      })
+    }
+
+    for (const pkg of task.package_codes) {
+      packages.push({
+        package_code: pkg,
+        latitude: to.lat + 0.002,
+        longitude: to.lng + 0.002,
+      })
+    }
+  }
+
+  return { nodes: [...nodeMap.values()], packages }
+}
+
+export function segmentsFromRouteDetail(
+  routeSegments: RouteDetailResponse['route_segments'],
+): RouteSegment[] {
+  return routeSegments.map((seg) => ({
+    road_name: seg.road_name,
+    start_lng: seg.start_lng,
+    start_lat: seg.start_lat,
+    end_lng: seg.end_lng,
+    end_lat: seg.end_lat,
+  }))
+}
+
+export function segmentsFromPolyline(
+  coordinates: BackendRouteCoordinate['coordinates'],
+): RouteSegment[] {
+  const segments: RouteSegment[] = []
+  for (let i = 0; i < coordinates.length - 1; i++) {
+    const [startLng, startLat] = coordinates[i]
+    const [endLng, endLat] = coordinates[i + 1]
+    segments.push({
+      road_name: '虚拟道路',
+      start_lng: startLng,
+      start_lat: startLat,
+      end_lng: endLng,
+      end_lat: endLat,
+    })
+  }
+  return segments
+}
+
+export function pickRouteForBatch(
+  data: BackendRouteCoordinatesResponse,
+  batchCode?: string,
+): BackendRouteCoordinate | null {
+  if (!data.routes.length) return null
+  if (batchCode) {
+    const matched = data.routes.find((r) => r.batch_code === batchCode)
+    if (matched) return matched
+  }
+  return data.routes[0]
+}
+
+export function normalizeFromRouteDetail(
+  vehicleCode: string,
+  detail: RouteDetailResponse,
+  dispatch?: NodeDispatchItem | null,
+): RouteCoordinates {
+  const segments =
+    detail.route_segments?.length > 0
+      ? segmentsFromRouteDetail(detail.route_segments)
+      : []
+
+  const overlay = dispatch?.tasks?.length
+    ? buildRouteOverlayFromDispatch(dispatch)
+    : { nodes: [] as RouteNodePoint[], packages: [] as RoutePackagePoint[] }
+
+  return {
+    vehicle_code: vehicleCode,
+    route_code: detail.route_code,
+    nodes: overlay.nodes,
+    packages: overlay.packages,
+    segments,
+    total_distance: detail.total_distance,
+    total_time: detail.total_time,
+  }
+}
+
+export function normalizeRouteCoordinates(
+  vehicleCode: string,
+  coordData: BackendRouteCoordinatesResponse,
+  detail: RouteDetailResponse,
+  dispatch?: NodeDispatchItem | null,
+): RouteCoordinates {
+  const route = pickRouteForBatch(coordData, detail.batch_code ?? undefined)
+  if (!route) {
+    throw new Error('该车辆暂无路线，请先完成路径规划')
+  }
+
+  const segments =
+    detail.route_segments?.length > 0
+      ? segmentsFromRouteDetail(detail.route_segments)
+      : segmentsFromPolyline(route.coordinates)
+
+  const overlay = dispatch?.tasks?.length
+    ? buildRouteOverlayFromDispatch(dispatch)
+    : { nodes: [] as RouteNodePoint[], packages: [] as RoutePackagePoint[] }
+
+  return {
+    vehicle_code: vehicleCode,
+    route_code: route.route_code,
+    nodes: overlay.nodes,
+    packages: overlay.packages,
+    segments,
+    total_distance: detail.total_distance ?? route.total_distance,
+    total_time: detail.total_time ?? 0,
+  }
+}

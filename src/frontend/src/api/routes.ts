@@ -1,10 +1,19 @@
 import request from './request'
-import type { NodeDispatchItem } from '@/types/dispatch'
-import type { RouteCoordinates } from '@/types/route'
+import type {
+  RouteCoordinates,
+  RouteDetailResponse,
+  GetVehicleRouteOptions,
+} from '@/types/route'
 import { useMockRoutes } from '@/utils/env'
 import { buildMockRouteCoordinates } from '@/utils/mock-route-builder'
+import { normalizeFromRouteDetail } from '@/utils/route-normalize'
 
 let staticMockCache: Record<string, RouteCoordinates> | null = null
+
+interface RouteListResponse {
+  items: Array<{ route_code: string }>
+  total: number
+}
 
 async function loadStaticMockCache(): Promise<Record<string, RouteCoordinates>> {
   if (staticMockCache) return staticMockCache
@@ -17,10 +26,19 @@ async function loadStaticMockCache(): Promise<Record<string, RouteCoordinates>> 
   return staticMockCache
 }
 
+export async function getRouteDetail(routeCode: string): Promise<RouteDetailResponse> {
+  const { data } = await request.get<RouteDetailResponse>(
+    `/routes/${encodeURIComponent(routeCode)}`,
+  )
+  return data
+}
+
 export async function getVehicleRouteCoordinates(
   vehicleCode: string,
-  dispatch?: NodeDispatchItem | null,
+  options?: GetVehicleRouteOptions,
 ): Promise<RouteCoordinates> {
+  const dispatch = options?.dispatch ?? null
+
   if (useMockRoutes()) {
     if (dispatch?.tasks?.length) {
       return buildMockRouteCoordinates(vehicleCode, dispatch)
@@ -31,8 +49,19 @@ export async function getVehicleRouteCoordinates(
     throw new Error('该车辆暂无路线，请先生成节点间调度')
   }
 
-  const { data } = await request.get<RouteCoordinates>(
-    `/routes/by-vehicle/${encodeURIComponent(vehicleCode)}/coordinates`,
-  )
-  return data
+  const { data: listData } = await request.get<RouteListResponse>('/routes', {
+    params: {
+      vehicle_code: vehicleCode,
+      batch_code: options?.batchCode,
+      page: 1,
+      page_size: 1,
+    },
+  })
+
+  if (!listData.items?.length) {
+    throw new Error('该车辆暂无路线，请先完成路径规划')
+  }
+
+  const detail = await getRouteDetail(listData.items[0].route_code)
+  return normalizeFromRouteDetail(vehicleCode, detail, dispatch)
 }

@@ -53,10 +53,10 @@ export function useRouteVisualization(batchDetail: Ref<DispatchBatchDetail | nul
     const option = vehicles.value.find((v) => v.vehicle_code === vehicleCode)
     loading.value = true
     try {
-      coordinates.value = await getVehicleRouteCoordinates(
-        vehicleCode,
-        option?.dispatch ?? null,
-      )
+      coordinates.value = await getVehicleRouteCoordinates(vehicleCode, {
+        batchCode: batchDetail.value?.batch_code,
+        dispatch: option?.dispatch ?? null,
+      })
     } catch (err) {
       coordinates.value = null
       ElMessage.error(err instanceof Error ? err.message : '加载路线失败')
