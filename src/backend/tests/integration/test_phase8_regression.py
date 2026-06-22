@@ -8,7 +8,7 @@
 4. 重规划回归测试
 """
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from httpx import AsyncClient, ASGITransport
 
 from main import app
@@ -63,11 +63,11 @@ async def test_ai_parse_with_mock(async_client, test_users):
     }
     
     # 正确Mock httpx.AsyncClient的异步上下文管理器
-    # 注意：response.json() 是异步方法，需要返回协程
-    mock_response_obj = AsyncMock()
+    # 注意：response.json() 是同步方法，不是异步方法
+    mock_response_obj = Mock()
     mock_response_obj.status_code = 200
-    mock_response_obj.json = AsyncMock(return_value=mock_response)
-    mock_response_obj.raise_for_status = AsyncMock()
+    mock_response_obj.json = Mock(return_value=mock_response)  # json 是同步方法
+    mock_response_obj.raise_for_status = Mock()  # 同步方法
     
     mock_client = AsyncMock()
     mock_client.post = AsyncMock(return_value=mock_response_obj)
@@ -231,11 +231,11 @@ async def test_ai_parse_response_format(async_client, test_users):
     }
     
     # 正确Mock httpx.AsyncClient的异步上下文管理器
-    # 注意：response.json() 是异步方法，需要返回协程
-    mock_response_obj = AsyncMock()
+    # 注意：response.json() 是同步方法，不是异步方法
+    mock_response_obj = Mock()
     mock_response_obj.status_code = 200
-    mock_response_obj.json = AsyncMock(return_value=mock_response)
-    mock_response_obj.raise_for_status = AsyncMock()
+    mock_response_obj.json = Mock(return_value=mock_response)  # json 是同步方法
+    mock_response_obj.raise_for_status = Mock()  # 同步方法
     
     mock_client = AsyncMock()
     mock_client.post = AsyncMock(return_value=mock_response_obj)
