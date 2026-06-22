@@ -12,6 +12,8 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime
 
+from fastapi import HTTPException
+
 from models.exception_event import ExceptionEvent
 from models.global_schedule import GlobalSchedule
 from models.route import Route
@@ -492,6 +494,7 @@ class TestExceptionTriggerReplan:
         result = await ExceptionService.trigger_replan(
             db=db_session,
             event_code="EX_NONEXISTENT",
+            action="reroute",
             replan_reason="测试",
         )
         assert result["code"] == 40401
@@ -514,6 +517,7 @@ class TestExceptionTriggerReplan:
         result = await ExceptionService.trigger_replan(
             db=db_session,
             event_code="EX_RESOLVED_001",
+            action="redispatch",
             replan_reason="测试",
         )
         assert result["code"] == 40001
@@ -537,6 +541,7 @@ class TestExceptionTriggerReplan:
         result = await ExceptionService.trigger_replan(
             db=db_session,
             event_code="EX_NO_SCH_001",
+            action="redispatch",
             replan_reason="测试",
         )
         assert result["code"] == 40001
@@ -545,25 +550,27 @@ class TestExceptionTriggerReplan:
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_trigger_replan_unsupported_action(self, db_session):
-        """触发重规划失败：不支持的重规划类型"""
+        """触发重规划失败：不支持的重规划类型（action 参数校验）"""
         event = ExceptionEvent(
             event_code="EX_UNSUPPORTED_001",
             exception_type="node",
             severity="medium",
-            recommended_action="unknown_action",
-            description="未知操作",
+            recommended_action="redispatch",
+            description="测试非法action参数",
             status="open",
         )
         db_session.add(event)
         db_session.commit()
 
-        result = await ExceptionService.trigger_replan(
-            db=db_session,
-            event_code="EX_UNSUPPORTED_001",
-            replan_reason="测试",
-        )
-        assert result["code"] == 40001
-        assert "不支持" in result["message"]
+        with pytest.raises(HTTPException) as exc_info:
+            await ExceptionService.trigger_replan(
+                db=db_session,
+                event_code="EX_UNSUPPORTED_001",
+                action="unknown_action",
+                replan_reason="测试",
+            )
+        assert exc_info.value.status_code == 400
+        assert "unknown_action" in exc_info.value.detail
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -604,6 +611,7 @@ class TestExceptionTriggerReplan:
         result = await ExceptionService.trigger_replan(
             db=db_session,
             event_code="EX_TRIGGER_001",
+            action="redispatch",
             replan_reason="节点容量异常触发重调度",
         )
 
@@ -731,6 +739,7 @@ class TestExceptionTriggerReplan:
             result = await ExceptionService.trigger_replan(
                 db=db_session,
                 event_code="EX_REROUTE_T_001",
+                action="reroute",
                 replan_reason="道路拥堵触发重路径规划",
             )
 

@@ -18,6 +18,7 @@ from services.exception_service import ExceptionService
 from schemas.exception_event import (
     CreateExceptionEventRequest,
     TriggerReplanRequest,
+    UpdateExceptionRequest,
     ResolveExceptionRequest,
 )
 from config.database import get_db
@@ -107,14 +108,37 @@ async def trigger_replan(
 
     需要角色：dispatcher
 
-    根据异常事件的 recommended_action 自动选择重规划类型：
+    根据请求体中的 action 选择重规划类型：
     - redispatch: 重新执行 F007→F021→F005→F006
     - reroute: 重新执行 F006 路径规划
     """
     return await ExceptionService.trigger_replan(
         db=db,
         event_code=event_code,
-        replan_reason=body.replan_reason,
+        action=body.action,
+        replan_reason=body.reason,
+    )
+
+
+@router.put("/{event_code}")
+async def update_exception(
+    event_code: str,
+    body: UpdateExceptionRequest,
+    current_user: User = Depends(require_dispatcher),
+    db: Session = Depends(get_db),
+):
+    """
+    更新异常事件
+
+    需要角色：dispatcher
+
+    可更新 status 和 resolution_note。
+    """
+    return await ExceptionService.update_exception(
+        db=db,
+        event_code=event_code,
+        status=body.status,
+        resolution_note=body.resolution_note,
     )
 
 

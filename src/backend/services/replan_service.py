@@ -106,6 +106,7 @@ class ReplanService:
 
             return success_response(data={
                 "schedule_code": new_schedule_code,
+                "new_schedule_code": new_schedule_code,
                 "batch_code": batch_code,
                 "version": new_schedule.version if new_schedule else original.version + 1,
                 "is_replan": True,
@@ -207,9 +208,12 @@ class ReplanService:
 
             db.commit()
 
+            new_route_code = new_route_codes[0] if new_route_codes else None
+
             return success_response(data={
                 "batch_code": batch.batch_code,
                 "route_codes": new_route_codes,
+                "new_route_code": new_route_code,
                 "version": original_route.version + 1,
                 "is_replan": True,
                 "replan_reason": replan_reason,

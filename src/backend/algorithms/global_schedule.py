@@ -104,6 +104,7 @@ def global_schedule(
     order_codes: Optional[List[str]],
     algorithm: str,
     db: Session,
+    excluded_nodes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     F007 全局调度算法
@@ -192,6 +193,10 @@ def global_schedule(
             best_score = float("inf")
 
             for l1_node in l1_nodes:
+                # 新增：排除异常节点
+                if excluded_nodes and l1_node.node_code in excluded_nodes:
+                    continue
+
                 l1_sc = l1_node_map.get(l1_node.id)
                 if not l1_sc:
                     continue

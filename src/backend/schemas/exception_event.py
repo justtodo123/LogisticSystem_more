@@ -25,7 +25,14 @@ class CreateExceptionEventRequest(BaseModel):
 
 class TriggerReplanRequest(BaseModel):
     """触发重规划请求体"""
-    replan_reason: str = Field(..., description="重规划原因")
+    action: str = Field(..., description="重规划类型：redispatch / reroute")
+    reason: str = Field(..., description="重规划原因")
+
+
+class UpdateExceptionRequest(BaseModel):
+    """更新异常事件请求体"""
+    status: Optional[str] = Field(None, description="异常状态：open / resolved")
+    resolution_note: Optional[str] = Field(None, description="解决备注")
 
 
 class ResolveExceptionRequest(BaseModel):
