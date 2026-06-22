@@ -1,0 +1,738 @@
+"""
+服务单元测试：ExceptionService + ReplanService（异常与重规划）
+
+测试目标：
+- ExceptionService CRUD 操作（创建、查询、解决）
+- ReplanService 重规划逻辑（redispatch / reroute）
+- 版本链管理验证
+
+阶段7单元测试（方案A：不修改现有服务层）。
+"""
+import pytest
+from unittest.mock import patch, MagicMock, AsyncMock
+from datetime import datetime
+
+from models.exception_event import ExceptionEvent
+from models.global_schedule import GlobalSchedule
+from models.route import Route
+from models.node_dispatch import NodeDispatch
+from models.dispatch_batch import DispatchBatch
+from models.vehicle import Vehicle
+from models.driver import Driver
+from models.node import Node
+from services.exception_service import ExceptionService
+from services.replan_service import ReplanService
+from schemas.exception_event import CreateExceptionEventRequest
+from utils.response import success_response, error_response
+
+
+class TestExceptionServiceCRUD:
+    """异常事件 CRUD 测试"""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_create_exception_event_success(self, db_session):
+        """创建异常事件成功"""
+        data = CreateExceptionEventRequest(
+            exception_type="node",
+            exception_subtype="capacity_limit",
+            target_type="node",
+            target_code="SC001",
+            severity="high",
+            recommended_action="redispatch",
+            description="存储中心容量不足",
+        )
+
+        result = await ExceptionService.create_exception_event(
+            db=db_session,
+            data=data,
+        )
+
+        assert result["code"] == 0
+        assert result["message"] == "success"
+        assert result["data"]["event_code"].startswith("EX")
+        assert result["data"]["exception_type"] == "node"
+        assert result["data"]["exception_subtype"] == "capacity_limit"
+        assert result["data"]["recommended_action"] == "redispatch"
+        assert result["data"]["status"] == "open"
+        assert result["data"]["description"] == "存储中心容量不足"
+
+        # 验证数据库写入
+        event = db_session.query(ExceptionEvent).filter(
+            ExceptionEvent.event_code == result["data"]["event_code"]
+        ).first()
+        assert event is not None
+        assert event.status == "open"
+        assert event.severity == "high"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_create_exception_event_invalid_schedule(self, db_session):
+        """创建异常事件失败：无效的 related_schedule_code"""
+        data = CreateExceptionEventRequest(
+            exception_type="node",
+            recommended_action="redispatch",
+            description="测试",
+            related_schedule_code="GS_NONEXISTENT",
+        )
+
+        result = await ExceptionService.create_exception_event(
+            db=db_session,
+            data=data,
+        )
+
+        assert result["code"] == 40401
+        assert "不存在" in result["message"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_create_exception_event_with_schedule(self, db_session, test_nodes):
+        """创建关联调度方案的异常事件成功（需 mock 调度方案）"""
+        # 先创建一个 GlobalSchedule
+        from models.global_schedule import GlobalSchedule
+        gs = GlobalSchedule(
+            schedule_code="GS_TEST_001",
+            order_codes=["O001"],
+            goods_schedules=[],
+            total_distance=100.0,
+            total_time=5.0,
+            total_goods=2,
+            score=0.5,
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(gs)
+        db_session.commit()
+
+        data = CreateExceptionEventRequest(
+            exception_type="road",
+            exception_subtype="congestion",
+            recommended_action="reroute",
+            description="道路拥堵",
+            related_schedule_code="GS_TEST_001",
+        )
+
+        result = await ExceptionService.create_exception_event(
+            db=db_session,
+            data=data,
+        )
+
+        assert result["code"] == 0
+        assert result["data"]["related_schedule_code"] == "GS_TEST_001"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_get_exception_events_list(self, db_session):
+        """查询异常事件列表（分页、筛选）"""
+        # 创建多个异常事件
+        for i in range(3):
+            event = ExceptionEvent(
+                event_code=f"EX_TEST_{i}",
+                exception_type="road" if i < 2 else "package",
+                severity="medium",
+                recommended_action="reroute",
+                description=f"测试异常 {i}",
+                status="open" if i < 2 else "resolved",
+            )
+            db_session.add(event)
+        db_session.commit()
+
+        # 查询全部
+        result = await ExceptionService.get_exception_events(
+            db=db_session,
+            page=1,
+            page_size=10,
+        )
+        assert result["code"] == 0
+        assert result["data"]["total"] == 3
+        assert len(result["data"]["items"]) == 3
+
+        # 按 status 筛选
+        result = await ExceptionService.get_exception_events(
+            db=db_session,
+            status="open",
+        )
+        assert result["data"]["total"] == 2
+
+        # 按 exception_type 筛选
+        result = await ExceptionService.get_exception_events(
+            db=db_session,
+            exception_type="package",
+        )
+        assert result["data"]["total"] == 1
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_get_exception_event_detail(self, db_session):
+        """查询异常事件详情"""
+        event = ExceptionEvent(
+            event_code="EX_DETAIL_001",
+            exception_type="node",
+            severity="high",
+            recommended_action="redispatch",
+            description="节点异常",
+            status="open",
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        result = await ExceptionService.get_exception_event_by_code(
+            db=db_session,
+            event_code="EX_DETAIL_001",
+        )
+        assert result["code"] == 0
+        assert result["data"]["event_code"] == "EX_DETAIL_001"
+        assert result["data"]["description"] == "节点异常"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_get_exception_event_not_found(self, db_session):
+        """查询不存在的异常事件"""
+        result = await ExceptionService.get_exception_event_by_code(
+            db=db_session,
+            event_code="EX_NONEXISTENT",
+        )
+        assert result["code"] == 40401
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_resolve_exception_success(self, db_session):
+        """标记异常已解决成功"""
+        event = ExceptionEvent(
+            event_code="EX_RESOLVE_001",
+            exception_type="node",
+            severity="medium",
+            recommended_action="redispatch",
+            description="待解决异常",
+            status="open",
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        result = await ExceptionService.resolve_exception(
+            db=db_session,
+            event_code="EX_RESOLVE_001",
+            resolution_note="已扩容存储中心",
+        )
+        assert result["code"] == 0
+        assert result["data"]["status"] == "resolved"
+        assert result["data"]["resolution_note"] == "已扩容存储中心"
+        assert result["data"]["resolved_at"] is not None
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_resolve_exception_already_resolved(self, db_session):
+        """标记已解决的异常应失败"""
+        event = ExceptionEvent(
+            event_code="EX_RESOLVED_001",
+            exception_type="node",
+            severity="medium",
+            recommended_action="redispatch",
+            description="已解决异常",
+            status="resolved",
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        result = await ExceptionService.resolve_exception(
+            db=db_session,
+            event_code="EX_RESOLVED_001",
+        )
+        assert result["code"] == 40001
+        assert "已解决" in result["message"]
+
+
+class TestReplanService:
+    """重规划服务测试（方案A）"""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_original_schedule_not_found(self, db_session):
+        """重调度失败：原调度方案不存在"""
+        result = await ReplanService.redispatch(
+            db=db_session,
+            original_schedule_code="GS_NONEXISTENT",
+            replan_reason="测试重调度",
+        )
+        assert result["code"] == 40401
+        assert "不存在" in result["message"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_success(self, db_session, test_nodes, test_orders, test_goods):
+        """重调度成功：验证版本链更新"""
+        # 1. 创建原调度方案
+        original = GlobalSchedule(
+            schedule_code="GS_ORIG_001",
+            order_codes=list(test_orders.keys())[:3],
+            goods_schedules=[],
+            total_distance=300.0,
+            total_time=15.0,
+            total_goods=6,
+            score=0.5,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(original)
+        db_session.commit()
+
+        # 2. 调用 redispatch（将触发 ScheduleService + DispatchService）
+        result = await ReplanService.redispatch(
+            db=db_session,
+            original_schedule_code="GS_ORIG_001",
+            replan_reason="节点容量异常触发重调度",
+        )
+
+        assert result["code"] == 0
+        assert result["data"]["is_replan"] is True
+        assert result["data"]["replan_reason"] == "节点容量异常触发重调度"
+        assert result["data"]["original_schedule_code"] == "GS_ORIG_001"
+
+        new_schedule_code = result["data"]["schedule_code"]
+        assert new_schedule_code != "GS_ORIG_001"
+        assert new_schedule_code.startswith("GS")
+
+        # 3. 验证版本链
+        new_schedule = db_session.query(GlobalSchedule).filter(
+            GlobalSchedule.schedule_code == new_schedule_code
+        ).first()
+        assert new_schedule is not None
+        assert new_schedule.version == 2  # original.version + 1
+        assert new_schedule.parent_id == original.id
+        assert new_schedule.is_replan is True
+        assert new_schedule.replan_reason == "节点容量异常触发重调度"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_reroute_original_route_not_found(self, db_session):
+        """重路径规划失败：原路径不存在"""
+        result = await ReplanService.reroute(
+            db=db_session,
+            original_route_code="RT_NONEXISTENT",
+            replan_reason="测试重路径规划",
+        )
+        assert result["code"] == 40401
+        assert "不存在" in result["message"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_reroute_success(self, db_session, test_nodes):
+        """重路径规划成功：验证版本链更新"""
+        # 需要完整的 Route → NodeDispatch → DispatchBatch 链条
+        # 创建必要的测试数据
+        import json
+
+        # 创建 vehicle 和 driver
+        node_0 = list(test_nodes.values())[0]
+        vehicle = Vehicle(
+            vehicle_code="V_TEST_001",
+            model="测试货车",
+            vehicle_type="normal",
+            energy_type="fuel",
+            status="idle",
+            capacity=5000.0,
+            node_id=node_0.id,
+            last_arrived_node_id=node_0.id,
+        )
+        driver = Driver(
+            driver_code="D_TEST_001",
+            name="测试司机",
+            phone="13800001111",
+            license_type="B2",
+            shift="早班",
+            status="idle",
+            node_id=node_0.id,
+        )
+        db_session.add_all([vehicle, driver])
+
+        # 创建 GlobalSchedule（不涉及版本链的前置条件）
+        gs = GlobalSchedule(
+            schedule_code="GS_REROUTE_001",
+            order_codes=["O001"],
+            goods_schedules=[],
+            total_distance=100.0,
+            total_time=5.0,
+            total_goods=2,
+            score=0.5,
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(gs)
+        db_session.flush()
+
+        # 创建 DispatchBatch
+        batch = DispatchBatch(
+            batch_code="DB_REROUTE_001",
+            global_schedule_id=gs.id,
+            status="completed",
+            l0_l1_dispatch_count=1,
+            l1_l2_dispatch_count=0,
+        )
+        db_session.add(batch)
+        db_session.flush()
+
+        # 创建 NodeDispatch
+        nd = NodeDispatch(
+            dispatch_code="ND_REROUTE_001",
+            dispatch_batch_id=batch.id,
+            vehicle_id=vehicle.id,
+            driver_id=driver.id,
+            level_phase=0,
+            tasks=json.dumps([]),
+            total_distance=50.0,
+            total_time=2.0,
+        )
+        db_session.add(nd)
+        db_session.flush()
+
+        # 创建原 Route（version=1）
+        original_route = Route(
+            route_code="RT_ORIG_001",
+            dispatch_id=nd.id,
+            vehicle_id=vehicle.id,
+            route_segments=json.dumps([
+                {"road_name": "虚拟大道", "start_lng": 114.30, "start_lat": 30.52,
+                 "end_lng": 114.31, "end_lat": 30.53}
+            ]),
+            total_distance=50.0,
+            total_time=2.0,
+            total_emission=10.0,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(original_route)
+        db_session.commit()
+
+        # Mock RouteService.create_route_planning（避免复杂的算法调用）
+        # 注意：RouteService 在 replan_service.py 中通过局部导入，需 mock 原始模块
+        with patch(
+            "services.route_service.RouteService.create_route_planning",
+            new_callable=AsyncMock,
+        ) as mock_rp:
+            mock_rp.return_value = success_response(data={
+                "batch_code": "DB_REROUTE_001",
+                "status": "completed",
+                "routes": [{
+                    "route_code": "RT_REPLAN_001",
+                    "dispatch_code": "ND_REROUTE_001",
+                    "vehicle_code": "V_TEST_001",
+                    "route_segments": [],
+                    "total_distance": 55.0,
+                    "total_time": 2.2,
+                    "total_emission": 11.0,
+                    "algorithm_type": "traditional",
+                }]
+            })
+
+            # 需要在 mock 返回前预先创建 route 对象到数据库
+            # mock 调用后不会真正创建 Route 记录，所以模拟版本链更新
+            result = await ReplanService.reroute(
+                db=db_session,
+                original_route_code="RT_ORIG_001",
+                replan_reason="道路拥堵触发重路径规划",
+            )
+
+        assert result["code"] == 0
+        assert result["data"]["is_replan"] is True
+        assert result["data"]["replan_reason"] == "道路拥堵触发重路径规划"
+        assert result["data"]["original_route_code"] == "RT_ORIG_001"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_reroute_no_dispatches(self, db_session, test_nodes):
+        """重路径规划失败：Route 关联的 dispatch 不存在"""
+        # 创建没有有效 dispatch 的 Route
+        import json
+        node_0 = list(test_nodes.values())[0]
+        vehicle = Vehicle(
+            vehicle_code="V_NO_DISP_001",
+            model="测试货车",
+            vehicle_type="normal",
+            energy_type="fuel",
+            status="idle",
+            capacity=5000.0,
+            node_id=node_0.id if node_0 else 1,
+            last_arrived_node_id=node_0.id if node_0 else 1,
+        )
+        db_session.add(vehicle)
+        db_session.commit()
+
+        route = Route(
+            route_code="RT_NO_DISP_001",
+            dispatch_id=99999,  # 不存在的 dispatch_id
+            vehicle_id=vehicle.id,
+            route_segments=json.dumps([]),
+            total_distance=10.0,
+            total_time=1.0,
+            total_emission=2.0,
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(route)
+        db_session.commit()
+
+        result = await ReplanService.reroute(
+            db=db_session,
+            original_route_code="RT_NO_DISP_001",
+            replan_reason="测试",
+        )
+        assert result["code"] == 40001
+        assert "调度明细不存在" in result["message"]
+
+
+class TestExceptionTriggerReplan:
+    """ExceptionService.trigger_replan 集成测试"""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_trigger_replan_event_not_found(self, db_session):
+        """触发重规划失败：异常事件不存在"""
+        result = await ExceptionService.trigger_replan(
+            db=db_session,
+            event_code="EX_NONEXISTENT",
+            replan_reason="测试",
+        )
+        assert result["code"] == 40401
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_trigger_replan_already_resolved(self, db_session):
+        """触发重规划失败：异常事件已解决"""
+        event = ExceptionEvent(
+            event_code="EX_RESOLVED_001",
+            exception_type="node",
+            severity="medium",
+            recommended_action="redispatch",
+            description="已解决",
+            status="resolved",
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        result = await ExceptionService.trigger_replan(
+            db=db_session,
+            event_code="EX_RESOLVED_001",
+            replan_reason="测试",
+        )
+        assert result["code"] == 40001
+        assert "已解决" in result["message"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_trigger_replan_redispatch_no_schedule(self, db_session):
+        """触发重规划失败：redispatch 但无 related_schedule_code"""
+        event = ExceptionEvent(
+            event_code="EX_NO_SCH_001",
+            exception_type="node",
+            severity="high",
+            recommended_action="redispatch",
+            description="无关联调度方案",
+            status="open",
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        result = await ExceptionService.trigger_replan(
+            db=db_session,
+            event_code="EX_NO_SCH_001",
+            replan_reason="测试",
+        )
+        assert result["code"] == 40001
+        assert "关联调度方案" in result["message"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_trigger_replan_unsupported_action(self, db_session):
+        """触发重规划失败：不支持的重规划类型"""
+        event = ExceptionEvent(
+            event_code="EX_UNSUPPORTED_001",
+            exception_type="node",
+            severity="medium",
+            recommended_action="unknown_action",
+            description="未知操作",
+            status="open",
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        result = await ExceptionService.trigger_replan(
+            db=db_session,
+            event_code="EX_UNSUPPORTED_001",
+            replan_reason="测试",
+        )
+        assert result["code"] == 40001
+        assert "不支持" in result["message"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_trigger_replan_redispatch_success(
+        self, db_session, test_nodes, test_orders, test_goods
+    ):
+        """触发 redispatch 成功"""
+        # 创建原调度方案
+        original = GlobalSchedule(
+            schedule_code="GS_TRIGGER_001",
+            order_codes=list(test_orders.keys())[:3],
+            goods_schedules=[],
+            total_distance=300.0,
+            total_time=15.0,
+            total_goods=6,
+            score=0.5,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(original)
+        db_session.commit()
+
+        # 创建异常事件
+        event = ExceptionEvent(
+            event_code="EX_TRIGGER_001",
+            exception_type="node",
+            exception_subtype="capacity_limit",
+            severity="high",
+            recommended_action="redispatch",
+            related_schedule_code="GS_TRIGGER_001",
+            description="触发重调度测试",
+            status="open",
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        result = await ExceptionService.trigger_replan(
+            db=db_session,
+            event_code="EX_TRIGGER_001",
+            replan_reason="节点容量异常触发重调度",
+        )
+
+        assert result["code"] == 0
+        assert result["data"]["is_replan"] is True
+        assert result["data"]["original_schedule_code"] == "GS_TRIGGER_001"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_trigger_replan_reroute_success(
+        self, db_session, test_nodes
+    ):
+        """触发 reroute 成功"""
+        import json
+
+        # 创建依赖数据
+        node_reroute = list(test_nodes.values())[0]
+        vehicle = Vehicle(
+            vehicle_code="V_REROUTE_T_001",
+            model="测试货车",
+            vehicle_type="normal",
+            energy_type="fuel",
+            status="idle",
+            capacity=5000.0,
+            node_id=node_reroute.id,
+            last_arrived_node_id=node_reroute.id,
+        )
+        driver = Driver(
+            driver_code="D_REROUTE_T_001",
+            name="测试司机2",
+            phone="13800002222",
+            license_type="B2",
+            shift="早班",
+            status="idle",
+            node_id=node_reroute.id,
+        )
+        db_session.add_all([vehicle, driver])
+
+        gs = GlobalSchedule(
+            schedule_code="GS_REROUTE_T_001",
+            order_codes=["O001"],
+            goods_schedules=[],
+            total_distance=100.0,
+            total_time=5.0,
+            total_goods=2,
+            score=0.5,
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(gs)
+        db_session.flush()
+
+        batch = DispatchBatch(
+            batch_code="DB_REROUTE_T_001",
+            global_schedule_id=gs.id,
+            status="completed",
+            l0_l1_dispatch_count=1,
+            l1_l2_dispatch_count=0,
+        )
+        db_session.add(batch)
+        db_session.flush()
+
+        nd = NodeDispatch(
+            dispatch_code="ND_REROUTE_T_001",
+            dispatch_batch_id=batch.id,
+            vehicle_id=vehicle.id,
+            driver_id=driver.id,
+            level_phase=0,
+            tasks=json.dumps([]),
+            total_distance=50.0,
+            total_time=2.0,
+        )
+        db_session.add(nd)
+        db_session.flush()
+
+        route = Route(
+            route_code="RT_REROUTE_T_001",
+            dispatch_id=nd.id,
+            vehicle_id=vehicle.id,
+            route_segments=json.dumps([]),
+            total_distance=50.0,
+            total_time=2.0,
+            total_emission=10.0,
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(route)
+        db_session.flush()
+
+        # 创建异常事件（reroute 类型，通过 related_route_id 关联路线）
+        event = ExceptionEvent(
+            event_code="EX_REROUTE_T_001",
+            exception_type="road",
+            exception_subtype="congestion",
+            severity="medium",
+            recommended_action="reroute",
+            related_route_id=route.id,
+            related_schedule_code="GS_REROUTE_T_001",
+            description="道路拥堵",
+            status="open",
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        # Mock RouteService（路径指向原始模块）
+        with patch(
+            "services.route_service.RouteService.create_route_planning",
+            new_callable=AsyncMock,
+        ) as mock_rp:
+            mock_rp.return_value = success_response(data={
+                "batch_code": "DB_REROUTE_T_001",
+                "status": "completed",
+                "routes": [{
+                    "route_code": "RT_REPLAN_T_001",
+                    "dispatch_code": "ND_REROUTE_T_001",
+                    "vehicle_code": "V_REROUTE_T_001",
+                    "route_segments": [],
+                    "total_distance": 55.0,
+                    "total_time": 2.2,
+                    "total_emission": 11.0,
+                    "algorithm_type": "traditional",
+                }]
+            })
+
+            result = await ExceptionService.trigger_replan(
+                db=db_session,
+                event_code="EX_REROUTE_T_001",
+                replan_reason="道路拥堵触发重路径规划",
+            )
+
+        assert result["code"] == 0
+        assert result["data"]["is_replan"] is True
