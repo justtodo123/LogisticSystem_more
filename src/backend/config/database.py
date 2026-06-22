@@ -37,3 +37,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def init_db():
+    """初始化数据库，创建所有表"""
+    # 导入所有模型以确保它们被注册到Base.metadata
+    from models import (  # noqa: F401
+        User, LogEvent, Node, StorageCenter, SortingCenter,
+        Order, Goods, Package, Vehicle, Driver, GlobalSchedule,
+        DispatchBatch, NodeDispatch, Route
+    )
+    
+    # 创建所有表
+    Base.metadata.create_all(bind=engine)

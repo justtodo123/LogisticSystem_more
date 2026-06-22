@@ -34,3 +34,4 @@ class NodeDispatch(Base):
     vehicle = relationship("Vehicle", back_populates="dispatches")
     driver = relationship("Driver", back_populates="dispatches")
     packages = relationship("Package", back_populates="dispatch")
+    routes = relationship("Route", back_populates="dispatch")

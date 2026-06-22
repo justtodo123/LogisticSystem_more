@@ -11,7 +11,8 @@ from .driver import Driver
 from .global_schedule import GlobalSchedule
 from .dispatch_batch import DispatchBatch
 from .node_dispatch import NodeDispatch
+from .route import Route
 
 __all__ = ["User", "LogEvent", "Node", "StorageCenter", "SortingCenter",
            "Order", "Goods", "Package", "Vehicle", "Driver", "GlobalSchedule",
-           "DispatchBatch", "NodeDispatch"]
+           "DispatchBatch", "NodeDispatch", "Route"]

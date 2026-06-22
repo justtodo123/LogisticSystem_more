@@ -4,8 +4,8 @@
 
 ## 项目状态
 
-**当前阶段**：阶段 4（节点间调度 F005）已完成  
-**下一阶段**：阶段 5（路径规划与可视化 F006）
+**当前阶段**：阶段 5（路径规划与可视化 F006）已完成  
+**下一阶段**：阶段 6（模拟送达 F013-1）
 
 **阶段4最新更新**：
 - **阶段4实现范围**：仅完整实现 `demo_mode=true`，`demo_mode=false` 完整流程推迟到阶段6
@@ -13,6 +13,14 @@
 - `demo_mode=false`：代码框架已预留（`_check_packages_by_level()` 智能检测 + 4种场景），但完整流程需阶段6的模拟送达接口配合
 - ✅ **状态机实现完成** (2026-06-17)：实现所有状态流转逻辑，包括 F005 调用后、模拟送达、重新打包等场景
 - ✅ **单元测试通过** (2026-06-17)：5/5 测试通过，验证状态流转正确性
+
+**阶段5最新更新** (2026-06-18)：
+- ✅ **单元测试完成**：创建算法层、服务层、API层和集成测试，共 35 个测试全部通过
+- ✅ **算法层测试** (`tests/test_algorithms/test_route_planning.py`)：12/12 通过，测试 Haversine 距离计算、路线编码生成、路径规划算法
+- ✅ **服务层测试** (`tests/test_services/test_route_service.py`)：13/13 通过，测试 RouteService 的所有方法
+- ✅ **API层测试** (`tests/test_routes_api.py`)：6/6 通过，测试路径规划 API 端点
+- ✅ **集成测试** (`tests/test_routes_integration.py`)：4/4 通过，测试完整路径规划流程
+- ✅ **测试覆盖完整**：从算法层到服务层、API层再到集成测试，确保阶段5功能正确性
 
 ## 技术栈
 
@@ -59,7 +67,7 @@ copy .env.example .env
 python -c "from config.database import engine, Base; from models import *; Base.metadata.create_all(bind=engine)"
 
 # 6. 初始化演示数据（创建用户、节点、车辆、司机、订单等）
-python -m  scripts.init_demo_data
+python -m scripts.init_demo_data
 
 # 7. 启动后端服务
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -95,6 +103,7 @@ src/backend/
 │   ├── drivers.py             # 司机管理 (GET/POST/PUT/DELETE /api/drivers)
 │   ├── nodes.py               # 节点管理 (GET /api/nodes, POST/PUT/DELETE storage-centers/sorting-centers)
 │   ├── schedule.py            # 调度管理 (POST /api/schedule/global, POST /api/schedule/node-dispatch, GET 列表/详情)
+│   ├── routes.py              # 路径规划 (POST /api/routes/plan, GET /api/routes, GET /api/routes/{code}, GET /api/routes/by-vehicle/{code}/coordinates)
 │   └── dependencies.py         # 依赖注入 (get_current_user JWT 验证, require_dispatcher RBAC)
 │
 ├── services/                   # 业务逻辑层
@@ -108,7 +117,8 @@ src/backend/
 │   ├── node_service.py        # 节点服务 (存储中心/分拣中心 CRUD)
 │   ├── schedule_service.py    # 调度编排服务 (F007→F021→写库, 单事务)
 │   ├── dispatch_service.py    # 节点调度服务 (F005→写库, 单事务)
-│   └── state_machine.py      # 状态机服务 (管理所有状态流转) ✅ 新增 (2026-06-17)
+│   ├── route_service.py       # 路径规划服务 (F006→写库, 单事务)
+│   └── state_machine.py       # 状态机服务 (状态流转逻辑)
 │
 ├── models/                     # SQLAlchemy ORM 模型
 │   ├── __init__.py
@@ -125,7 +135,8 @@ src/backend/
 │   ├── driver.py              # Driver 模型 (司机)
 │   ├── global_schedule.py     # GlobalSchedule 模型 (F007 调度结果)
 │   ├── dispatch_batch.py      # DispatchBatch 模型 (F005 调度批次)
-│   └── node_dispatch.py      # NodeDispatch 模型 (F005 节点调度明细)
+│   ├── node_dispatch.py      # NodeDispatch 模型 (F005 节点调度明细)
+│   └── route.py              # Route 模型 (F006 路径规划结果)
 │
 ├── schemas/                    # Pydantic 请求/响应模型
 │   ├── __init__.py
@@ -137,7 +148,7 @@ src/backend/
 │   ├── driver.py              # DriverCreate, DriverUpdate
 │   ├── node.py                # StorageCenterCreate/Update, SortingCenterCreate/Update
 │   ├── dispatch.py             # NodeDispatchRequest, DispatchBatchResponse, NodeDispatchResponse
-│   └── log_event.py           # LogEventResponse
+│   └── route.py               # RoutePlanRequest, RouteListResponse, RouteDetailResponse, RouteCoordinatesResponse
 │
 ├── core/                       # 核心模块
 │   ├── error_codes.py          # 错误码定义
@@ -153,26 +164,33 @@ src/backend/
 │
 ├── scripts/                    # 工具脚本
 │   ├── __init__.py
-│   └── init_demo_data.py      # 演示数据初始化 (用户、节点、车辆、司机、订单、货物)
+│   ├── init_users.py          # 用户初始化
+│   ├── init_demo_data.py      # 演示数据初始化 (用户、节点、车辆、司机、订单、货物)
+│   └── init_log_events.py     # 日志事件初始化
 │
 ├── algorithms/                 # 算法引擎 (F005/F006/F007/F021)
 │   ├── __init__.py
 │   ├── global_schedule.py      # F007 全局调度 (贪心算法, L0→L1→L2 路径规划)
 │   ├── packaging.py            # F021 打包 (L0→L1 按节点对, L1→L2 按订单)
-│   └── node_dispatch.py       # F005 节点调度 (L0→L1, L1→L2 两次串行调用, 支持demo_mode)
+│   ├── node_dispatch.py       # F005 节点调度 (L0→L1, L1→L2 两次串行调用, 支持demo_mode)
+│   └── route_planning.py      # F006 路径规划 (Haversine + 2-opt)
 │
 ├── tests/                      # 测试
 │   ├── conftest.py             # 测试夹具与配置
-│   ├── phase3_api_verification.py  # 阶段3 API 集成验证脚本
-│   ├── test_api/               # API 层测试
-│   │   └── test_schedule.py    # 调度接口测试
+│   ├── test_routes_api.py      # 路径规划 API 测试 (6个测试)
+│   ├── test_routes_integration.py  # 路径规划集成测试 (4个测试)
+│   ├── test_algorithms/        # 算法层测试
+│   │   ├── test_global_schedule.py   # F007 全局调度算法测试
+│   │   ├── test_packaging.py         # F021 打包算法测试
+│   │   ├── test_node_dispatch.py    # F005 节点调度算法测试
+│   │   └── test_route_planning.py   # F006 路径规划算法测试 (12个测试)
 │   ├── test_services/          # 服务层测试
 │   │   ├── test_schedule_service.py  # 调度编排服务测试
-│   │   └── test_dispatch_service.py # 节点调度服务测试
-│   └── test_algorithms/        # 算法层测试
-│       ├── test_global_schedule.py   # F007 全局调度算法测试
-│       ├── test_packaging.py         # F021 打包算法测试
-│       └── test_node_dispatch.py    # F005 节点调度算法测试
+│   │   └── test_route_service.py     # 路径规划服务测试 (13个测试)
+│   ├── test_api/               # API 层测试
+│   │   └── test_schedule.py    # 调度接口测试
+│   └── test_integration/       # 集成测试
+│       └── test_full_dispatch_flow.py  # 完整调度链路测试 F007→F021→F005→F006 (2个测试)
 │
 ├── data/                       # 数据文件
 │   └── logistics.db            # SQLite 数据库
@@ -185,7 +203,7 @@ src/backend/
 
 ## API 接口
 
-### 已实现（阶段 1-3）
+### 已实现（阶段 1-5）
 
 #### 认证与权限（阶段 1）
 
@@ -246,11 +264,19 @@ src/backend/
 | `GET` | `/api/schedule/batches` | 调度批次列表（分页、筛选） | Bearer Token |
 | `GET` | `/api/schedule/batches/{code}` | 调度批次详情（含 dispatches） | Bearer Token |
 
-### 规划中（阶段 5-8）
+#### 路径规划（阶段 5）
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| `POST` | `/api/routes/plan` | 手动触发路径规划 (F006) | Bearer Token (dispatcher) |
+| `GET` | `/api/routes` | 路线列表（分页、筛选） | Bearer Token |
+| `GET` | `/api/routes/{code}` | 路线详情（含 route_segments） | Bearer Token |
+| `GET` | `/api/routes/by-vehicle/{code}/coordinates` | 车辆路线坐标（供可视化） | Bearer Token |
+
+### 规划中（阶段 6-8）
 
 详见 `docs/` 目录下的 MVP 开发计划。核心接口包括：
 
-- **路线**：`GET /api/routes`、`GET /api/routes/by-vehicle/{code}/coordinates`
 - **异常**：`GET/POST /api/exceptions`、`POST /api/exceptions/{code}/replan`
 - **模拟**：`POST /api/simulation/deliver`
 - **AI**：`POST /api/ai/parse`
@@ -423,355 +449,48 @@ alembic downgrade -1
 | 错误处理 | 无可用车辆 → 40001、L0→L1 未完成 → 40001、不存在的 schedule_code → 40401 | ✅ |
 | 数据完整性 | 调度批次、节点调度明细、包裹状态更新、车辆/司机状态更新 | ✅ |
 
-## demo_mode 使用指南
+### 阶段 5 自测（路径规划 F006）
 
-### 概述
+测试时间：2026-06-14，更新：2026-06-18，结果：**35/35 通过（100%）**
 
-`POST /api/schedule/node-dispatch` 接口支持两种模式：
-- **`demo_mode=true`**：演示模式，一次调用完成 L0→L1 和 L1→L2 两次调度（用于课堂演示）
-- **`demo_mode=false`**：正常模式，分两次调用，首次执行 L0→L1，第二次执行 L1→L2（需等待 L1 送达）
+#### 算法层测试 (12/12)
 
-### demo_mode=true（演示模式）
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| Haversine 距离 | 同一坐标距离为0、不同坐标距离正确、长距离计算 | ✅ |
+| 路线编码生成 | 第一个编码格式正确、多个编码序号递增 | ✅ |
+| 路径规划算法 | L0→L1 路径规划成功、L1→L2 路径规划成功 | ✅ |
+| 路径规划算法 | 返程路径生成、空任务列表错误、节点不存在错误 | ✅ |
+| 路径规划算法 | 车辆不存在错误、距离和时间计算正确 | ✅ |
 
-**使用场景**：课堂演示、快速测试完整链路
+#### 服务层测试 (13/13)
 
-**请求示例**：
-```json
-{
-  "schedule_code": "GS20260614001",
-  "demo_mode": true
-}
-```
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| 创建路径规划 | 成功创建、批次不存在错误、无调度明细错误 | ✅ |
+| 查询路线 | 查询路线列表、分页、筛选（车辆编码/调度编码） | ✅ |
+| 查询详情 | 查询路线详情、路线不存在错误 | ✅ |
+| 查询坐标 | 查询车辆路线坐标、路线不存在错误、车辆不存在错误 | ✅ |
 
-**响应结果**（HTTP 200）：
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "batch_code": "BATCH20260614001",
-    "status": "completed",
-    "dispatches": [
-      {
-        "vehicle_code": "VEHSC00101",
-        "driver_code": "DRVSC00101",
-        "tasks": [
-          {
-            "from_node_code": "SC001",
-            "to_node_code": "L1001",
-            "package_codes": ["PKG202606140001"],
-            "is_return": false
-          },
-          {
-            "from_node_code": "L1001",
-            "to_node_code": "SC001",
-            "package_codes": [],
-            "is_return": true
-          }
-        ],
-        "total_distance": 25.3,
-        "total_time": 0.42
-      }
-    ]
-  },
-  "meta": {
-    "degraded": false,
-    "degraded_reason": null
-  }
-}
-```
+#### 集成测试 (2/2)
 
-**关键字段说明**：
-- `status`: `"completed"` - 批次已完成（L0→L1 和 L1→L2 都已完成）
-- `dispatches`: 包含所有调度明细（L0→L1 + L1→L2）
-- `tasks[].is_return`: `false` = 去程任务，`true` = 返程任务
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| 完整调度链路 | demo_mode=true 完整流程 F007→F021→F005→F006 | ✅ |
+| 完整调度链路 | 分步执行完整流程 F007→F021→F005→F006 | ✅ |
 
-**后续操作**：
-1. **查看调度批次详情**：`GET /api/schedule/batches/{batch_code}`
-2. **路径规划**（阶段5，当前未实现）：`POST /api/routes/plan`（为每辆车规划路径）
-3. **模拟送达**（阶段6，当前未实现）：`POST /api/simulation/deliver`（模拟货物送达）
+#### 自测验收清单
 
-> **⚠️ 注意**：路径规划和模拟送达功能当前未实现，计划分别在阶段5和阶段6实现。当前阶段4只能完成到节点调度。
-
-### demo_mode=false（正常模式）
-
-**使用场景**：生产环境、真实物流调度
-
-**第一次调用**（执行 L0→L1 调度）：
-
-请求：
-```json
-{
-  "schedule_code": "GS20260614001",
-  "demo_mode": false
-}
-```
-
-响应（HTTP 200）：
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "batch_code": "BATCH20260614001",
-    "status": "l0_l1_done",
-    "dispatches": [
-      {
-        "vehicle_code": "VEHSC00101",
-        "driver_code": "DRVSC00101",
-        "tasks": [
-          {
-            "from_node_code": "SC001",
-            "to_node_code": "L1001",
-            "package_codes": ["PKG202606140001"],
-            "is_return": false
-          }
-        ],
-        "total_distance": 12.5,
-        "total_time": 0.21
-      }
-    ]
-  },
-  "meta": {
-    "degraded": false,
-    "degraded_reason": null
-  }
-}
-```
-
-**关键字段说明**：
-- `status`: `"l0_l1_done"` - L0→L1 调度已完成，等待 L1 送达
-- `dispatches`: 只包含 L0→L1 的调度明细
-
-**后续操作**（等待 L1 送达）：
-1. **模拟送达**（阶段6，**当前未实现**）：`POST /api/simulation/deliver`
-   - 将 L0→L1 的包裹状态更新为 `delivered`
-   - 货物状态更新为 `pending_pack`（需要在 L1 重新打包）
-   
-   > **⚠️ 注意**：模拟送达功能计划在阶段6实现，当前阶段4无法执行此操作。
-   
-2. **重新打包**（自动，需模拟送达后触发）：L1 送达后，系统自动触发重新打包（F021）
-   - 将货物打包成 L1→L2 的包裹
-
-**第二次调用**（执行 L1→L2 调度）：
-
-请求（使用同一个 `schedule_code`）：
-```json
-{
-  "schedule_code": "GS20260614001",
-  "demo_mode": false
-}
-```
-
-响应（HTTP 200）：
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "batch_code": "BATCH20260614001",
-    "status": "completed",
-    "dispatches": [
-      {
-        "vehicle_code": "VEHL100101",
-        "driver_code": "DRVL100101",
-        "tasks": [
-          {
-            "from_node_code": "L1001",
-            "to_node_code": "SO001",
-            "package_codes": ["PKG202606140051"],
-            "is_return": false
-          }
-        ],
-        "total_distance": 8.3,
-        "total_time": 0.14
-      }
-    ]
-  },
-  "meta": {
-    "degraded": false,
-    "degraded_reason": null
-  }
-}
-```
-
-**关键字段说明**：
-- `status`: `"completed"` - 批次已完成（L1→L2 也已完成）
-- `dispatches`: 包含 L1→L2 的调度明细
-
-### 自动检测调用阶段（demo_mode=false 预留框架）
-
-> **注意**：以下智能检测逻辑是 `demo_mode=false` 的代码框架，已在阶段4中实现但尚未完整联调。阶段6将配合模拟送达接口完成完整验证。阶段4推荐使用 `demo_mode=true`。
-
-系统会通过 `_check_packages_by_level()` 智能检测当前应该执行哪个阶段的调度（demo_mode=false 时生效）：
-
-| 场景 | 条件 | 行为 |
-|------|------|------|
-| A | L0→L1 和 L1→L2 包裹都存在 | 优先执行 L0→L1，提示再次调用执行 L1→L2 |
-| B | 仅存在 L0→L1 包裹 | 执行 L0→L1 |
-| C | 仅存在 L1→L2 包裹 | 自动创建批次（status=l0_l1_done），直接执行 L1→L2 |
-| D | 包裹都不存在 | 返回错误"没有可调度的包裹" |
-
-**无需手动指定阶段**，只需多次调用同一接口即可。场景 C 确保即使 L0→L1 已送达并重新打包，也能自动完成 L1→L2 调度。
-
-## 完整链路指南（阶段 3 → 4 → 5 → 6）
-
-### 概述
-
-完整物流调度链路包含以下阶段：
-1. **阶段 3**：全局调度（F007）+ 打包（F021） → 规划货物从 L0→L1→L2 的路径
-2. **阶段 4**：节点间调度（F005） → 分配车辆/司机执行运输
-3. **阶段 5**：路径规划（F006） → 为每辆车规划最优行驶路线
-4. **阶段 6**：模拟送达（F013-1） → 驱动状态流转，完成送达
-
-### ⚠️ 阶段4实现范围说明
-
-**阶段4仅完整实现 `demo_mode=true`**：
-
-- ✅ **已实现**：`demo_mode=true` — 一次 `POST /api/schedule/node-dispatch` 调用，后端自动完成 L0→L1 调度 + 模拟送达 + L1 重新打包 + L1→L2 调度 + 模拟送达，货物直通 L2
-- ⚠️ **框架预留**：`demo_mode=false` 的代码框架已存在（`_check_packages_by_level()` 智能检测 + 4种场景分阶段），但因阶段6模拟送达接口尚未就绪，完整流程需在阶段6中联调验证
-- ❌ **未实现**：阶段5（路径规划 F006）、阶段6（模拟送达独立接口）
-
-**阶段4内可以完成的操作**：
-1. 触发全局调度（阶段3）
-2. 以 `demo_mode=true` 触发节点调度 → 一次调用完成 L0→L2 全链路
-3. 查看调度批次和明细（`GET /api/schedule/batches`、`GET /api/schedule/batches/{code}`）
-4. 验证完整状态流转（包裹/货物/订单/车辆/司机）
-
-**需等待阶段5/6的操作**：
-1. 路径规划（阶段5）— 为车辆规划最优路线
-2. `demo_mode=false` 完整流程（阶段6）— 分阶段调度 + 手动模拟送达
-
----
-
-### demo_mode=true 完整演示流程（推荐）
-
-以下是使用 `demo_mode=true` 演示货物从 L0 到 L2 的完整步骤：
-
-#### 步骤 1：全局调度（阶段 3）
-
-| 项目 | 内容 |
-|------|------|
-| **前端操作** | 选择订单 → 点击"全局调度"按钮 |
-| **调用的 API** | `POST /api/schedule/global` |
-| **请求体** | `{ "order_codes": ["O001", "O002"], "algorithm": "traditional" }` |
-| **后端行为** | ① F007 为每票货物规划 L0→L1→L2 路径 → ② F021 生成 L0→L1 和 L1→L2 包裹 → ③ 写入 global_schedules + packages |
-| **状态变化** | 订单 `pending`→`delivering`；货物/包裹 `pending_pack`→`packed` |
-| **前端拿到** | `data.schedule_code`（保存用于步骤2） |
-
-```json
-// 响应示例
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "schedule_code": "GS20260614001",
-    "total_orders": 2,
-    "total_packages": 5,
-    "goods_schedules": [...]
-  }
-}
-```
-
-#### 步骤 2：节点调度 — demo_mode=true（阶段 4）
-
-| 项目 | 内容 |
-|------|------|
-| **前端操作** | 输入 `schedule_code` → 勾选"演示模式" → 点击"节点调度"按钮 |
-| **调用的 API** | `POST /api/schedule/node-dispatch` |
-| **请求体** | `{ "schedule_code": "GS20260614001", "demo_mode": true }` |
-| **后端行为** | **一次性自动完成以下全部步骤**（单事务）： |
-|  | **A. L0→L1 调度**：查询 L0→L1 packed 包裹 → 按节点分组 → 分配车辆/司机 → 写入 DispatchBatch + NodeDispatch(level_phase=0) |
-|  | **B. 自动模拟 L0→L1 送达**：包裹 `packed`→`delivered`；货物 `packed`→`pending_pack`；车辆/司机恢复 idle |
-|  | **C. 自动 L1 重新打包**：到达 L1 的货物重新打包为 L1→L2 包裹（同订单合并） |
-|  | **D. L1→L2 调度**：查询 L1→L2 packed 包裹 → 分配车辆/司机 → 写入 NodeDispatch(level_phase=1) |
-|  | **E. 自动模拟 L1→L2 送达**：包裹 `packed`→`delivered`；货物 `packed`→`delivered`；订单所有货物到达 → `completed`；车辆/司机恢复 idle；批次 `pending`→`completed` |
-| **前端拿到** | `data.batch_code` + `data.status="completed"` + `data.dispatches`（含 L0→L1 和 L1→L2 全部明细） |
-
-```json
-// 响应示例
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "batch_code": "BATCH20260614001",
-    "status": "completed",
-    "dispatches": [
-      // ... L0→L1 调度明细 (level_phase=0) ...
-      // ... L1→L2 调度明细 (level_phase=1) ...
-    ],
-    "unallocated_packages": []
-  }
-}
-```
-
-#### 步骤 2 完成后：查看结果
-
-| 前端操作 | 调用的 API | 可查看内容 |
-|---------|-----------|----------|
-| 查看批次列表 | `GET /api/schedule/batches` | 所有批次及状态 |
-| 查看批次详情 | `GET /api/schedule/batches/{batch_code}` | dispatches 明细（车辆/司机/包裹/任务） |
-| 查看订单状态 | `GET /api/orders` | 订单是否已 `completed` |
-| 查看货物状态 | `GET /api/goods` | 货物是否已 `delivered` |
-
-### 完整链路示意图（demo_mode=true）
-
-```
-前端                          后端                         状态
- │                             │                            │
- │─ POST /schedule/global ────→│                            │
- │                             │─ F007+F021 ──────────────→│ 订单→delivering
- │←─ { schedule_code } ───────│                            │ 货物→packed
- │                             │                            │ 包裹→packed
- │                             │                            │
- │─ POST /node-dispatch ──────→│                            │
- │   { demo_mode: true }      │                            │
- │                             │─ A.L0→L1调度 ─────────────→│ 车辆→delivering
- │                             │─ B.模拟L0→L1送达 ─────────→│ 包裹→delivered
- │                             │                           │ 货物→pending_pack
- │                             │─ C.L1重新打包 ────────────→│ 包裹→packed
- │                             │─ D.L1→L2调度 ─────────────→│ 车辆→delivering
- │                             │─ E.模拟L1→L2送达 ─────────→│ 包裹→delivered
- │                             │   (以上在单事务中)          │ 货物→delivered
- │←─ { batch_code,            │                           │ 订单→completed
- │     status:"completed",    │                           │ 车辆/司机→idle
- │     dispatches: [...] }    │                           │
- │                             │                            │
- │─ GET /batches/{code} ──────→│─ 查询 ────────────────────→│
- │←─ 批次详情（含全量明细）────│                            │
-```
-
-### 常见问题
-
-**Q1: demo_mode=true 和 false 的区别是什么？**
-
-A: 
-- `demo_mode=true`（阶段4已实现）：**一次调用**，后端自动执行 L0→L1 调度 → 模拟送达 → 重新打包 → L1→L2 调度 → 模拟送达，货物直接从 L0 到达 L2。前端只需调一次接口。
-- `demo_mode=false`（阶段6完整实现）：**分多次调用**，首次 L0→L1 → 手动模拟送达 → 手动重新打包 → 第二次 L1→L2 → 手动模拟送达。适合生产环境逐步推进。
-
-**Q2: 为什么 demo_mode=true 响应中 status 直接是 "completed"？**
-
-A: 因为 `demo_mode=true` 在后端内部自动完成了 L0→L1 和 L1→L2 的全部调度 + 送达，所以批次状态直接为 `completed`。不需要前端再调模拟送达接口。
-
-**Q3: 如何查看调度批次详情？**
-
-A: 使用 `GET /api/schedule/batches/{batch_code}` 接口，可查看完整的调度明细（dispatches），包含每辆车的 tasks、包裹列表、距离等。
-
-**Q4: 如何知道批次状态？**
-
-A: 使用 `GET /api/schedule/batches` 接口，查看 `status` 字段：
-- `pending`: 批次已创建，但未执行调度
-- `l0_l1_done`: L0→L1 调度已完成（demo_mode=false 时出现）
-- `completed`: L1→L2 调度已完成（demo_mode=true 直接到达此状态）
-- `failed`: 调度失败
-
-**Q5: demo_mode=true 后还需要调阶段6的模拟送达接口吗？**
-
-A: **不需要**。`demo_mode=true` 已经在后端内部自动完成了模拟送达（L0→L1 和 L1→L2 各一次）。货物状态已直接变为 `delivered`，订单已 `completed`。
-
-**Q6: 阶段 4 完成后，如何进入阶段 5？**
-
-A: 阶段 4 完成后，可调用阶段 5 的路径规划接口（`POST /api/routes/plan`），为每辆车规划最优行驶路线并生成路线可视化数据。
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| F006 算法 | Haversine 距离计算、路径路段生成、碳排放计算 | ✅ |
+| F006 算法 | 2-opt 优化（MVP不触发）、空任务列表错误、节点不存在错误 | ✅ |
+| API 集成 | POST /api/routes/plan 触发路径规划、GET /api/routes 列表、GET /api/routes/{code} 详情 | ✅ |
+| API 集成 | GET /api/routes/by-vehicle/{code}/coordinates 车辆路线坐标 | ✅ |
+| 事务原子性 | routes 表写入与 F005 在同一个事务中 | ✅ |
+| 权限 | dispatcher 可触发路径规划、manager 返回 403 | ✅ |
+| 错误处理 | 批次不存在 → 40001、路线不存在 → 40400、车辆不存在 → 40400 | ✅ |
+| 数据完整性 | 路线记录、route_segments JSON、总距离/时间/碳排放 | ✅ |
 
 ## 相关文档
 
@@ -785,4 +504,6 @@ A: 阶段 4 完成后，可调用阶段 5 的路径规划接口（`POST /api/rou
 - [阶段 3 开发文档](../../My_doc/阶段3开发文档-全局调度F007+F021.md)
 - [阶段 3 API 契约文档](../../docs/api-contract/api-contract-phase3.md)（V1.0）
 - [阶段 4 开发文档](../../My_doc/阶段4开发文档.md)
-- [阶段 4 API 契约文档](../../docs/api-contract/api-contract-phase4.md)（V1.1）
+- [阶段 4 API 契约文档](../../My_doc/阶段4-API契约文档.md)（V1.0）
+- [阶段 5 开发文档](../../My_doc/阶段5开发文档-F006路径规划.md)
+- [阶段 5 API 契约文档](../../docs/api-contract/api-contract-phase5.md)（V1.0）
