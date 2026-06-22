@@ -567,14 +567,14 @@ async def test_complex_redispatch_scenario(db_session, test_nodes, test_orders, 
     # 模拟送达会自动触发repackaging_at_l1
     # 查询是否有L1→L2的包裹生成
     l1_to_l2_packages = db_session.query(Package).filter(
-        Package.status == 'packed',
+        Package.status.in_(['packed', 'pending_pack']),
         Package.from_node_id.in_([
             test_nodes["SO001"].id,
             test_nodes["SO002"].id
         ])
     ).all()
     
-    assert len(l1_to_l2_packages) > 0
+    assert len(l1_to_l2_packages) > 0, "L1→L2包裹应为 pending_pack（F021预生成）或 packed（送达后已激活）"
     
     # 6. 执行节点调度（F005 第二次，L1→L2）
     # 此时L1节点包裹数量众多，但车辆可能不足

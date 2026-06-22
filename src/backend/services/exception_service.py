@@ -20,6 +20,7 @@ from models.order import Order
 from models.goods import Goods
 from models.package import Package
 from models.vehicle import Vehicle
+from models.node import Node
 from schemas.exception_event import (
     CreateExceptionEventRequest,
     ExceptionEventResponse,
@@ -60,6 +61,28 @@ class ExceptionService:
             created_at=event.created_at,
         )
 
+    @staticmethod
+    def _verify_target(db: Session, target_type: str, target_code: str) -> bool:
+        """
+        校验 target_code 在对应表中是否存在
+
+        - node    → nodes 表
+        - route   → routes 表
+        - package → packages 表
+        - vehicle → vehicles 表
+        """
+        target_map = {
+            "node": (Node, Node.node_code),
+            "route": (Route, Route.route_code),
+            "package": (Package, Package.package_code),
+            "vehicle": (Vehicle, Vehicle.vehicle_code),
+        }
+        entry = target_map.get(target_type)
+        if not entry:
+            return True  # 未知 target_type 不在此处阻断（Schema 层已校验）
+        model_cls, col = entry
+        return db.query(model_cls).filter(col == target_code).first() is not None
+
     # ── CRUD 方法 ───────────────────────────────────────────────
 
     @staticmethod
@@ -75,7 +98,7 @@ class ExceptionService:
         2. 生成 event_code
         3. 写入数据库
         """
-        # 0. 校验 exception_type（在 try 之前，避免被 except 捕获）
+        # 0. 校验 exception_type（Schema 层已校验，此处兜底）
         if data.exception_type not in ALLOWED_EXCEPTION_TYPES:
             raise HTTPException(
                 status_code=400,
@@ -83,7 +106,16 @@ class ExceptionService:
             )
 
         try:
-            # 1. 验证 related_schedule_code
+            # 1. 验证 target_code 对应实体是否存在
+            if data.target_type and data.target_code:
+                target_exists = ExceptionService._verify_target(db, data.target_type, data.target_code)
+                if not target_exists:
+                    return error_response(
+                        code=40001,
+                        message=f"target_code 不存在: {data.target_type}={data.target_code}",
+                    )
+
+            # 2. 验证 related_schedule_code
             if data.related_schedule_code:
                 schedule = db.query(GlobalSchedule).filter(
                     GlobalSchedule.schedule_code == data.related_schedule_code
@@ -118,7 +150,7 @@ class ExceptionService:
                         Package.schedule_id == schedule.id
                     ).all()
                     for pkg in packages:
-                        if pkg.status in ["packed", "in_transit"]:
+                        if pkg.status in ["packed", "in_transit", "pending_pack"]:
                             pkg.status = "exception"
 
             # 4. 处理车辆异常（如果 target_type 是 vehicle）
@@ -145,7 +177,7 @@ class ExceptionService:
                         # 收集需要更新的货物编码
                         all_goods_items = []
                         for pkg in packages:
-                            if pkg.status in ["packed", "in_transit"]:
+                            if pkg.status in ["packed", "in_transit", "pending_pack"]:
                                 pkg.status = "exception"
                                 if pkg.goods_items:
                                     all_goods_items.extend(pkg.goods_items)

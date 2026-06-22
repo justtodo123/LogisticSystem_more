@@ -61,16 +61,31 @@ async def create_exception(
 
     需要角色：dispatcher
 
-    请求体示例：
+    请求体示例（redispatch - 节点异常）：
     {
         "exception_type": "node",
         "exception_subtype": "capacity_limit",
         "target_type": "node",
-        "target_code": "SC001",
-        "description": "存储中心容量不足",
+        "target_code": "L1001",
+        "description": "分拣中心容量不足",
         "recommended_action": "redispatch",
         "related_schedule_code": "GS20260609001"
     }
+
+    请求体示例（reroute - 道路异常）：
+    {
+        "exception_type": "road",
+        "exception_subtype": "road_closed",
+        "target_type": "route",
+        "target_code": "RT202606220001",
+        "description": "道路封闭，需重新规划路径",
+        "recommended_action": "reroute",
+        "related_schedule_code": "GS20260609001"
+    }
+
+    target_type 约束：
+    - reroute  要求 target_type="route"  且必须提供 target_code（路线编码）
+    - redispatch 建议 target_type="node" / "vehicle" / "package"
     """
     return await ExceptionService.create_exception_event(
         db=db,

@@ -176,14 +176,42 @@ def repack_at_l1(
     # 4. 检查是否已有F021生成的L1→L2包裹（重用，避免重复）
     # F021生成的L1→L2包裹状态为 pending_pack（货物尚在L0），
     # 但为兼容旧数据也检查 packed 状态（重规划等场景可能已有packed包裹）
+    # 
+    # 关键修复：使用 .all() 而非 .first()，并按 goods_items 中的 order_code
+    # 精确匹配。当多个订单共享同一 L1→L2 路线时，每个订单有独立的 F021 包裹，
+    # .first() 会错误地重复激活同一个包裹，导致其他订单的包裹永远停在 pending_pack。
     existing_package = None
     if schedule_id:
-        existing_package = db.query(Package).filter(
+        all_matching = db.query(Package).filter(
             Package.schedule_id == schedule_id,
             Package.status.in_(['packed', 'pending_pack']),
             Package.from_node_id == l1_node.id,
             Package.to_node_id == l2_node.id
-        ).first()
+        ).all()
+        
+        # 优先匹配 goods_items 中包含当前 order_code 的包裹
+        for pkg in all_matching:
+            items = pkg.goods_items
+            if isinstance(items, str):
+                import json
+                items = json.loads(items)
+            if items:
+                for item in items:
+                    if item.get('order_code') == order_code:
+                        existing_package = pkg
+                        break
+            if existing_package:
+                break
+        
+        # 兜底：若 goods_items 中未匹配到（兼容旧数据），使用第一个 pending_pack 包裹
+        if not existing_package:
+            for pkg in all_matching:
+                if pkg.status == 'pending_pack':
+                    existing_package = pkg
+                    break
+            # 最后兜底：使用第一个包裹
+            if not existing_package and all_matching:
+                existing_package = all_matching[0]
     
     if existing_package:
         # 重用现有包裹：F021已正确设置了goods_items，只需更新状态和货物状态

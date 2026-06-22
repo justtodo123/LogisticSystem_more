@@ -33,14 +33,15 @@ class TestExceptionServiceCRUD:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
-    async def test_create_exception_event_success(self, db_session):
+    async def test_create_exception_event_success(self, db_session, test_nodes):
         """创建异常事件成功"""
+        # 使用 test_nodes fixture 中真实存在的节点编码
+        node_code = list(test_nodes.keys())[0]
         data = CreateExceptionEventRequest(
             exception_type="node",
             exception_subtype="capacity_limit",
             target_type="node",
-            target_code="SC001",
-            severity="high",
+            target_code=node_code,
             recommended_action="redispatch",
             description="存储中心容量不足",
         )
@@ -65,7 +66,6 @@ class TestExceptionServiceCRUD:
         ).first()
         assert event is not None
         assert event.status == "open"
-        assert event.severity == "high"
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -106,10 +106,14 @@ class TestExceptionServiceCRUD:
         db_session.add(gs)
         db_session.commit()
 
+        # 使用 test_nodes 中真实存在的节点编码
+        node_code = list(test_nodes.keys())[0]
         data = CreateExceptionEventRequest(
             exception_type="road",
             exception_subtype="congestion",
-            recommended_action="reroute",
+            recommended_action="redispatch",
+            target_type="node",
+            target_code=node_code,
             description="道路拥堵",
             related_schedule_code="GS_TEST_001",
         )
@@ -131,7 +135,7 @@ class TestExceptionServiceCRUD:
             event = ExceptionEvent(
                 event_code=f"EX_TEST_{i}",
                 exception_type="road" if i < 2 else "package",
-                severity="medium",
+                exception_subtype="congestion",
                 recommended_action="reroute",
                 description=f"测试异常 {i}",
                 status="open" if i < 2 else "resolved",
@@ -170,7 +174,7 @@ class TestExceptionServiceCRUD:
         event = ExceptionEvent(
             event_code="EX_DETAIL_001",
             exception_type="node",
-            severity="high",
+            exception_subtype="capacity_limit",
             recommended_action="redispatch",
             description="节点异常",
             status="open",
@@ -203,7 +207,7 @@ class TestExceptionServiceCRUD:
         event = ExceptionEvent(
             event_code="EX_RESOLVE_001",
             exception_type="node",
-            severity="medium",
+            exception_subtype="capacity_limit",
             recommended_action="redispatch",
             description="待解决异常",
             status="open",
@@ -214,11 +218,9 @@ class TestExceptionServiceCRUD:
         result = await ExceptionService.resolve_exception(
             db=db_session,
             event_code="EX_RESOLVE_001",
-            resolution_note="已扩容存储中心",
         )
         assert result["code"] == 0
         assert result["data"]["status"] == "resolved"
-        assert result["data"]["resolution_note"] == "已扩容存储中心"
         assert result["data"]["resolved_at"] is not None
 
     @pytest.mark.unit
@@ -228,7 +230,7 @@ class TestExceptionServiceCRUD:
         event = ExceptionEvent(
             event_code="EX_RESOLVED_001",
             exception_type="node",
-            severity="medium",
+            exception_subtype="capacity_limit",
             recommended_action="redispatch",
             description="已解决异常",
             status="resolved",
@@ -515,7 +517,7 @@ class TestExceptionTriggerReplan:
         event = ExceptionEvent(
             event_code="EX_RESOLVED_001",
             exception_type="node",
-            severity="medium",
+            exception_subtype="capacity_limit",
             recommended_action="redispatch",
             description="已解决",
             status="resolved",
@@ -539,7 +541,7 @@ class TestExceptionTriggerReplan:
         event = ExceptionEvent(
             event_code="EX_NO_SCH_001",
             exception_type="node",
-            severity="high",
+            exception_subtype="capacity_limit",
             recommended_action="redispatch",
             description="无关联调度方案",
             status="open",
@@ -563,7 +565,7 @@ class TestExceptionTriggerReplan:
         event = ExceptionEvent(
             event_code="EX_UNSUPPORTED_001",
             exception_type="node",
-            severity="medium",
+            exception_subtype="capacity_limit",
             recommended_action="redispatch",
             description="测试非法action参数",
             status="open",
@@ -616,7 +618,6 @@ class TestExceptionTriggerReplan:
             event_code="EX_TRIGGER_001",
             exception_type="node",
             exception_subtype="capacity_limit",
-            severity="high",
             recommended_action="redispatch",
             related_schedule_code="GS_TRIGGER_001",
             description="触发重调度测试",
@@ -718,14 +719,14 @@ class TestExceptionTriggerReplan:
         db_session.add(route)
         db_session.flush()
 
-        # 创建异常事件（reroute 类型，通过 related_route_id 关联路线）
+        # 创建异常事件（reroute 类型，通过 target_type+target_code 关联路线）
         event = ExceptionEvent(
             event_code="EX_REROUTE_T_001",
             exception_type="road",
             exception_subtype="congestion",
-            severity="medium",
+            target_type="route",
+            target_code=route.route_code,
             recommended_action="reroute",
-            related_route_id=route.id,
             related_schedule_code="GS_REROUTE_T_001",
             description="道路拥堵",
             status="open",

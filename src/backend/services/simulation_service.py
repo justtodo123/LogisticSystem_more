@@ -120,10 +120,18 @@ class SimulationService:
                         level_info["l1_to_l2"] += 1
                     else:
                         # 中间节点（L0→L1 送达后）
-                        # F021 已一次性生成 L1→L2 包裹，无需重新打包
-                        # 货物状态直接从 in_transit → packed
+                        # 货物状态：in_transit → packed
                         goods.status = "packed"
                         level_info["l0_to_l1"] += 1
+                        # 将 F021 预生成的 L1→L2 包裹状态从 pending_pack 提升为 packed
+                        # （F021 以 pending_pack 状态创建 L1→L2 包裹，需等货物到达 L1 后激活）
+                        l1_l2_pkgs = db.query(Package).filter(
+                            Package.schedule_id == package.schedule_id,
+                            Package.status == 'pending_pack',
+                            Package.from_node_id == package.to_node_id
+                        ).all()
+                        for l1pkg in l1_l2_pkgs:
+                            l1pkg.status = 'packed'
                     
                     status_changed_goods_count += 1
                     updated_order_ids.add(order.id)

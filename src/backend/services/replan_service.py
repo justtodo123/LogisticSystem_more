@@ -16,6 +16,7 @@ from models.global_schedule import GlobalSchedule
 from models.route import Route
 from models.node_dispatch import NodeDispatch
 from models.dispatch_batch import DispatchBatch
+from models.vehicle import Vehicle
 from utils.response import success_response, error_response
 
 
@@ -68,8 +69,24 @@ class ReplanService:
 
             # 3. 提取排除参数
             excluded_nodes = []
-            if event and event.target_type == "node" and event.target_code:
-                excluded_nodes.append(event.target_code)
+            excluded_vehicles = []
+            if event:
+                if event.target_type == "node" and event.target_code:
+                    excluded_nodes.append(event.target_code)
+                elif event.target_type == "vehicle" and event.target_code:
+                    excluded_vehicles.append(event.target_code)
+                    # 同时从关联调度明细中查找该车辆参与的所有调度
+                    vehicle = db.query(Vehicle).filter(
+                        Vehicle.vehicle_code == event.target_code
+                    ).first()
+                    if vehicle:
+                        dispatches = db.query(NodeDispatch).filter(
+                            NodeDispatch.vehicle_id == vehicle.id
+                        ).all()
+                        for d in dispatches:
+                            v = db.query(Vehicle).filter(Vehicle.id == d.vehicle_id).first()
+                            if v and v.vehicle_code not in excluded_vehicles:
+                                excluded_vehicles.append(v.vehicle_code)
 
             # 4. 调用现有服务层（不修改它们）
             from services.schedule_service import ScheduleService
@@ -108,6 +125,7 @@ class ReplanService:
                 schedule_code=new_schedule_code,
                 demo_mode=False,  # 重规划只生成方案，不模拟送达
                 db=db,
+                excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
                 is_replan=True,  # 重规划模式：只调度 exception 包裹
             )
 
