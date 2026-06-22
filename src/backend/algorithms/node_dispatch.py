@@ -207,7 +207,9 @@ def dispatch_level(
     level_phase: int,
     config: dict,
     package_codes: Optional[List[str]] = None,
-    batch_id: Optional[int] = None
+    batch_id: Optional[int] = None,
+    excluded_vehicles: Optional[List[str]] = None,
+    is_replan: bool = False,
 ) -> Tuple[List[Dict[str, Any]], List[Package], List[Package]]:
     """
     执行一次节点调度（L0→L1 或 L1→L2）
@@ -221,6 +223,7 @@ def dispatch_level(
         config: 算法配置
         package_codes: 可选，指定要调度的包裹编码列表。如果提供，只调度这些包裹；否则调度所有符合条件的包裹
         batch_id: 可选，如果提供，则自动将调度明细写入数据库（调用_write_dispatches）
+        is_replan: 是否为重规划模式（True=调度exception包裹，False=调度packed包裹）
     
     Returns:
         (dispatch_list, updated_packages, unallocated_packages)
@@ -228,6 +231,9 @@ def dispatch_level(
         - updated_packages: 已分配并更新状态的包裹列表
         - unallocated_packages: 未分配的包裹列表（保持status=packed, dispatch_id=NULL）
     """
+    # 确定包裹状态过滤条件
+    target_status = "exception" if is_replan else "packed"
+    
     # 创建别名
     NodeAlias1 = aliased(Node)
     NodeAlias2 = aliased(Node)
@@ -237,11 +243,11 @@ def dispatch_level(
     # 1. 根据 level_phase 确定查询条件
     if level_phase == 0:
         # L0→L1: from_node.node_type='storage_center' AND to_node.node_type='sorting_center' 
-        # AND to_node.sorting_center.level=1 AND packages.status='packed'
+        # AND to_node.sorting_center.level=1 AND packages.status='packed' (or 'exception' for replan)
         
         # 简化查询：使用 relationships
         query = db.query(Package).filter(
-            Package.status == 'packed',
+            Package.status == target_status,
             Package.schedule_id == schedule_id
         )
         
@@ -273,7 +279,7 @@ def dispatch_level(
     else:
         # L1→L2: from_node.node_type='sorting_center' AND from_node.sorting_center.level=1 
         # AND to_node.node_type='sorting_center' AND to_node.sorting_center.level=0 
-        # AND packages.status='packed'
+        # AND packages.status='packed' (or 'exception' for replan)
         query = (
             db.query(Package)
             .join(Node, Package.from_node_id == Node.id)
@@ -285,7 +291,7 @@ def dispatch_level(
                 SortingCenter.level == 1,
                 NodeAlias1.node_type == 'sorting_center',
                 SortingCenterAlias1.level == 0,
-                Package.status == 'packed',
+                Package.status == target_status,
                 Package.schedule_id == schedule_id
             )
         )
@@ -346,10 +352,20 @@ def dispatch_level(
             
             # 查询候选车辆：优先级 本节点空闲 > 本节点返程 > 跨节点空闲
             candidate_vehicles = _get_idle_vehicles_at_node(db, from_node.id)
+            
+            # 新增：排除异常车辆
+            if excluded_vehicles:
+                candidate_vehicles = [v for v in candidate_vehicles 
+                                        if v.vehicle_code not in excluded_vehicles]
+            
             used_cross_node = False
             
             if not candidate_vehicles:
                 candidate_vehicles = _get_return_vehicles_at_node(db, from_node.id)
+                # 排除异常车辆
+                if excluded_vehicles:
+                    candidate_vehicles = [v for v in candidate_vehicles 
+                                                if v.vehicle_code not in excluded_vehicles]
             
             # 跨节点后备：当本节点无可用车辆时，尝试同类型其他节点的空闲车辆
             if not candidate_vehicles:
@@ -357,6 +373,10 @@ def dispatch_level(
                     candidate_vehicles = _get_idle_vehicles_by_node_type(db, 'storage_center', from_node.id)
                 else:
                     candidate_vehicles = _get_idle_vehicles_at_l1_centers(db, from_node.id)
+                # 排除异常车辆
+                if excluded_vehicles:
+                    candidate_vehicles = [v for v in candidate_vehicles 
+                                                if v.vehicle_code not in excluded_vehicles]
                 used_cross_node = True
             
             if not candidate_vehicles:
@@ -467,7 +487,7 @@ def dispatch_level(
     return dispatch_list, updated_packages, unallocated_packages
 
 
-def _check_packages_by_level(db: Session, schedule_id: int, level_phase: int) -> bool:
+def _check_packages_by_level(db: Session, schedule_id: int, level_phase: int, is_replan: bool = False) -> bool:
     """
     检查指定层级的包裹是否存在
     
@@ -475,12 +495,15 @@ def _check_packages_by_level(db: Session, schedule_id: int, level_phase: int) ->
         db: 数据库会话
         schedule_id: 调度方案 ID
         level_phase: 0 (L0→L1) 或 1 (L1→L2)
+        is_replan: 是否为重规划模式（True=检查exception包裹，False=检查packed包裹）
     
     Returns:
         bool: 是否存在该层级的包裹
     """
+    target_status = "exception" if is_replan else "packed"
+    
     packages = db.query(Package).filter(
-        Package.status == 'packed',
+        Package.status == target_status,
         Package.schedule_id == schedule_id
     ).all()
     
@@ -509,7 +532,7 @@ def _check_packages_by_level(db: Session, schedule_id: int, level_phase: int) ->
     return False
 
 
-def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) -> Dict[str, Any]:
+def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False, excluded_vehicles: Optional[List[str]] = None, is_replan: bool = False) -> Dict[str, Any]:
     """
     F005 节点间调度主函数
     
@@ -523,6 +546,8 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
         db: 数据库会话
         schedule_code: 全局调度方案编码
         demo_mode: 是否演示模式（跳过L1送达等待）
+        excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
+        is_replan: 是否为重规划模式（True=调度exception包裹，False=调度packed包裹）
     
     Returns:
         调度结果字典，包含 batch_code, status, dispatches
@@ -542,8 +567,8 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
     ).first()
     
     # 3. 智能判断：检查存在哪些类型的包裹
-    has_l0_l1 = _check_packages_by_level(db, schedule.id, level_phase=0)
-    has_l1_l2 = _check_packages_by_level(db, schedule.id, level_phase=1)
+    has_l0_l1 = _check_packages_by_level(db, schedule.id, level_phase=0, is_replan=is_replan)
+    has_l1_l2 = _check_packages_by_level(db, schedule.id, level_phase=1, is_replan=is_replan)
     
     # 4. 加载算法配置
     config = _load_config()
@@ -551,23 +576,23 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
     # 5. 根据 demo_mode、existing_batch 和包裹类型决定执行逻辑
     if demo_mode:
         # demo_mode=true：一次完成两次调度（L0→L1 + L1→L2）
-        return _run_dispatch_both_levels(db, schedule, config)
+        return _run_dispatch_both_levels(db, schedule, config, excluded_vehicles, is_replan=is_replan)
     
     else:
         # demo_mode=false：分阶段调度
         if existing_batch:
             # 已有批次，执行 L1→L2（第二次调用）
-            return _run_dispatch_l1_to_l2(db, schedule, existing_batch, config)
+            return _run_dispatch_l1_to_l2(db, schedule, existing_batch, config, excluded_vehicles, is_replan=is_replan)
         else:
             # 没有批次，判断是首次调用还是跳过 L0→L1
             if has_l0_l1 and has_l1_l2:
                 # 同时存在两个层级的包裹，优先执行 L0→L1
-                result = _run_dispatch_l0_to_l1(db, schedule, config)
+                result = _run_dispatch_l0_to_l1(db, schedule, config, excluded_vehicles, is_replan=is_replan)
                 result["message"] = "L0→L1调度完成，请再次调用以执行L1→L2"
                 return result
             elif has_l0_l1:
                 # 只有 L0→L1 包裹，执行首次调用
-                return _run_dispatch_l0_to_l1(db, schedule, config)
+                return _run_dispatch_l0_to_l1(db, schedule, config, excluded_vehicles, is_replan=is_replan)
             elif has_l1_l2:
                 # 只有 L1→L2 包裹，直接执行 L1→L2
                 # 需要先创建一个批次（模拟首次调用的批次）
@@ -581,12 +606,12 @@ def run_node_dispatch(db: Session, schedule_code: str, demo_mode: bool = False) 
                 )
                 db.add(batch)
                 db.flush()
-                return _run_dispatch_l1_to_l2(db, schedule, batch, config)
+                return _run_dispatch_l1_to_l2(db, schedule, batch, config, excluded_vehicles, is_replan=is_replan)
             else:
                 raise ValueError("没有可调度的包裹")
 
 
-def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, Any]:
+def _run_dispatch_both_levels(db: Session, schedule, config: dict, excluded_vehicles: Optional[List[str]] = None, is_replan: bool = False) -> Dict[str, Any]:
     """
     demo_mode=true 时的一次性调度（L0→L1 + L1→L2）
     
@@ -594,14 +619,18 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
         db: 数据库会话
         schedule: 全局调度方案对象
         config: 算法配置
+        excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
+        is_replan: 是否为重规划模式
     
     Returns:
         调度结果字典
     """
+    target_status = "exception" if is_replan else "packed"
+    
     # 1. 执行 L0→L1 调度
-    # 先检查是否有状态为packed的包裹
+    # 先检查是否有符合条件的包裹
     packed_packages_count = db.query(Package).filter(
-        Package.status == 'packed',
+        Package.status == target_status,
         Package.schedule_id == schedule.id
     ).count()
     
@@ -609,7 +638,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
         raise ValueError("L0→L1没有可调度的包裹")
     
     try:
-        l0_l1_dispatches, _, unallocated_l0_l1 = dispatch_level(db, schedule.id, 0, config)
+        l0_l1_dispatches, _, unallocated_l0_l1 = dispatch_level(db, schedule.id, 0, config, excluded_vehicles=excluded_vehicles, is_replan=is_replan)
     except Exception as e:
         raise ValueError(f"L0→L1调度失败：{str(e)}")
     
@@ -674,7 +703,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
     
     # 6. 执行 L1→L2 调度
     try:
-        l1_l2_dispatches, _, unallocated_l1_l2 = dispatch_level(db, schedule.id, 1, config)
+        l1_l2_dispatches, _, unallocated_l1_l2 = dispatch_level(db, schedule.id, 1, config, excluded_vehicles=excluded_vehicles, is_replan=is_replan)
     except Exception as e:
         raise ValueError(f"L1→L2调度失败：{str(e)}")
     
@@ -718,7 +747,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict) -> Dict[str, 
     }
 
 
-def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any]:
+def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict, excluded_vehicles: Optional[List[str]] = None, is_replan: bool = False) -> Dict[str, Any]:
     """
     demo_mode=false 时的首次调用（只执行 L0→L1）
     
@@ -726,13 +755,15 @@ def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any
         db: 数据库会话
         schedule: 全局调度方案对象
         config: 算法配置
+        excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
+        is_replan: 是否为重规划模式
     
     Returns:
         调度结果字典
     """
     # 1. 执行 L0→L1 调度
     try:
-        l0_l1_dispatches, _, unallocated_l0_l1 = dispatch_level(db, schedule.id, 0, config)
+        l0_l1_dispatches, _, unallocated_l0_l1 = dispatch_level(db, schedule.id, 0, config, excluded_vehicles=excluded_vehicles, is_replan=is_replan)
     except Exception as e:
         raise ValueError(f"L0→L1调度失败：{str(e)}")
     
@@ -777,7 +808,7 @@ def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict) -> Dict[str, Any
     }
 
 
-def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict) -> Dict[str, Any]:
+def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict, excluded_vehicles: Optional[List[str]] = None, is_replan: bool = False) -> Dict[str, Any]:
     """
     demo_mode=false 时的第二次调用（只执行 L1→L2）
     
@@ -786,13 +817,15 @@ def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict) 
         schedule: 全局调度方案对象
         existing_batch: 已存在的调度批次（status=l0_l1_done）
         config: 算法配置
+        excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
+        is_replan: 是否为重规划模式
     
     Returns:
         调度结果字典
     """
     # 1. 执行 L1→L2 调度
     try:
-        l1_l2_dispatches, _, unallocated_l1_l2 = dispatch_level(db, schedule.id, 1, config)
+        l1_l2_dispatches, _, unallocated_l1_l2 = dispatch_level(db, schedule.id, 1, config, excluded_vehicles=excluded_vehicles, is_replan=is_replan)
     except Exception as e:
         raise ValueError(f"L1→L2调度失败：{str(e)}")
     

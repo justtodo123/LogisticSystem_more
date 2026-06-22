@@ -64,8 +64,14 @@ class TestScheduleServiceNormalFlow:
             Package.schedule_id == gs.id
         ).all()
         assert len(packages) == result["data"]["package_count"]
+        # L0→L1 包裹: packed（货物在同一节点，可立即发运）
+        # L1→L2 包裹: pending_pack（货物尚在L0，需等货物到达L1后重新打包）
+        packed_count = sum(1 for p in packages if p.status == "packed")
+        pending_count = sum(1 for p in packages if p.status == "pending_pack")
+        assert packed_count > 0, "应至少有一个 L0→L1 包裹状态为 packed"
+        assert pending_count > 0, "应至少有一个 L1→L2 包裹状态为 pending_pack"
+        assert packed_count + pending_count == len(packages), "所有包裹状态应为 packed 或 pending_pack"
         for pkg in packages:
-            assert pkg.status == "packed"
             assert pkg.schedule_id == gs.id
 
         # ── 验证 orders 状态更新 ──

@@ -104,14 +104,18 @@ def global_schedule(
     order_codes: Optional[List[str]],
     algorithm: str,
     db: Session,
+    excluded_nodes: Optional[List[str]] = None,
+    is_replan: bool = False,
 ) -> Dict[str, Any]:
     """
     F007 全局调度算法
 
     Args:
-        order_codes: 订单编号列表（可选，None 则处理所有 pending 订单）
+        order_codes: 订单编号列表（可选，None 则处理所有 pending/exception 订单）
         algorithm: 算法类型（"traditional" 或 "deepseek"，阶段3仅实现 traditional）
         db: 数据库会话
+        excluded_nodes: 排除的节点编码列表（重规划时使用）
+        is_replan: 是否为重规划模式（True=只调度exception订单，False=只调度pending订单）
 
     Returns:
         dict: {
@@ -138,14 +142,18 @@ def global_schedule(
     w3 = weights["w3_packages"]
 
     # ── 1. 查询订单 ──
-    # 始终只允许 pending 状态的订单参与调度，防止已完成的订单被重复调度
-    query = db.query(Order).filter(Order.status == "pending")
+    # 正常调度：只处理 pending 订单
+    # 重规划调度：只处理 exception 订单
+    if is_replan:
+        query = db.query(Order).filter(Order.status == "exception")
+    else:
+        query = db.query(Order).filter(Order.status == "pending")
     if order_codes:
         query = query.filter(Order.order_code.in_(order_codes))
     orders = query.all()
 
     if not orders:
-        raise ValueError("没有找到符合条件的订单（status=pending）")
+        raise ValueError("没有找到符合条件的订单（status=pending 或 status=exception）")
 
     # ── 2. 预加载 L1 节点（含 sorting_center 属性） ──
     l1_nodes = (
@@ -190,6 +198,10 @@ def global_schedule(
             best_score = float("inf")
 
             for l1_node in l1_nodes:
+                # 新增：排除异常节点
+                if excluded_nodes and l1_node.node_code in excluded_nodes:
+                    continue
+
                 l1_sc = l1_node_map.get(l1_node.id)
                 if not l1_sc:
                     continue

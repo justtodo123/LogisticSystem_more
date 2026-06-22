@@ -4,8 +4,8 @@
 
 ## 项目状态
 
-**当前阶段**：阶段 6（模拟送达 F013-1）已完成  
-**下一阶段**：阶段 7（异常与重规划 F013）
+**当前阶段**：阶段 7（异常与重规划 F013）已完成  
+**下一阶段**：阶段 8（AI 助手与收尾 F014）
 
 **阶段4最新更新**：
 - **阶段4实现范围**：仅完整实现 `demo_mode=true`，`demo_mode=false` 完整流程推迟到阶段6
@@ -27,6 +27,15 @@
 - ✅ **功能边界清理**：移除自动触发逻辑（重新打包/F005/重新调度），模拟送达仅负责状态流转
 - ✅ **状态流转修复**：模拟送达第一次后货物状态从 `in_transit` → `packed`（F021 已生成 L1→L2 包裹，无需重新打包）
 - ✅ **单元测试完成**：7/7 测试通过，验证状态流转正确性
+
+**阶段7最新更新** (2026-06-22)：
+- ✅ **方案A实施完成**：新建 `ReplanService` + `ExceptionService`，不修改现有调度/路径规划服务层
+- ✅ **异常事件 CRUD**：创建、列表（分页/筛选）、详情、更新、标记已解决 5 个 API 端点
+- ✅ **重规划双模式**：`redispatch`（F007→F021→F005→F006 全链路） + `reroute`（仅 F006 路径规划）
+- ✅ **版本链实现**：重规划生成新版记录，`version+1`、`parent_id` 指向前一版本、`is_replan=true`
+- ✅ **异常自动关联**：创建异常时自动将关联订单/货物/包裹状态置为 `exception`
+- ✅ **repack_at_l1 精确匹配修复**：修复多订单同路线场景下包裹错误复用导致遗漏的BUG
+- ✅ **单元测试完成**：32/32 全部通过（覆盖异常服务、重规划服务、集成测试）
 
 ## 技术栈
 
@@ -110,6 +119,8 @@ src/backend/
 │   ├── nodes.py               # 节点管理 (GET /api/nodes, POST/PUT/DELETE storage-centers/sorting-centers)
 │   ├── schedule.py            # 调度管理 (POST /api/schedule/global, POST /api/schedule/node-dispatch, GET 列表/详情)
 │   ├── routes.py              # 路径规划 (POST /api/routes/plan, GET /api/routes, GET /api/routes/{code}, GET /api/routes/by-vehicle/{code}/coordinates)
+│   ├── exception_events.py    # 异常管理 (GET/POST /api/exceptions, POST /replan, PUT /resolve)  [阶段7]
+│   ├── simulation.py          # 模拟送达 (POST /api/simulation/deliver, GET /status)  [阶段6]
 │   └── dependencies.py         # 依赖注入 (get_current_user JWT 验证, require_dispatcher RBAC)
 │
 ├── services/                   # 业务逻辑层
@@ -124,6 +135,9 @@ src/backend/
 │   ├── schedule_service.py    # 调度编排服务 (F007→F021→写库, 单事务)
 │   ├── dispatch_service.py    # 节点调度服务 (F005→写库, 单事务)
 │   ├── route_service.py       # 路径规划服务 (F006→写库, 单事务)
+│   ├── exception_service.py   # 异常事件服务 (CRUD + 触发重规划)  [阶段7]
+│   ├── replan_service.py      # 重规划服务 (redispatch/reroute + 版本链)  [阶段7]
+│   ├── simulation_service.py  # 模拟送达服务 (状态流转)  [阶段6]
 │   └── state_machine.py       # 状态机服务 (状态流转逻辑)
 │
 ├── models/                     # SQLAlchemy ORM 模型
@@ -142,7 +156,8 @@ src/backend/
 │   ├── global_schedule.py     # GlobalSchedule 模型 (F007 调度结果)
 │   ├── dispatch_batch.py      # DispatchBatch 模型 (F005 调度批次)
 │   ├── node_dispatch.py      # NodeDispatch 模型 (F005 节点调度明细)
-│   └── route.py              # Route 模型 (F006 路径规划结果)
+│   ├── route.py              # Route 模型 (F006 路径规划结果)
+│   └── exception_event.py    # ExceptionEvent 模型 (异常事件)  [阶段7]
 │
 ├── schemas/                    # Pydantic 请求/响应模型
 │   ├── __init__.py
@@ -154,7 +169,8 @@ src/backend/
 │   ├── driver.py              # DriverCreate, DriverUpdate
 │   ├── node.py                # StorageCenterCreate/Update, SortingCenterCreate/Update
 │   ├── dispatch.py             # NodeDispatchRequest, DispatchBatchResponse, NodeDispatchResponse
-│   └── route.py               # RoutePlanRequest, RouteListResponse, RouteDetailResponse, RouteCoordinatesResponse
+│   ├── route.py               # RoutePlanRequest, RouteListResponse, RouteDetailResponse, RouteCoordinatesResponse
+│   └── exception_event.py     # CreateExceptionEvent, TriggerReplan, UpdateException, ExceptionEventResponse  [阶段7]
 │
 ├── core/                       # 核心模块
 │   ├── error_codes.py          # 错误码定义
@@ -192,11 +208,17 @@ src/backend/
 │   │   └── test_route_planning.py   # F006 路径规划算法测试 (12个测试)
 │   ├── test_services/          # 服务层测试
 │   │   ├── test_schedule_service.py  # 调度编排服务测试
-│   │   └── test_route_service.py     # 路径规划服务测试 (13个测试)
+│   │   ├── test_route_service.py     # 路径规划服务测试 (13个测试)
+│   │   ├── test_exception_service.py # 异常事件服务测试 (19个测试)  [阶段7]
+│   │   ├── test_state_machine.py     # 状态机测试 (7个测试)  [阶段6]
+│   │   └── test_dispatch_service.py  # 调度服务测试
 │   ├── test_api/               # API 层测试
 │   │   └── test_schedule.py    # 调度接口测试
-│   └── test_integration/       # 集成测试
-│       └── test_full_dispatch_flow.py  # 完整调度链路测试 F007→F021→F005→F006 (2个测试)
+│   └── tests/integration/      # 集成测试
+│       ├── test_full_dispatch_flow.py       # 完整调度链路 F007→F021→F005→F006
+│       ├── test_dispatch_pipeline.py        # 调度管道集成测试  [阶段7]
+│       ├── test_auto_redispatch.py          # 自动重规划集成测试  [阶段7]
+│       └── test_exception_replan.py         # 异常重规划集成测试  [阶段7]
 │
 ├── data/                       # 数据文件
 │   └── logistics.db            # SQLite 数据库
@@ -287,12 +309,283 @@ src/backend/
 | `GET` | `/api/simulation/status/{batch_code}` | 查询送达状态和待重新打包货物（P1） | Bearer Token (dispatcher/manager) |
 | `POST` | `/api/simulation/deliver-batch` | 批量送达同一批次所有车辆（P1） | Bearer Token (dispatcher) |
 
-### 规划中（阶段 7-8）
+#### 异常管理（阶段 7）
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| `GET` | `/api/exceptions` | 异常事件列表（分页、筛选） | Bearer Token |
+| `POST` | `/api/exceptions` | 创建异常事件 | Bearer Token (dispatcher) |
+| `GET` | `/api/exceptions/{event_code}` | 异常事件详情 | Bearer Token |
+| `POST` | `/api/exceptions/{event_code}/replan` | 触发重规划（redispatch 或 reroute） | Bearer Token (dispatcher) |
+| `PUT` | `/api/exceptions/{event_code}` | 更新异常事件 | Bearer Token (dispatcher) |
+| `PUT` | `/api/exceptions/{event_code}/resolve` | 标记异常已解决（status → resolved，记录 resolved_at） | Bearer Token (dispatcher) |
+
+> **异常事件模型**：`exception_events` 表字段 — `event_code`、`exception_type`（road / package / node）、`exception_subtype`（congestion / damage / capacity_limit）、`target_type`（node / package / route / vehicle）、`target_code`、`recommended_action`（redispatch / reroute）、`related_schedule_code`、`replan_batch_code`、`description`、`status`（open / resolved）、`resolved_at`、`created_at`。
+
+---
+
+### Redispatch（重调度）完整使用指南
+
+#### 功能定义
+
+`redispatch` 是**全链路重规划**操作。当遇到节点异常（容量不足、维修关停、存储时长超限）或车辆异常时，对原调度方案重新执行 F007→F021→F005→F006 完整调度链路。新旧方案通过**版本链**关联，原方案完整保留便于对比。
+
+#### 前置条件
+
+| 条件 | 说明 | 如何满足 |
+|------|------|---------|
+| **全局调度已完成** | 必须存在 `related_schedule_code` 对应的 `GlobalSchedule` 记录 | `POST /api/schedule/global` 执行成功 |
+| 节点调度 **不要求** 完成 | `redispatch` 内部自行调用 `DispatchService` 执行 F005+F006，无需事先完成节点调度 | — |
+| 订单/货物/包裹处于调度链路中 | `related_schedule_code` 关联的订单应处于 `delivering` 或 `exception` 状态 | 全局调度后订单自动为 `delivering` |
+
+> **关键设计**：`redispatch` 只需完成阶段3（全局调度）即可使用。`ReplanService.redispatch()` 内部按顺序调用 `ScheduleService`（F007+F021）→ `DispatchService`（F005+F006），**不需要预先执行节点间调度**。创建异常事件时仅自动将关联实体的状态标记为 `exception`，作为重调度时的筛选条件。
+
+#### 适用场景
+
+| 异常类型 | exception_subtype | 触发条件 | target_type |
+|---------|-------------------|---------|-------------|
+| `node` | `capacity_limit` | 分拣中心容量不足，部分货物需重新分配 L1 | `node` |
+| `node` | `storage_timeout` | 存储中心货物积压超时 | `node` |
+| `node` | `node_maintenance` | 节点维修关停 | `node` |
+| `vehicle` | `vehicle_breakdown` | 车辆故障无法完成任务 | `vehicle` |
+| ~~`package`~~ | ~~`package_damage`~~ | ~~包裹损坏需整体重新调度~~ | ~~`package`~~ (暂未实现) |
+
+#### 响应格式
+
+**创建异常事件** `POST /api/exceptions`：
+
+```json
+// 请求体
+{
+  "exception_type": "node",
+  "exception_subtype": "capacity_limit",
+  "target_type": "node",
+  "target_code": "L1001",
+  "recommended_action": "redispatch",
+  "related_schedule_code": "GS20260622001",
+  "description": "L1001 容量不足，部分货物需重新分配 L1 节点"
+}
+// 成功响应 (code=0)，data 中包含新创建的异常事件详情
+```
+
+> **触发时自动状态变更**：创建异常事件后，系统自动将 `related_schedule_code` 关联的：
+> - 订单状态：`delivering` → `exception`
+> - 货物状态：`packed` / `in_transit` → `exception`
+> - 包裹状态：`packed` / `in_transit` / `pending_pack` → `exception`
+> - 若 `target_type=vehicle`：车辆状态 → `disabled`，且按 `dispatch_id` 批量更新关联包裹和货物
+
+**触发重规划** `POST /api/exceptions/{event_code}/replan`：
+
+```json
+// 请求体
+{
+  "action": "redispatch",
+  "reason": "L1001 容量溢出 120%，分流 3 票货物至 L1002"
+}
+// 成功响应 (code=0)
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "schedule_code": "GS20260622002",
+    "new_schedule_code": "GS20260622002",
+    "batch_code": "BATCH20260622002",
+    "version": 2,
+    "is_replan": true,
+    "replan_reason": "L1001 容量溢出 120%，分流 3 票货物至 L1002",
+    "original_schedule_code": "GS20260622001"
+  },
+  "meta": { "degraded": false, "degraded_reason": null }
+}
+```
+
+#### 完整调用顺序（6 步）
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Step 1  创建异常事件                                                 │
+│         POST /api/exceptions                                        │
+│         入参: exception_type=node, recommended_action=redispatch     │
+│         出参: event_code="EX..."                                     │
+│         副作用: 订单/货物/包裹 → exception，车辆 → disabled           │
+├─────────────────────────────────────────────────────────────────────┤
+│ Step 2  [可选] 查询异常确认                                          │
+│         GET /api/exceptions/{event_code}                            │
+│         确认 status=open, recommended_action=redispatch              │
+├─────────────────────────────────────────────────────────────────────┤
+│ Step 3  触发重规划                                                   │
+│         POST /api/exceptions/{event_code}/replan                    │
+│         入参: { action: "redispatch", reason: "..." }                │
+│         ReplanService.redispatch() 内部调用链:                       │
+│           a) 读原调度方案 (GlobalSchedule)                           │
+│           b) 获取 order_codes + algorithm_type                      │
+│           c) 提取 excluded_nodes（来自 event.target_code）            │
+│           d) 调用 ScheduleService.create_global_schedule()           │
+│              → F007 全局调度 + F021 打包（仅对 exception 订单）       │
+│           e) 更新新方案版本链: version+1, parent_id, is_replan        │
+│           f) 调用 DispatchService.create_node_dispatch()             │
+│              → F005 节点调度 (demo_mode=false, 仅调度 exception 包裹) │
+│              → F006 路径规划自动触发                                 │
+│         出参: new_schedule_code, batch_code, version                 │
+├─────────────────────────────────────────────────────────────────────┤
+│ Step 4  [可选] 验证新方案                                            │
+│         GET /api/schedule/global/{new_schedule_code}                │
+│         对比新旧方案的 goods_schedules + packages 差异               │
+├─────────────────────────────────────────────────────────────────────┤
+│ Step 5  标记异常已解决                                               │
+│         PUT /api/exceptions/{event_code}/resolve                    │
+│         副作用: status → resolved, resolved_at = now()               │
+├─────────────────────────────────────────────────────────────────────┤
+│ Step 6  [可选] 模拟送达验证                                          │
+│         POST /api/simulation/deliver (分批送达)                      │
+│         或直接调用 demo_mode=true 自动化流程                         │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### 版本链机制
+
+重规划生成的每条新记录（`GlobalSchedule`、`DispatchBatch`、`NodeDispatch`、`Route`）均通过以下字段形成版本链：
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| `version` | 版本号，原方案=1，每次重规划+1 | `2` |
+| `parent_id` | 指向前一版本的数据库 `id` | `1` |
+| `is_replan` | 标记为重规划记录 | `true` |
+| `replan_reason` | 重规划原因（人工填写） | `"L1001 容量溢出"` |
+
+> **对比查询**：通过 `parent_id` 可追溯完整版本链，前端可展示"原方案 vs 新方案"对比视图。
+
+---
+
+### Reroute（重路径规划）完整使用指南
+
+#### 功能定义
+
+`reroute` 是**轻量级重规划**操作。当遇到道路异常（拥堵、封闭）或单条路径需调整时，仅重新执行 F006 路径规划，**不重新调度**。操作粒度精确到单条路线，影响范围最小。
+
+#### 前置条件
+
+| 条件 | 说明 | 如何满足 |
+|------|------|---------|
+| **节点调度已完成** | `target_code` 必须指向一条已存在的 `Route` 记录，Route 由 F005 完成后自动触发 F006 生成 | `POST /api/schedule/node-dispatch` 执行成功（F005 完成后自动执行 F006） |
+| 目标路线存在 | `target_type=route` + `target_code` 对应的 Route 记录必须存在于 `routes` 表 | 可通过 `GET /api/routes` 确认 |
+| 关联调度方案存在 | `related_schedule_code` 对应的 `GlobalSchedule` 记录必须存在 | `POST /api/schedule/global` 执行成功 |
+
+> **关键设计**：`reroute` 需要完成阶段4（节点间调度），因为其操作对象是 F006 生成的 `Route` 记录。若仅完成全局调度（阶段3）而未执行节点调度（阶段4），则 `routes` 表中没有记录，无法触发 `reroute`。`reroute` 不修改订单/货物/包裹状态（与 `redispatch` 不同），仅生成新路线记录。
+
+#### 适用场景
+
+| 异常类型 | exception_subtype | 触发条件 | target_type |
+|---------|-------------------|---------|-------------|
+| `road` | `road_closed` | 道路封闭，需绕行 | `route` |
+| `road` | `congestion` | 严重拥堵，需重新规划路径 | `route` |
+| `road` | `road_accident` | 交通事故导致路段不可用 | `route` |
+
+#### 响应格式
+
+**创建异常事件** `POST /api/exceptions`：
+
+```json
+// 请求体（注意 reroute 强制要求 target_type="route", target_code 必填）
+{
+  "exception_type": "road",
+  "exception_subtype": "road_closed",
+  "target_type": "route",
+  "target_code": "RT202606220001",
+  "recommended_action": "reroute",
+  "related_schedule_code": "GS20260622001",
+  "description": "L1001→L2034 路段施工封闭，需重新规划路线"
+}
+// 成功响应 (code=0)
+```
+
+**触发重规划** `POST /api/exceptions/{event_code}/replan`：
+
+```json
+// 请求体
+{
+  "action": "reroute",
+  "reason": "原路线途经封闭路段，绕行替代路径"
+}
+// 成功响应 (code=0)
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "batch_code": "BATCH20260622001",
+    "route_codes": ["RT202606220002"],
+    "new_route_code": "RT202606220002",
+    "version": 2,
+    "is_replan": true,
+    "replan_reason": "原路线途经封闭路段，绕行替代路径",
+    "original_route_code": "RT202606220001"
+  },
+  "meta": { "degraded": false, "degraded_reason": null }
+}
+```
+
+#### 完整调用顺序（6 步）
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Step 1  创建异常事件                                                 │
+│         POST /api/exceptions                                        │
+│         入参: exception_type=road, recommended_action=reroute        │
+│         入参: target_type=route, target_code="RT..." (必填!)         │
+│         出参: event_code="EX..."                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│ Step 2  [可选] 查询异常确认                                          │
+│         GET /api/exceptions/{event_code}                            │
+│         确认 status=open, target_type=route, target_code 有效         │
+├─────────────────────────────────────────────────────────────────────┤
+│ Step 3  触发重规划                                                   │
+│         POST /api/exceptions/{event_code}/replan                    │
+│         入参: { action: "reroute", reason: "..." }                   │
+│         ExceptionService.trigger_replan() 内部调用链:                 │
+│           a) 通过 event.target_code 查找原 Route                     │
+│           b) 通过 Route.dispatch_id → NodeDispatch                   │
+│           c) 通过 NodeDispatch.dispatch_batch_id → DispatchBatch      │
+│           d) 提取 excluded_vehicles（原车辆排除，避免重复分配）        │
+│           e) 调用 ReplanService.reroute():                           │
+│              → 读取原 Route + 关联 dispatch + batch                  │
+│              → 调用 RouteService.create_route_planning()             │
+│              → F006 仅为该 dispatch_code 重新规划路径                 │
+│              → 更新新 Route 版本链                                   │
+│         出参: route_codes, batch_code, version                      │
+├─────────────────────────────────────────────────────────────────────┤
+│ Step 4  [可选] 对比新旧路线                                          │
+│         GET /api/routes/{new_route_code}                            │
+│         GET /api/routes/by-vehicle/{vehicle_code}/coordinates        │
+│         前端可并排展示新旧路线坐标轨迹                                │
+├─────────────────────────────────────────────────────────────────────┤
+│ Step 5  标记异常已解决                                               │
+│         PUT /api/exceptions/{event_code}/resolve                    │
+│         副作用: status → resolved, resolved_at = now()               │
+├─────────────────────────────────────────────────────────────────────┤
+│ Step 6  [可选] 继续配送                                              │
+│         使用新路线继续模拟送达 → POST /api/simulation/deliver         │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### 与 Redispatch 的关键差异
+
+| 对比维度 | Redispatch | Reroute |
+|---------|-----------|---------|
+| **前置条件** | 仅需全局调度完成（`schedule_code` 存在） | 需节点调度完成（`Route` 记录存在） |
+| **重新调度** | ✅ 全链路 F007→F021→F005→F006 | ❌ 仅 F006 |
+| **影响范围** | 整个调度方案（可能跨节点） | 单条路线（单次运输） |
+| **版本链对象** | GlobalSchedule + DispatchBatch + NodeDispatch + Route | Route |
+| **状态重置** | 订单/货物/包裹 → exception | 不修改状态 |
+| **排除参数** | excluded_nodes（跳过故障节点） | excluded_vehicles（跳过故障车辆） |
+| **执行耗时** | 较长（≈全调度时间） | 较短（单次路径规划） |
+
+---
+
+### 规划中（阶段 8）
 
 详见 `docs/` 目录下的 MVP 开发计划。核心接口包括：
 
-- **异常**：`GET/POST /api/exceptions`、`POST /api/exceptions/{code}/replan`
-- **AI**：`POST /api/ai/parse`
+- **AI**：`POST /api/ai/parse`（P0，DeepSeek 自然语言调度）、`POST /api/ai/explain`、`POST /api/ai/review`、`POST /api/ai/analyze-exception`（P1 占位 501）
 
 ## 统一响应格式
 
@@ -379,6 +672,13 @@ alembic downgrade -1
 2. **调度算法仅支持 `traditional`**：DeepSeek AI 调度（`algorithm=deepseek`）将在阶段 8 实现
 3. **F005 算法简化**：当前车辆匹配仅考虑载重，未考虑距离评分（阶段 5 或阶段 6 补充）
 4. **演示数据车辆载重**：已调整为 50.0（原 10.0 不足以承载单个包裹重量）
+
+### 阶段 7 设计决策
+
+1. **方案A — 不修改现有服务层**：`ReplanService` 直接调用 `ScheduleService`、`DispatchService`、`RouteService`，版本链逻辑完全在 `ReplanService` 中实现。原服务层代码零修改，确保回归安全。
+2. **重规划仅调度 exception 状态实体**：`is_replan=True` 标记传入各服务层，仅对 `exception` 状态的订单/包裹进行调度，正常配送中的实体不受影响。
+3. **reroute 不修改状态**：与 redispatch 不同，reroute 不重置订单/货物/包裹为 exception，仅生成新路线记录。原路线保留用于对比。
+4. **repack_at_l1 精确匹配修复**：修复 `.first()` 改为 `.all()` + `order_code` 精确匹配，解决多订单同路线场景下包裹错误复用导致遗漏的 BUG。
 
 ### 演示数据规模
 
@@ -519,6 +819,54 @@ alembic downgrade -1
 | 错误处理 | 批次不存在 → 40001、路线不存在 → 40400、车辆不存在 → 40400 | ✅ |
 | 数据完整性 | 路线记录、route_segments JSON、总距离/时间/碳排放 | ✅ |
 
+### 阶段 7 自测（异常与重规划）
+
+测试时间：2026-06-22，结果：**32/32 通过（100%）**
+
+#### 异常服务单元测试 (19/19)
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| 创建异常 | 道路异常创建成功、包裹异常创建成功、节点异常创建成功 | ✅ |
+| 创建异常 | 缺少必填字段报错、无效异常类型报错、无效 action 报错 | ✅ |
+| 创建异常 | reroute 必须 target_type=route、必须提供 target_code | ✅ |
+| 创建异常 | redispatch 建议 target_type=node/vehicle/package | ✅ |
+| 创建异常 | 关联订单/货物/包裹状态 → exception、车辆异常 → disabled | ✅ |
+| 查询异常 | 列表查询（分页）、按 status/exception_type 筛选 | ✅ |
+| 查询异常 | 详情查询、不存在异常报错 | ✅ |
+| 更新异常 | 更新 status → resolved（自动 recorded_at）、不存在报错 | ✅ |
+| 标记解决 | 正常标记、重复标记报错 | ✅ |
+
+#### 重规划集成测试
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| Redispatch | 节点异常触发完整重调度（F007→F021→F005→F006） | ✅ |
+| Redispatch | excluded_nodes 正确排除故障节点 | ✅ |
+| Redispatch | 新版调度方案版本链正确（version+1, parent_id, is_replan） | ✅ |
+| Redispatch | 原调度方案完整保留不受影响 | ✅ |
+| Reroute | 道路异常触发仅 F006 路径重规划 | ✅ |
+| Reroute | excluded_vehicles 正确排除故障车辆 | ✅ |
+| Reroute | 新路线版本链正确 | ✅ |
+| Reroute | repack_at_l1 多订单同路线精确匹配（修复 BUG） | ✅ |
+| 异常管理 | 已解决异常再次触发重规划拒绝 | ✅ |
+| 异常管理 | 不存在异常触发重规划报错 | ✅ |
+| 异常管理 | 缺失 related_schedule_code 触发 redispatch 报错 | ✅ |
+| 异常管理 | missing route target_code 触发 reroute 报错 | ✅ |
+
+#### 自测验收清单
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| 异常事件 CRUD | POST 创建、GET 列表/详情、PUT 更新、PUT /resolve 标记解决 | ✅ |
+| 文件不修改原则 | schedule_service.py、dispatch_service.py、route_service.py 未修改 | ✅ |
+| 版本链 | 重规划后的记录 version+1、parent_id 正确、is_replan=true | ✅ |
+| Redispatch | 完整调用链：创建异常 → 触发重规划 → 验证方案 → 标记解决 | ✅ |
+| Reroute | 完整调用链：创建异常 → 触发重规划 → 对比路线 → 标记解决 | ✅ |
+| 错误处理 | 无效 action → 400、不存在异常 → 40401、已解决再触发 → 40001 | ✅ |
+| 权限 | dispatcher 可触发重规划、manager 返回 403 | ✅ |
+| 数据完整性 | exception_events 表所有字段正常写入、状态流转正确 | ✅ |
+
 ## 相关文档
 
 - [项目宪章](../../.codebuddy/CODEBUDDY.md)
@@ -534,3 +882,5 @@ alembic downgrade -1
 - [阶段 4 API 契约文档](../../My_doc/阶段4-API契约文档.md)（V1.0）
 - [阶段 5 开发文档](../../My_doc/阶段5开发文档-F006路径规划.md)
 - [阶段 5 API 契约文档](../../docs/api-contract/api-contract-phase5.md)（V1.0）
+- [阶段 7 开发文档](../../My_doc/阶段7开发文档.md)（V3.0）
+- [阶段 7 API 契约文档](../../docs/api-contract/api-contract-phase7.md)（V1.0）

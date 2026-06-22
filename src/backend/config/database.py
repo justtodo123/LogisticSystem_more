@@ -45,7 +45,7 @@ def init_db():
     from models import (  # noqa: F401
         User, LogEvent, Node, StorageCenter, SortingCenter,
         Order, Goods, Package, Vehicle, Driver, GlobalSchedule,
-        DispatchBatch, NodeDispatch, Route
+        DispatchBatch, NodeDispatch, Route, ExceptionEvent
     )
     
     # 创建所有表

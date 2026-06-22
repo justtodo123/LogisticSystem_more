@@ -25,6 +25,7 @@ class RouteService:
         batch_code: str,
         dispatch_codes: Optional[List[str]],
         db: Session,
+        excluded_vehicles: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         编排 F006 算法 → 写库（单事务）
@@ -39,6 +40,7 @@ class RouteService:
             batch_code: 调度批次编码
             dispatch_codes: 节点调度明细编码列表（可选）
             db: 数据库会话
+            excluded_vehicles: 排除的车辆编码列表（可选，用于重规划场景，F006暂不使用）
             
         Returns:
             统一响应格式 dict
