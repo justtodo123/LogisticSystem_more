@@ -1,6 +1,7 @@
 import request from './request'
 import type {
   SimulationDeliverPayload,
+  SimulationDeliverResponse,
   SimulationDeliverResult,
 } from '@/types/simulation'
 import { useMockSimulation } from '@/utils/env'
@@ -8,12 +9,23 @@ import { simulateDeliverMock } from '@/utils/mock-simulation'
 
 function compactPayload(
   payload: SimulationDeliverPayload,
-): SimulationDeliverPayload {
-  const body: SimulationDeliverPayload = {}
-  if (payload.batch_code) body.batch_code = payload.batch_code
+): Omit<SimulationDeliverPayload, 'batch_code'> {
+  const body: Omit<SimulationDeliverPayload, 'batch_code'> = {}
   if (payload.vehicle_code) body.vehicle_code = payload.vehicle_code
   if (payload.package_code) body.package_code = payload.package_code
   return body
+}
+
+function toResult(data: SimulationDeliverResponse): SimulationDeliverResult {
+  const count = data.delivered_package_codes.length
+  return {
+    packages_delivered: count,
+    delivered_package_codes: data.delivered_package_codes,
+    message:
+      count > 0
+        ? `已模拟送达 ${count} 个包裹`
+        : '未送达包裹',
+  }
 }
 
 export async function simulateDeliver(
@@ -22,9 +34,9 @@ export async function simulateDeliver(
   if (useMockSimulation()) {
     return simulateDeliverMock(payload)
   }
-  const { data } = await request.post<SimulationDeliverResult>(
+  const { data } = await request.post<SimulationDeliverResponse>(
     '/simulation/deliver',
     compactPayload(payload),
   )
-  return data
+  return toResult(data)
 }

@@ -206,7 +206,7 @@ export async function simulateDeliverMock(
 
   return {
     packages_delivered: count,
-    batch_status: batch.status,
+    delivered_package_codes: deliverable,
     message: `已模拟送达 ${count} 个包裹`,
   }
 }
