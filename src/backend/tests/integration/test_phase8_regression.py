@@ -63,12 +63,14 @@ async def test_ai_parse_with_mock(async_client, test_users):
     }
     
     # 正确Mock httpx.AsyncClient的异步上下文管理器
+    # 注意：response.json() 是异步方法，需要返回协程
+    mock_response_obj = AsyncMock()
+    mock_response_obj.status_code = 200
+    mock_response_obj.json = AsyncMock(return_value=mock_response)
+    mock_response_obj.raise_for_status = AsyncMock()
+    
     mock_client = AsyncMock()
-    mock_client.post.return_value = AsyncMock(
-        status_code=200,
-        json=AsyncMock(return_value=mock_response),
-        raise_for_status=AsyncMock()
-    )
+    mock_client.post = AsyncMock(return_value=mock_response_obj)
     
     # Mock DEEPSPEEK_API_KEY 使其不为None，这样才会调用httpx.AsyncClient
     with patch("services.deepseek_service.settings.DEEPSEEK_API_KEY", "fake-api-key"), \
@@ -229,14 +231,18 @@ async def test_ai_parse_response_format(async_client, test_users):
     }
     
     # 正确Mock httpx.AsyncClient的异步上下文管理器
-    mock_client = AsyncMock()
-    mock_client.post.return_value = AsyncMock(
-        status_code=200,
-        json=AsyncMock(return_value=mock_response),
-        raise_for_status=AsyncMock()
-    )
+    # 注意：response.json() 是异步方法，需要返回协程
+    mock_response_obj = AsyncMock()
+    mock_response_obj.status_code = 200
+    mock_response_obj.json = AsyncMock(return_value=mock_response)
+    mock_response_obj.raise_for_status = AsyncMock()
     
-    with patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response_obj)
+    
+    # Mock DEEPSPEEK_API_KEY 使其不为None
+    with patch("services.deepseek_service.settings.DEEPSEEK_API_KEY", "fake-api-key"), \
+         patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
         # 配置__aenter__返回mock_client
         mock_client_class.return_value.__aenter__.return_value = mock_client
         
