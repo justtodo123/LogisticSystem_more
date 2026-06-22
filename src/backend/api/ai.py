@@ -47,9 +47,17 @@ async def parse_natural_language(
         from services.vehicle_service import VehicleService
         from services.node_service import NodeService
         
-        pending_orders = await OrderService.get_orders_by_status(status="pending", db=db)
-        available_vehicles = await VehicleService.get_available_vehicles(db=db)
-        nodes = await NodeService.get_all_nodes(db=db)
+        # 获取待分配订单（status="pending"）
+        orders_result = await OrderService.get_orders(page=1, page_size=1000, status="pending", db=db)
+        pending_orders = orders_result["data"]["items"]
+        
+        # 获取可用车辆（status="idle"）
+        vehicles_result = await VehicleService.get_vehicles(page=1, page_size=1000, status="idle", db=db)
+        available_vehicles = vehicles_result["data"]["items"]
+        
+        # 获取所有节点
+        nodes_result = await NodeService.get_nodes(page=1, page_size=1000, db=db)
+        nodes = nodes_result["data"]["items"]
         
         system_context = {
             "order_count": len(pending_orders),
@@ -84,15 +92,17 @@ async def parse_natural_language(
         # 4. 如果 auto_execute=true，执行完整调度链路
         schedule_code = None
         if request.auto_execute:
-            # 4.1 执行 F007 全局调度
+            # 4.1 执行 F007 全局调度 + F021 打包
             from services.schedule_service import ScheduleService
             
             schedule_result = await ScheduleService.create_global_schedule(
-                db=db,
-                current_user_id=current_user.id,
-                current_user_role=current_user.role
+                order_codes=None,  # None = 处理所有 pending 订单
+                algorithm="traditional",
+                db=db
             )
-            schedule_code = schedule_result["schedule_code"]
+            if schedule_result["code"] != 0:
+                return schedule_result  # 返回错误响应
+            schedule_code = schedule_result["data"]["schedule_code"]
             
             # 4.2 执行 F021 打包服务（由 ScheduleService 内部调用）
             # 已经在 create_global_schedule 中自动执行
@@ -101,23 +111,24 @@ async def parse_natural_language(
             from services.dispatch_service import DispatchService
             
             batch_result = await DispatchService.create_node_dispatch(
-                db=db,
                 schedule_code=schedule_code,
                 demo_mode=True,  # 关键：跳过模拟送达，连续执行两次
-                current_user_id=current_user.id,
-                current_user_role=current_user.role
+                db=db
             )
-            batch_code = batch_result["batch_code"]
+            if batch_result["code"] != 0:
+                return batch_result  # 返回错误响应
+            batch_code = batch_result["data"]["batch_code"]
             
             # 4.4 执行 F006 路径规划
             from services.route_service import RouteService
             
-            await RouteService.create_routes(
-                db=db,
+            route_result = await RouteService.create_route_planning(
                 batch_code=batch_code,
-                current_user_id=current_user.id,
-                current_user_role=current_user.role
+                dispatch_codes=None,  # None = 处理批次下所有 dispatch
+                db=db
             )
+            if route_result["code"] != 0:
+                return route_result  # 返回错误响应
         
         # 5. 返回结果
         return {
