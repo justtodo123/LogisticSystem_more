@@ -13,11 +13,15 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
 
 from config.database import get_db
-from schemas.ai import AiParseRequest, AiParseResponse
+from schemas.ai import AiParseRequest, AiParseResponse, AiExplainRequest, AiReviewRequest, AiAnalyzeExceptionRequest
 from services.deepseek_service import DeepSeekService
 from services.log_service import LogService, build_deepseek_call_event_data
+from services.schedule_service import ScheduleService
+from services.dispatch_service import DispatchService
+from services.exception_service import ExceptionService
 from api.dependencies import get_current_user
 from models.user import User
+from utils.response import success_response, error_response
 
 logger = logging.getLogger(__name__)
 
@@ -314,58 +318,169 @@ async def _execute_replan(
 
 @router.post("/explain")
 async def explain_schedule(
-    current_user: User = Depends(get_current_user)
+    request: AiExplainRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
-    方案解释（F015，P1，返回 501）
+    方案解释（F015）
     
-    未来实现：
-    1. 获取当前调度方案数据
-    2. 调用 DeepSeek API 生成解释
-    3. 返回自然语言解释
+    输入：schedule_code（可选）、batch_code（可选）
+    输出：自然语言解释（包含决策逻辑、潜在风险、优化建议）
     """
-    return {
-        "code": 50100,
-        "message": "F015 方案解释功能正在开发中（P1）",
-        "data": None,
-        "meta": {
-            "degraded": False,
-            "degraded_reason": None
+    try:
+        # 1. 参数校验
+        if not request.schedule_code and not request.batch_code:
+            return error_response(
+                code=40001,
+                message="schedule_code和batch_code至少一个必须提供"
+            )
+        
+        # 2. 查询数据
+        schedule_data = None
+        batch_data = None
+        
+        if request.schedule_code:
+            result = await ScheduleService.get_global_schedule(db, request.schedule_code)
+            if result["code"] != 0:
+                return result  # 返回错误响应
+            
+            schedule_data = result["data"]  # 数据在data字段中
+            
+        if request.batch_code:
+            result = await DispatchService.get_dispatch_batch_detail(db, request.batch_code)
+            if result["code"] != 0:
+                return result  # 返回错误响应
+            batch_data = result["data"]  # 数据在data字段中
+            
+        # 3. 调用DeepSeek服务
+        result = await DeepSeekService.explain_schedule(schedule_data, batch_data)
+        
+        # 4. 返回响应
+        return success_response(data=result)
+        
+    except Exception as e:
+        logger.error(f"方案解释失败：{e}")
+        # 降级响应
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "explanation": "AI服务暂时不可用，请稍后重试",
+                "key_decisions": [],
+                "potential_risks": [],
+                "suggestions": []
+            },
+            "meta": {
+                "degraded": True,
+                "degraded_reason": str(e)
+            }
         }
-    }
 
 
 @router.post("/review")
 async def review_schedule(
-    current_user: User = Depends(get_current_user)
+    request: AiReviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
-    方案审查（F016，P1，返回 501）
+    方案审查（F016）
+    
+    输入：schedule_code（可选）、batch_code（可选）
+    输出：风险列表（包含风险类型、描述、严重级别、优化建议）
     """
-    return {
-        "code": 50100,
-        "message": "F016 方案审查功能正在开发中（P1）",
-        "data": None,
-        "meta": {
-            "degraded": False,
-            "degraded_reason": None
+    try:
+        # 1. 参数校验
+        if not request.schedule_code and not request.batch_code:
+            return error_response(
+                code=40001,
+                message="schedule_code和batch_code至少一个必须提供"
+            )
+        
+        # 2. 查询数据
+        schedule_data = None
+        batch_data = None
+        
+        if request.schedule_code:
+            result = await ScheduleService.get_global_schedule(db, request.schedule_code)
+            if result["code"] != 0:
+                return result  # 返回错误响应
+            
+            schedule_data = result["data"]  # 数据在data字段中
+            
+        if request.batch_code:
+            result = await DispatchService.get_dispatch_batch_detail(db, request.batch_code)
+            if result["code"] != 0:
+                return result  # 返回错误响应
+            batch_data = result["data"]  # 数据在data字段中
+            
+        # 3. 调用DeepSeek服务
+        result = await DeepSeekService.review_schedule(schedule_data, batch_data)
+        
+        # 4. 返回响应
+        return success_response(data=result)
+        
+    except Exception as e:
+        logger.error(f"方案审查失败：{e}")
+        # 降级响应
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {"risks": []},
+            "meta": {
+                "degraded": True,
+                "degraded_reason": str(e)
+            }
         }
-    }
 
 
 @router.post("/analyze-exception")
 async def analyze_exception(
-    current_user: User = Depends(get_current_user)
+    request: AiAnalyzeExceptionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
-    异常分析（F017，P1，返回 501）
+    异常分析（F017）
+    
+    输入：event_code（必填）
+    输出：分析建议（包含根本原因、调整建议、推荐操作）
     """
-    return {
-        "code": 50100,
-        "message": "F017 异常分析功能正在开发中（P1）",
-        "data": None,
-        "meta": {
-            "degraded": False,
-            "degraded_reason": None
+    try:
+        # 1. 查询异常事件
+        result = await ExceptionService.get_exception_event_by_code(db, request.event_code)
+        if result["code"] != 0:
+            return result  # 返回错误响应
+        
+        exception_data = result["data"]  # 数据在data字段中
+        
+        # 2. 查询关联调度方案（如果存在）
+        schedule_data = None
+        if exception_data.get("related_schedule_code"):
+            result = await ScheduleService.get_global_schedule(db, exception_data["related_schedule_code"])
+            if result["code"] == 0:
+                schedule_data = result["data"]
+        
+        # 3. 调用DeepSeek服务
+        result = await DeepSeekService.analyze_exception(exception_data, schedule_data)
+        
+        # 5. 返回响应
+        return success_response(data=result)
+        
+    except Exception as e:
+        logger.error(f"异常分析失败：{e}")
+        # 降级响应
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "root_cause": "AI服务暂时不可用，请稍后重试",
+                "suggestions": [],
+                "auto_fix_available": False
+            },
+            "meta": {
+                "degraded": True,
+                "degraded_reason": str(e)
+            }
         }
-    }
