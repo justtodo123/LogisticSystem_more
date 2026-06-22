@@ -8,7 +8,7 @@ DeepSeek API 调用服务
 """
 import json
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import httpx
 

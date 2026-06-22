@@ -341,20 +341,23 @@ async def explain_schedule(
         batch_data = None
         
         if request.schedule_code:
-            result = await ScheduleService.get_global_schedule(db, request.schedule_code)
+            result = await ScheduleService.get_global_schedule(request.schedule_code, db)
             if result["code"] != 0:
                 return result  # 返回错误响应
             
             schedule_data = result["data"]  # 数据在data字段中
             
         if request.batch_code:
-            result = await DispatchService.get_dispatch_batch_detail(db, request.batch_code)
+            result = await DispatchService.get_dispatch_batch_detail(request.batch_code, db)
             if result["code"] != 0:
                 return result  # 返回错误响应
             batch_data = result["data"]  # 数据在data字段中
             
-        # 3. 调用DeepSeek服务
-        result = await DeepSeekService.explain_schedule(schedule_data, batch_data)
+        # 3. 调用DeepSeek服务（保证至少传入空dict而非None）
+        result = await DeepSeekService.explain_schedule(
+            schedule_data if schedule_data is not None else {},
+            batch_data if batch_data is not None else {}
+        )
         
         # 4. 返回响应
         return success_response(data=result)
@@ -403,20 +406,23 @@ async def review_schedule(
         batch_data = None
         
         if request.schedule_code:
-            result = await ScheduleService.get_global_schedule(db, request.schedule_code)
+            result = await ScheduleService.get_global_schedule(request.schedule_code, db)
             if result["code"] != 0:
                 return result  # 返回错误响应
             
             schedule_data = result["data"]  # 数据在data字段中
             
         if request.batch_code:
-            result = await DispatchService.get_dispatch_batch_detail(db, request.batch_code)
+            result = await DispatchService.get_dispatch_batch_detail(request.batch_code, db)
             if result["code"] != 0:
                 return result  # 返回错误响应
             batch_data = result["data"]  # 数据在data字段中
             
-        # 3. 调用DeepSeek服务
-        result = await DeepSeekService.review_schedule(schedule_data, batch_data)
+        # 3. 调用DeepSeek服务（保证至少传入空dict而非None）
+        result = await DeepSeekService.review_schedule(
+            schedule_data if schedule_data is not None else {},
+            batch_data if batch_data is not None else {}
+        )
         
         # 4. 返回响应
         return success_response(data=result)
@@ -458,7 +464,7 @@ async def analyze_exception(
         # 2. 查询关联调度方案（如果存在）
         schedule_data = None
         if exception_data.get("related_schedule_code"):
-            result = await ScheduleService.get_global_schedule(db, exception_data["related_schedule_code"])
+            result = await ScheduleService.get_global_schedule(exception_data["related_schedule_code"], db)
             if result["code"] == 0:
                 schedule_data = result["data"]
         

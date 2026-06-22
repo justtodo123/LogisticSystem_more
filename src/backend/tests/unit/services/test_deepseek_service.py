@@ -10,7 +10,7 @@ DeepSeek服务单元测试：测试F015/F016/F017功能
 """
 import pytest
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 
 def _mock_deepseek_response(mock_json_data):
@@ -34,15 +34,11 @@ def _mock_deepseek_response(mock_json_data):
         }]
     }
     
-    # 创建mock客户端和post方法
-    mock_post = MagicMock()
-    mock_post.return_value = mock_response
-    
-    # 创建mock异步上下文管理器
+    # 创建mock客户端：post/__aenter__ 必须是 AsyncMock 以支持 await
     mock_client = MagicMock()
-    mock_client.post = mock_post
-    mock_client.__aenter__ = MagicMock(return_value=mock_client)
-    mock_client.__aexit__ = MagicMock(return_value=None)
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
     
     return mock_client
 
@@ -99,12 +95,12 @@ class TestExplainSchedule:
             "total_time": 5.2,
         }
         
-        # 使用patch模拟超时异常
+        # 使用patch模拟超时异常：__aenter__正常，post抛出异常
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = MagicMock()
-            mock_client.post = MagicMock(side_effect=Exception("Timeout"))
-            mock_client.__aenter__ = MagicMock(return_value=mock_client)
-            mock_client.__aexit__ = MagicMock(return_value=None)
+            mock_client.post = AsyncMock(side_effect=Exception("Timeout"))
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client_class.return_value = mock_client
             
             result = await DeepSeekService.explain_schedule(schedule_data)
@@ -162,9 +158,9 @@ class TestReviewSchedule:
         
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = MagicMock()
-            mock_client.post = MagicMock(side_effect=Exception("Timeout"))
-            mock_client.__aenter__ = MagicMock(return_value=mock_client)
-            mock_client.__aexit__ = MagicMock(return_value=None)
+            mock_client.post = AsyncMock(side_effect=Exception("Timeout"))
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client_class.return_value = mock_client
             
             result = await DeepSeekService.review_schedule(schedule_data, batch_data)
@@ -221,9 +217,9 @@ class TestAnalyzeException:
         
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = MagicMock()
-            mock_client.post = MagicMock(side_effect=Exception("Timeout"))
-            mock_client.__aenter__ = MagicMock(return_value=mock_client)
-            mock_client.__aexit__ = MagicMock(return_value=None)
+            mock_client.post = AsyncMock(side_effect=Exception("Timeout"))
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client_class.return_value = mock_client
             
             result = await DeepSeekService.analyze_exception(exception_data)

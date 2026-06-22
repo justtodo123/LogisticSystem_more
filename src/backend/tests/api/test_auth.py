@@ -100,10 +100,13 @@ class TestLogin:
             json={"username": "testuser"},  # 缺少password
         )
 
-        # 验证响应（FastAPI参数校验失败返回422）
+        # 验证响应（参数校验失败返回422，使用统一响应格式）
         assert response.status_code == 422
         body = response.json()
-        assert "detail" in body  # FastAPI 422错误格式
+        assert "code" in body
+        assert body["code"] == 40000
+        assert "data" in body
+        assert "detail" in body["data"]
 
 
 class TestGetMe:
