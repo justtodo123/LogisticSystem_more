@@ -12,6 +12,7 @@ import type {
   DispatchBatchDetail,
   DispatchBatchSummary,
   NodeDispatchCreatePayload,
+  NodeDispatchPhase,
   NodeDispatchResult,
 } from '@/types/dispatch'
 import { useMockScheduleFail } from '@/utils/env'
@@ -199,88 +200,284 @@ export async function getMockBatchDetail(
   return batchDetailsData![batchCode] ?? null
 }
 
-function buildMockDispatchDetail(
-  batchCode: string,
-  scheduleCode: string,
-): DispatchBatchDetail {
-  const l0Phase = {
-    level_phase: 0 as const,
+export async function updateMockBatchDetail(
+  detail: DispatchBatchDetail,
+): Promise<void> {
+  await ensureMockBatches()
+  batchDetailsData![detail.batch_code] = detail
+}
+
+export async function updateMockBatchSummary(
+  detail: DispatchBatchDetail,
+): Promise<void> {
+  await ensureMockBatches()
+  const idx = batchesData!.findIndex((b) => b.batch_code === detail.batch_code)
+  const summary: DispatchBatchSummary = {
+    batch_code: detail.batch_code,
+    schedule_code: detail.schedule_code,
+    status: detail.status,
+    vehicle_count: detail.vehicle_count,
+    l0_l1_dispatch_count: detail.l0_l1_dispatch_count,
+    l1_l2_dispatch_count: detail.l1_l2_dispatch_count,
+    demo_mode: detail.demo_mode,
+    created_at: detail.created_at,
+  }
+  if (idx >= 0) {
+    batchesData![idx] = summary
+  }
+}
+
+function buildL0Phase(batchCode: string): NodeDispatchPhase {
+  return {
+    level_phase: 0,
     dispatch_code: `ND${batchCode.slice(2)}L0`,
     vehicle_tasks: [
       {
-        vehicle_code: 'VEHSC00101',
-        driver_code: 'DRVSC00101',
+        vehicle_code: '鄂A12345',
+        driver_code: 'D20260601001',
         distance: 12.5,
         tasks: [
           {
             from_node_code: 'SC001',
             to_node_code: 'L1001',
-            package_codes: ['PKG001', 'PKG002'],
+            package_codes: ['PKG20260612001'],
+            is_return: false,
+          },
+          {
+            from_node_code: 'L1001',
+            to_node_code: 'SC001',
+            package_codes: [],
+            is_return: true,
           },
         ],
       },
       {
-        vehicle_code: 'VEHSC00201',
-        driver_code: 'DRVSC00201',
+        vehicle_code: '鄂A12346',
+        driver_code: 'D20260601002',
         distance: 18.3,
         tasks: [
           {
             from_node_code: 'SC002',
             to_node_code: 'L1002',
-            package_codes: ['PKG003'],
+            package_codes: ['PKG20260612002'],
+            is_return: false,
+          },
+          {
+            from_node_code: 'L1002',
+            to_node_code: 'SC002',
+            package_codes: [],
+            is_return: true,
           },
         ],
       },
     ],
   }
+}
 
-  const l1Phase = {
-    level_phase: 1 as const,
+function buildL1Phase(batchCode: string): NodeDispatchPhase {
+  return {
+    level_phase: 1,
     dispatch_code: `ND${batchCode.slice(2)}L1`,
     vehicle_tasks: [
       {
-        vehicle_code: 'VEHL100101',
-        driver_code: 'DRVL100101',
+        vehicle_code: '鄂A12347',
+        driver_code: 'D20260601003',
         distance: 22.1,
         tasks: [
           {
             from_node_code: 'L1001',
             to_node_code: 'L2001',
-            package_codes: ['PKG001', 'PKG002'],
+            package_codes: ['PKG20260612001'],
+            is_return: false,
+          },
+          {
+            from_node_code: 'L2001',
+            to_node_code: 'L1001',
+            package_codes: [],
+            is_return: true,
           },
         ],
       },
       {
-        vehicle_code: 'VEHL100201',
-        driver_code: 'DRVL100201',
+        vehicle_code: '鄂A12348',
+        driver_code: 'D20260601004',
         distance: 15.8,
         tasks: [
           {
             from_node_code: 'L1002',
             to_node_code: 'L2005',
-            package_codes: ['PKG003'],
+            package_codes: ['PKG20260612002'],
+            is_return: false,
+          },
+          {
+            from_node_code: 'L2005',
+            to_node_code: 'L1002',
+            package_codes: [],
+            is_return: true,
           },
         ],
       },
     ],
   }
+}
 
-  const dispatches = [l0Phase, l1Phase]
+function buildMockDispatchDetail(
+  batchCode: string,
+  scheduleCode: string,
+  options: { demoMode: boolean; includeL1: boolean },
+): DispatchBatchDetail {
+  const l0Phase = buildL0Phase(batchCode)
+  const phases: NodeDispatchPhase[] = [l0Phase]
+  if (options.includeL1) {
+    phases.push(buildL1Phase(batchCode))
+  }
+
+  const dispatches = phases
   const vehicleCount = new Set(
     dispatches.flatMap((d) => d.vehicle_tasks.map((v) => v.vehicle_code)),
   ).size
   const now = new Date().toISOString().slice(0, 19)
+  const l0Count = l0Phase.vehicle_tasks.length
+  const l1Count = options.includeL1 ? buildL1Phase(batchCode).vehicle_tasks.length : 0
+
+  let status: DispatchBatchDetail['status'] = 'pending'
+  if (options.demoMode && options.includeL1) {
+    status = 'completed'
+  } else if (!options.demoMode && options.includeL1) {
+    status = 'l0_l1_done'
+  }
 
   return normalizeBatchDetail({
     batch_code: batchCode,
     schedule_code: scheduleCode,
-    status: 'completed',
+    status,
+    demo_mode: options.demoMode,
     vehicle_count: vehicleCount,
-    l0_l1_dispatch_count: l0Phase.vehicle_tasks.length,
-    l1_l2_dispatch_count: l1Phase.vehicle_tasks.length,
-    route_codes: ['RT001', 'RT002'],
+    l0_l1_dispatch_count: l0Count,
+    l1_l2_dispatch_count: l1Count,
+    route_codes: options.includeL1 ? ['RT001', 'RT002'] : [],
     created_at: now,
     dispatches,
+  })
+}
+
+async function markPackagesInTransit(
+  packageCodes: string[],
+  vehicleCodes: string[],
+  driverCodes: string[],
+): Promise<void> {
+  const packages = await getMockPackages()
+  const goods = await getMockGoods()
+  const vehicles = await getMockVehicles()
+  const drivers = await getMockDrivers()
+
+  for (const code of packageCodes) {
+    const pkg = packages.find((p) => p.package_code === code)
+    if (!pkg) continue
+    pkg.status = 'in_transit'
+    for (const item of pkg.goods_items) {
+      const g = goods.find((x) => x.goods_code === item.goods_code)
+      if (g) g.status = 'in_transit'
+    }
+  }
+
+  for (const v of vehicles) {
+    if (vehicleCodes.includes(v.vehicle_code)) {
+      v.status = 'delivering'
+    }
+  }
+  for (const d of drivers) {
+    if (driverCodes.includes(d.driver_code)) {
+      d.status = 'busy'
+    }
+  }
+}
+
+function cargoPackageCodesFromDetail(detail: DispatchBatchDetail): string[] {
+  const codes = new Set<string>()
+  for (const d of detail.dispatches) {
+    for (const task of d.tasks) {
+      if (task.is_return) continue
+      for (const pkg of task.package_codes) {
+        codes.add(pkg)
+      }
+    }
+  }
+  return [...codes]
+}
+
+function vehicleAndDriverCodes(
+  detail: DispatchBatchDetail,
+  levelPhase: 0 | 1,
+): { vehicles: string[]; drivers: string[] } {
+  const vehicles: string[] = []
+  const drivers: string[] = []
+  for (const d of detail.dispatches) {
+    if (d.level_phase !== levelPhase) continue
+    vehicles.push(d.vehicle_code)
+    if (d.driver_code) drivers.push(d.driver_code)
+  }
+  return { vehicles, drivers }
+}
+
+async function prepareL0DispatchTransit(detail: DispatchBatchDetail): Promise<void> {
+  const codes = collectPhasePackageCodes(detail, 0)
+  const { vehicles, drivers } = vehicleAndDriverCodes(detail, 0)
+  await markPackagesInTransit(codes, vehicles, drivers)
+}
+
+async function repackAndMarkL1Transit(detail: DispatchBatchDetail): Promise<void> {
+  const packages = await getMockPackages()
+  const goods = await getMockGoods()
+  const codes = collectPhasePackageCodes(detail, 1)
+
+  for (const code of codes) {
+    const pkg = packages.find((p) => p.package_code === code)
+    if (!pkg) continue
+    pkg.status = 'in_transit'
+    for (const item of pkg.goods_items) {
+      const g = goods.find((x) => x.goods_code === item.goods_code)
+      if (g) g.status = 'in_transit'
+    }
+  }
+
+  const { vehicles, drivers } = vehicleAndDriverCodes(detail, 1)
+  await markPackagesInTransit(codes, vehicles, drivers)
+}
+
+function collectPhasePackageCodes(
+  detail: DispatchBatchDetail,
+  levelPhase: 0 | 1,
+): string[] {
+  const codes = new Set<string>()
+  for (const d of detail.dispatches) {
+    if (d.level_phase !== levelPhase) continue
+    for (const task of d.tasks) {
+      if (task.is_return) continue
+      for (const pkg of task.package_codes) {
+        codes.add(pkg)
+      }
+    }
+  }
+  return [...codes]
+}
+
+function appendL1ToBatch(existing: DispatchBatchDetail): DispatchBatchDetail {
+  const l1Phase = buildL1Phase(existing.batch_code)
+  const flatL1 = normalizeBatchDetail({
+    ...existing,
+    dispatches: [l1Phase],
+  }).dispatches
+
+  return normalizeBatchDetail({
+    ...existing,
+    status: 'l0_l1_done',
+    l1_l2_dispatch_count: l1Phase.vehicle_tasks.length,
+    vehicle_count: new Set([
+      ...existing.dispatches.map((d) => d.vehicle_code),
+      ...flatL1.map((d) => d.vehicle_code),
+    ]).size,
+    dispatches: [...existing.dispatches, ...flatL1],
   })
 }
 
@@ -308,11 +505,52 @@ export async function createMockNodeDispatch(
 
   await delay(1500)
 
+  const demoMode = payload.demo_mode ?? false
+  const scheduleBatches = batchesData!.filter((b) => b.schedule_code === scheduleCode)
+  const pendingBatch = scheduleBatches.find((b) => b.status === 'l0_l1_done')
+
+  if (!demoMode && pendingBatch) {
+    const existing = batchDetailsData![pendingBatch.batch_code]
+    if (!existing) {
+      throw new Error('批次详情不存在')
+    }
+    const updated = appendL1ToBatch(existing)
+    await repackAndMarkL1Transit(updated)
+    batchDetailsData![updated.batch_code] = updated
+    await updateMockBatchSummary(updated)
+    return {
+      batch_code: updated.batch_code,
+      status: updated.status,
+      l0_l1_dispatch_count: updated.l0_l1_dispatch_count!,
+      l1_l2_dispatch_count: updated.l1_l2_dispatch_count!,
+      route_codes: updated.route_codes,
+    }
+  }
+
   const batchCode = nextCode(
     'DB',
     batchesData!.map((b) => b.batch_code),
   )
-  const batchDetail = buildMockDispatchDetail(batchCode, scheduleCode)
+  const batchDetail = buildMockDispatchDetail(batchCode, scheduleCode, {
+    demoMode,
+    includeL1: demoMode,
+  })
+
+  if (!demoMode) {
+    await prepareL0DispatchTransit(batchDetail)
+  } else {
+    const codes = cargoPackageCodesFromDetail(batchDetail)
+    const vehicles = batchDetail.dispatches.map((d) => d.vehicle_code)
+    const drivers = batchDetail.dispatches
+      .map((d) => d.driver_code)
+      .filter((c): c is string => Boolean(c))
+    await markPackagesInTransit(codes, vehicles, drivers)
+    for (const pkg of await getMockPackages()) {
+      if (codes.includes(pkg.package_code)) {
+        pkg.status = 'delivered'
+      }
+    }
+  }
 
   const summary: DispatchBatchSummary = {
     batch_code: batchDetail.batch_code,
@@ -345,4 +583,6 @@ export function resetMockStore(): void {
   driversData = null
   schedulesData = null
   scheduleDetailsData = null
+  batchesData = null
+  batchDetailsData = null
 }

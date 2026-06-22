@@ -86,6 +86,7 @@ export function useNodeDispatch(selectedCode: Ref<string>) {
       })
       await loadBatches(selectedCode.value)
       selectedBatchCode.value = result.batch_code
+      await loadBatchDetail(result.batch_code)
       ElMessage.success(
         `节点间调度已生成：L0→L1 ${result.l0_l1_dispatch_count} 辆，L1→L2 ${result.l1_l2_dispatch_count} 辆`,
       )
@@ -93,6 +94,13 @@ export function useNodeDispatch(selectedCode: Ref<string>) {
       ElMessage.error(err instanceof Error ? err.message : '生成节点间调度失败')
     } finally {
       dispatching.value = false
+    }
+  }
+
+  async function refreshDispatch(): Promise<void> {
+    await loadBatches(selectedCode.value)
+    if (selectedBatchCode.value) {
+      await loadBatchDetail(selectedBatchCode.value)
     }
   }
 
@@ -114,5 +122,6 @@ export function useNodeDispatch(selectedCode: Ref<string>) {
     dispatching,
     loadBatches,
     createDispatch,
+    refreshDispatch,
   }
 }
