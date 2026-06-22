@@ -25,3 +25,4 @@ class Vehicle(Base):
     # 关系
     last_arrived_node = relationship("Node", foreign_keys=[last_arrived_node_id], back_populates="vehicles_at_node")
     node = relationship("Node", foreign_keys=[node_id], back_populates="vehicles")
+    dispatches = relationship("NodeDispatch", back_populates="vehicle")

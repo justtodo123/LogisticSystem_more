@@ -9,6 +9,9 @@ from .package import Package
 from .vehicle import Vehicle
 from .driver import Driver
 from .global_schedule import GlobalSchedule
+from .dispatch_batch import DispatchBatch
+from .node_dispatch import NodeDispatch
 
 __all__ = ["User", "LogEvent", "Node", "StorageCenter", "SortingCenter",
-           "Order", "Goods", "Package", "Vehicle", "Driver", "GlobalSchedule"]
+           "Order", "Goods", "Package", "Vehicle", "Driver", "GlobalSchedule",
+           "DispatchBatch", "NodeDispatch"]

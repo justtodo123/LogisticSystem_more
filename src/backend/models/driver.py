@@ -20,3 +20,4 @@ class Driver(Base):
 
     # 关系
     node = relationship("Node", back_populates="drivers")
+    dispatches = relationship("NodeDispatch", back_populates="driver")

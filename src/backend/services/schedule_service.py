@@ -88,10 +88,15 @@ class ScheduleService:
                 db.add(pkg)
 
             # F021 完成后更新货物状态：pending_pack → packed
-            goods_codes = [gs["goods_code"] for gs in schedule_result["goods_schedules"]]
-            for gc in goods_codes:
+            # 从生成的包裹中提取货物代码，只更新真正被打包的货物（防御性编程）
+            packed_goods_codes = set()
+            for pkg in packages:
+                for item in pkg.goods_items:
+                    packed_goods_codes.add(item["goods_code"])
+            
+            for gc in packed_goods_codes:
                 goods = db.query(Goods).filter(Goods.goods_code == gc).first()
-                if goods:
+                if goods and goods.status == "pending_pack":  # 双重保险
                     goods.status = "packed"
 
             db.commit()

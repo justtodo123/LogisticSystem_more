@@ -83,8 +83,8 @@ class PackageService:
             from_node = db.query(Node).filter(Node.id == pkg.from_node_id).first()
             to_node = db.query(Node).filter(Node.id == pkg.to_node_id).first()
 
-            # 3. 解析goods_items
-            goods_items = json.loads(pkg.goods_items) if pkg.goods_items else []
+            # 3. 获取goods_items（SQLAlchemy JSON类型已自动反序列化）
+            goods_items = pkg.goods_items if pkg.goods_items else []
 
             # 4. 返回响应
             return {
@@ -125,7 +125,7 @@ class PackageService:
                 return {"code": CODE_PACKAGE_STATUS_NOT_ALLOWED, "message": "包裹状态不允许repack", "data": None}
 
             # 2. 校验 goods_codes 中的货物是否属于原包裹
-            original_goods_items = json.loads(pkg.goods_items) if pkg.goods_items else []
+            original_goods_items = pkg.goods_items if pkg.goods_items else []
             original_goods_codes = [item["goods_code"] for item in original_goods_items]
             
             for goods_code in repack.goods_codes:
