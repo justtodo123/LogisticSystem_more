@@ -101,7 +101,7 @@ def _calculate_emission(distance: float, energy_type: str) -> float:
         return 0.0  # 电动车：0
 
 
-def run_route_planning(db: Session, dispatch_id: int) -> Dict[str, Any]:
+def run_route_planning(db: Session, dispatch_id: int, custom_weights: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     F006 路径规划算法主函数
     
@@ -110,6 +110,8 @@ def run_route_planning(db: Session, dispatch_id: int) -> Dict[str, Any]:
     Args:
         db: 数据库会话
         dispatch_id: 节点调度明细ID
+        custom_weights: 自定义权重参数（可选，MVP暂未使用权重评分，预留扩展）
+            格式: {"route_planning": {"algorithm": "traditional", "max_iterations": 500}}
         
     Returns:
         route_data: 路径规划结果字典，包含：

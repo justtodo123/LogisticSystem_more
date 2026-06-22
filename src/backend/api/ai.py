@@ -10,7 +10,7 @@ AI 助手路由模块
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 from config.database import get_db
 from schemas.ai import AiParseRequest, AiParseResponse
@@ -32,121 +32,267 @@ async def parse_natural_language(
 ):
     """
     自然语言解析 → 调度执行（F014）
-    
-    流程：
-    1. 获取系统上下文（订单数、车辆数、节点数）
-    2. 调用 DeepSeek API 解析自然语言
-    3. 如果 DeepSeek 失败，降级使用默认参数
-    4. 如果 auto_execute=true，自动执行完整调度链路
-    5. 记录埋点（deepseek_call 事件）
-    6. 返回结果
+
+    三步模型：
+    1. 确定参数来源 → AI解析 / 手动权重 / 混合 / 默认
+    2. 确定执行目标 → schedule_codes 非空=重规划 / 空=新建
+    3. 执行调度链路 → F007 → F021 → F005 → F006
     """
     try:
-        # 1. 获取系统上下文
-        from services.order_service import OrderService
-        from services.vehicle_service import VehicleService
-        from services.node_service import NodeService
-        
-        # 获取待分配订单（status="pending"）
-        orders_result = await OrderService.get_orders(page=1, page_size=1000, status="pending", db=db)
-        pending_orders = orders_result["data"]["items"]
-        
-        # 获取可用车辆（status="idle"）
-        vehicles_result = await VehicleService.get_vehicles(page=1, page_size=1000, status="idle", db=db)
-        available_vehicles = vehicles_result["data"]["items"]
-        
-        # 获取所有节点
-        nodes_result = await NodeService.get_nodes(page=1, page_size=1000, db=db)
-        nodes = nodes_result["data"]["items"]
-        
-        system_context = {
-            "order_count": len(pending_orders),
-            "vehicle_count": len(available_vehicles),
-            "node_count": len(nodes),
-            "pending_orders": pending_orders
-        }
-        
-        # 2. 调用 DeepSeek API
-        deepseek_result = await DeepSeekService.parse_natural_language(
-            user_message=request.message,
-            system_context=system_context
+        has_message = bool(request.message and request.message.strip())
+        has_weights = bool(request.weights)
+
+        # ── 步骤1：确定算法参数 ──
+        algorithm_params, mode, degraded, degraded_reason = await _resolve_params(
+            db=db, user_id=current_user.id, role=current_user.role,
+            message=request.message if has_message else None,
+            weights=request.weights,
+            schedule_codes=request.schedule_codes,
         )
-        
-        algorithm_params = deepseek_result["algorithm_params"]
-        degraded = not deepseek_result["success"]
-        degraded_reason = deepseek_result.get("error")
-        
-        # 3. 记录埋点
-        LogService.log_event(
-            event_name="deepseek_call",
-            user_id=current_user.id,
-            role=current_user.role,
-            event_data=build_deepseek_call_event_data(
-                function_name="parse",
-                success=deepseek_result["success"],
-                degraded=degraded
-            ),
-            db=db
-        )
-        
-        # 4. 如果 auto_execute=true，执行完整调度链路
-        schedule_code = None
-        if request.auto_execute:
-            # 4.1 执行 F007 全局调度 + F021 打包
-            from services.schedule_service import ScheduleService
-            
-            schedule_result = await ScheduleService.create_global_schedule(
-                order_codes=None,  # None = 处理所有 pending 订单
-                algorithm="traditional",
-                db=db
-            )
-            if schedule_result["code"] != 0:
-                return schedule_result  # 返回错误响应
-            schedule_code = schedule_result["data"]["schedule_code"]
-            
-            # 4.2 执行 F021 打包服务（由 ScheduleService 内部调用）
-            # 已经在 create_global_schedule 中自动执行
-            
-            # 4.3 执行 F005 节点间调度（demo_mode=true，连续执行 L0→L1 和 L1→L2）
-            from services.dispatch_service import DispatchService
-            
-            batch_result = await DispatchService.create_node_dispatch(
-                schedule_code=schedule_code,
-                demo_mode=True,  # 关键：跳过模拟送达，连续执行两次
-                db=db
-            )
-            if batch_result["code"] != 0:
-                return batch_result  # 返回错误响应
-            batch_code = batch_result["data"]["batch_code"]
-            
-            # 4.4 执行 F006 路径规划
-            from services.route_service import RouteService
-            
-            route_result = await RouteService.create_route_planning(
-                batch_code=batch_code,
-                dispatch_codes=None,  # None = 处理批次下所有 dispatch
-                db=db
-            )
-            if route_result["code"] != 0:
-                return route_result  # 返回错误响应
-        
-        # 5. 返回结果
-        return {
-            "code": 0,
-            "message": "success",
-            "data": {
-                "schedule_code": schedule_code,
-                "algorithm_params": algorithm_params
-            },
-            "meta": {
-                "degraded": degraded,
-                "degraded_reason": degraded_reason
+
+        # ── 步骤2：查询参考方案（供 prompt 和响应复用） ──
+        reference_codes = None
+        if request.schedule_codes:
+            reference_codes = request.schedule_codes
+
+        # ── 步骤3：执行 ──
+        is_replan = bool(request.schedule_codes)
+        if is_replan:
+            # 重规划模式：逐条对指定方案执行版本化重规划
+            replan_results = []
+            first_code = None
+            for code in request.schedule_codes:
+                replan_reason = f"AI驱动重规划: {request.message}" if has_message else "手动权重重规划"
+                result = await _execute_replan(
+                    db=db, original_code=code,
+                    replan_reason=replan_reason,
+                    algorithm_params=algorithm_params,
+                )
+                if result["code"] != 0:
+                    return result
+                replan_results.append({
+                    "original_schedule_code": code,
+                    "new_schedule_code": result["data"]["schedule_code"],
+                })
+                if first_code is None:
+                    first_code = result["data"]["schedule_code"]
+
+            return {
+                "code": 0, "message": "success",
+                "data": {
+                    "schedule_code": first_code,
+                    "replan_results": replan_results,
+                    "algorithm_params": algorithm_params,
+                    "mode": mode,
+                    "is_replan": True,
+                    "reference_codes": reference_codes,
+                },
+                "meta": {"degraded": degraded, "degraded_reason": degraded_reason},
             }
-        }
-        
+        else:
+            # 新建模式：对全部 pending 订单创建新方案
+            schedule_code = await _execute_new_schedule(
+                db=db, algorithm_params=algorithm_params,
+            )
+            return {
+                "code": 0, "message": "success",
+                "data": {
+                    "schedule_code": schedule_code,
+                    "algorithm_params": algorithm_params,
+                    "mode": mode,
+                    "is_replan": False,
+                    "reference_codes": reference_codes,
+                },
+                "meta": {"degraded": degraded, "degraded_reason": degraded_reason},
+            }
+
     except Exception as e:
         logger.error(f"AI 解析失败：{e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ════════════════════════════════════════════════════════════
+# 辅助函数 — 三步模型
+# ════════════════════════════════════════════════════════════
+
+
+async def _resolve_params(
+    db: Session,
+    user_id: int,
+    role: str,
+    message: Optional[str],
+    weights: Optional[Dict[str, Any]],
+    schedule_codes: Optional[List[str]],
+) -> tuple:
+    """
+    步骤1：确定算法参数 + 模式
+    
+    Returns:
+        (algorithm_params, mode, degraded, degraded_reason)
+    """
+    degraded = False
+    degraded_reason = None
+
+    if message and not weights:
+        # ai 模式：纯 DeepSeek 解析
+        mode = "ai"
+        system_context = await _build_context(db, schedule_codes)
+        ds_result = await DeepSeekService.parse_natural_language(message, system_context)
+        algorithm_params = ds_result["algorithm_params"]
+        degraded = not ds_result["success"]
+        degraded_reason = ds_result.get("error")
+        _log_deepseek(user_id, role, ds_result["success"], degraded, db)
+
+    elif not message and weights:
+        # manual 模式：纯手动权重
+        mode = "manual"
+        algorithm_params = weights
+
+    elif message and weights:
+        # hybrid 模式：DeepSeek + 权重覆盖
+        mode = "hybrid"
+        system_context = await _build_context(db, schedule_codes)
+        ds_result = await DeepSeekService.parse_natural_language(message, system_context)
+        algorithm_params = _merge_weights(ds_result["algorithm_params"], weights)
+        degraded = not ds_result["success"]
+        degraded_reason = ds_result.get("error")
+        _log_deepseek(user_id, role, ds_result["success"], degraded, db)
+
+    else:
+        # default 模式：无 message 无 weights → 默认参数
+        mode = "default"
+        algorithm_params = DeepSeekService._load_default_params()
+
+    return algorithm_params, mode, degraded, degraded_reason
+
+
+async def _build_context(
+    db: Session,
+    schedule_codes: Optional[List[str]],
+) -> Dict[str, Any]:
+    """构建 DeepSeek 系统上下文（含历史方案指标）"""
+    from services.order_service import OrderService
+    from services.vehicle_service import VehicleService
+    from services.node_service import NodeService
+
+    orders_result = await OrderService.get_orders(page=1, page_size=1000, status="pending", db=db)
+    vehicles_result = await VehicleService.get_vehicles(page=1, page_size=1000, status="idle", db=db)
+    nodes_result = await NodeService.get_nodes(page=1, page_size=1000, db=db)
+
+    ctx = {
+        "order_count": len(orders_result["data"]["items"]),
+        "vehicle_count": len(vehicles_result["data"]["items"]),
+        "node_count": len(nodes_result["data"]["items"]),
+        "pending_orders": orders_result["data"]["items"],
+    }
+
+    if schedule_codes:
+        from models.global_schedule import GlobalSchedule
+        schedules = db.query(GlobalSchedule).filter(
+            GlobalSchedule.schedule_code.in_(schedule_codes)
+        ).all()
+        if schedules:
+            ctx["reference_schedules"] = [
+                {
+                    "schedule_code": s.schedule_code,
+                    "total_distance": float(s.total_distance),
+                    "total_time": float(s.total_time),
+                    "total_goods": s.total_goods,
+                    "score": float(s.score),
+                    "version": s.version,
+                    "is_replan": s.is_replan,
+                    "replan_reason": s.replan_reason,
+                }
+                for s in schedules
+            ]
+            # 重规划时首个方案作为参考重点
+            first = schedules[0]
+            ctx["target_schedule"] = {
+                "schedule_code": first.schedule_code,
+                "total_distance": float(first.total_distance),
+                "total_time": float(first.total_time),
+                "total_goods": first.total_goods,
+                "score": float(first.score),
+                "algorithm_type": first.algorithm_type,
+            }
+
+    return ctx
+
+
+def _merge_weights(ds_params: Dict[str, Any], weights: Dict[str, Any]) -> Dict[str, Any]:
+    """DeepSeek 参数 + 手动权重合并（weights 优先级更高）"""
+    merged = {**ds_params}
+    for section in weights:
+        if section in merged and isinstance(merged[section], dict) and isinstance(weights[section], dict):
+            merged[section] = {**merged[section], **weights[section]}
+        else:
+            merged[section] = weights[section]
+    return merged
+
+
+def _log_deepseek(user_id: int, role: str, success: bool, degraded: bool, db: Session):
+    """记录 DeepSeek 调用埋点"""
+    LogService.log_event(
+        event_name="deepseek_call",
+        user_id=user_id, role=role,
+        event_data=build_deepseek_call_event_data(
+            function_name="parse", success=success, degraded=degraded,
+        ),
+        db=db,
+    )
+
+
+async def _execute_new_schedule(db: Session, algorithm_params: Dict[str, Any]) -> str:
+    """步骤3-new：创建全新调度方案（全部 pending 订单）"""
+    from services.schedule_service import ScheduleService
+    from services.dispatch_service import DispatchService
+    from services.route_service import RouteService
+
+    # F007 + F021
+    result = await ScheduleService.create_global_schedule(
+        order_codes=None,
+        algorithm=algorithm_params.get("global_schedule", {}).get("algorithm", "traditional"),
+        db=db,
+        custom_weights=algorithm_params,
+    )
+    if result["code"] != 0:
+        raise RuntimeError(f"全局调度失败: {result['message']}")
+    schedule_code = result["data"]["schedule_code"]
+
+    # F005
+    batch_result = await DispatchService.create_node_dispatch(
+        schedule_code=schedule_code, demo_mode=True,
+        db=db, custom_weights=algorithm_params,
+    )
+    if batch_result["code"] != 0:
+        raise RuntimeError(f"节点调度失败: {batch_result['message']}")
+    batch_code = batch_result["data"]["batch_code"]
+
+    # F006
+    route_result = await RouteService.create_route_planning(
+        batch_code=batch_code, dispatch_codes=None,
+        db=db, custom_weights=algorithm_params,
+    )
+    if route_result["code"] != 0:
+        raise RuntimeError(f"路径规划失败: {route_result['message']}")
+
+    return schedule_code
+
+
+async def _execute_replan(
+    db: Session,
+    original_code: str,
+    replan_reason: str,
+    algorithm_params: Dict[str, Any],
+) -> Dict[str, Any]:
+    """步骤3-replan：对指定方案执行版本化重规划"""
+    from services.replan_service import ReplanService
+    return await ReplanService.redispatch(
+        db=db,
+        original_schedule_code=original_code,
+        replan_reason=replan_reason,
+        custom_weights=algorithm_params,
+    )
 
 
 @router.post("/explain")

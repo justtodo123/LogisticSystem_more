@@ -11,6 +11,7 @@ from services.auth_service import (
 from services.log_service import LogService, build_login_event_data
 from api.dependencies import get_current_user
 from models.user import User
+from models.log_event import LogEvent
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 security = HTTPBearer()

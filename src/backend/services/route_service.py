@@ -26,6 +26,7 @@ class RouteService:
         dispatch_codes: Optional[List[str]],
         db: Session,
         excluded_vehicles: Optional[List[str]] = None,
+        custom_weights: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         编排 F006 算法 → 写库（单事务）
@@ -41,6 +42,7 @@ class RouteService:
             dispatch_codes: 节点调度明细编码列表（可选）
             db: 数据库会话
             excluded_vehicles: 排除的车辆编码列表（可选，用于重规划场景，F006暂不使用）
+            custom_weights: 自定义权重参数（可选，MVP暂未使用权重评分，预留扩展）
             
         Returns:
             统一响应格式 dict
@@ -74,7 +76,7 @@ class RouteService:
             routes = []
             for dispatch in dispatches:
                 # 调用 F006 算法
-                route_data = run_route_planning(db, dispatch.id)
+                route_data = run_route_planning(db, dispatch.id, custom_weights=custom_weights)
                 
                 # 4. 写入 routes 表
                 route = Route(

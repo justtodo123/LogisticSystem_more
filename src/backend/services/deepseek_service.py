@@ -46,6 +46,21 @@ SYSTEM_PROMPT = """你是一个物流调度专家。根据用户需求和当前�
 }
 ```
 
+权重说明：
+- distance: 距离权重（越大越倾向缩短总距离）
+- time: 时间权重（越大越倾向缩短总时间）
+- package_count: 包裹数权重（越大越倾向减少包裹数/合并包裹）
+- 三个权重之和应为 1.0（如 0.5+0.3+0.2=1.0）
+
+如果提供了历史参考方案：
+- 分析各方案的评分优劣，找出表现最好的方案的权重特征
+- 如果用户说"参考方案X"，应优先对齐方案X的权重倾向
+- 如果方案X是重规划版本且评分更优，应朝其优化方向调整权重
+
+如果是重规划目标方案：
+- 分析当前方案的不足（距离/时间/包裹数哪项拖后腿）
+- 生成能针对性改善目标方案的优化参数
+
 如果用户需求不明确，使用默认参数（traditional算法，标准权重）。
 """
 
@@ -55,7 +70,10 @@ def build_user_prompt(user_message: str, system_context: Dict) -> str:
     
     Args:
         user_message: 用户自然语言输入
-        system_context: 系统上下文（order_count, vehicle_count, node_count, pending_orders）
+        system_context: 系统上下文，可包含：
+            - order_count, vehicle_count, node_count, pending_orders（基础上下文）
+            - reference_schedules: 参考方案列表 [{"schedule_code": "GS001", "total_distance": 120.5, ...}]
+            - target_schedule: 目标方案（重规划场景）{"schedule_code": "GS001", ...}
         
     Returns:
         完整的用户提示词
@@ -73,6 +91,35 @@ def build_user_prompt(user_message: str, system_context: Dict) -> str:
             for order in pending_orders[:10]
         ])
     
+    # 构建参考方案描述
+    reference_text = ""
+    reference_schedules = system_context.get("reference_schedules", [])
+    if reference_schedules:
+        lines = ["\n历史参考方案（请分析其表现并优化参数）："]
+        for s in reference_schedules:
+            replan_tag = f" [重规划·{s.get('replan_reason', '未知')}]" if s.get("is_replan") else ""
+            lines.append(
+                f"- {s['schedule_code']} v{s.get('version', 1)}{replan_tag}: "
+                f"总距离{s.get('total_distance', '?')}km, "
+                f"总时间{s.get('total_time', '?')}h, "
+                f"货物数{s.get('total_goods', '?')}件, "
+                f"评分{s.get('score', '?')}"
+            )
+        reference_text = "\n".join(lines)
+    
+    # 构建目标方案描述（重规划场景）
+    target_text = ""
+    target_schedule = system_context.get("target_schedule")
+    if target_schedule:
+        target_text = f"""
+重规划目标方案：
+- 编码: {target_schedule.get('schedule_code', '?')}
+- 当前指标: 总距离{target_schedule.get('total_distance', '?')}km, 总时间{target_schedule.get('total_time', '?')}h
+- 货物数: {target_schedule.get('total_goods', '?')}件, 评分: {target_schedule.get('score', '?')}
+- 原算法类型: {target_schedule.get('algorithm_type', 'traditional')}
+注意：新生成的参数将用于此方案的版本化重规划，请生成能改善目标方案的优化参数。
+"""
+    
     prompt = f"""当前系统状态：
 - 待分配订单：{order_count}个
 - 可用车辆：{vehicle_count}辆
@@ -80,7 +127,7 @@ def build_user_prompt(user_message: str, system_context: Dict) -> str:
 
 订单列表（前10个）：
 {orders_desc}
-
+{reference_text}{target_text}
 用户需求：{user_message}
 
 请生成算法参数JSON。

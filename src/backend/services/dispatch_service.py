@@ -36,6 +36,7 @@ class DispatchService:
         db: Session,
         excluded_vehicles: Optional[List[str]] = None,
         is_replan: bool = False,
+        custom_weights: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         编排 F005 算法 → 写库（单事务）
@@ -52,13 +53,14 @@ class DispatchService:
             db: 数据库会话
             excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
             is_replan: 是否为重规划模式（True=调度exception包裹，False=调度packed包裹）
+            custom_weights: 自定义权重参数（可选，优先级高于 algorithm_config.json）
         
         Returns:
             统一响应格式 dict
         """
         try:
             # 1. 调用 F005 算法（纯计算，不提交事务）
-            dispatch_result = run_node_dispatch(db, schedule_code, demo_mode, excluded_vehicles, is_replan=is_replan)
+            dispatch_result = run_node_dispatch(db, schedule_code, demo_mode, excluded_vehicles, is_replan=is_replan, custom_weights=custom_weights)
             
             # 2. 检查是否有调度明细创建
             dispatches = dispatch_result["dispatches"]

@@ -29,6 +29,7 @@ class ReplanService:
         original_schedule_code: str,
         replan_reason: str,
         event: Optional[ExceptionEvent] = None,
+        custom_weights: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         重调度（F007→F021→F005→F006）
@@ -47,6 +48,7 @@ class ReplanService:
             original_schedule_code: 原调度方案业务编号
             replan_reason: 重规划原因
             event: 异常事件对象（可选，用于提取排除参数）
+            custom_weights: 自定义权重参数（可选，用于AI驱动的重规划）
 
         Returns:
             统一响应格式 dict
@@ -97,6 +99,7 @@ class ReplanService:
                 db=db,
                 excluded_nodes=excluded_nodes if excluded_nodes else None,
                 is_replan=True,  # 重规划模式：只调度 exception 订单
+                custom_weights=custom_weights,  # AI驱动的自定义权重
             )
 
             # 检查调度是否成功
@@ -127,6 +130,7 @@ class ReplanService:
                 db=db,
                 excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
                 is_replan=True,  # 重规划模式：只调度 exception 包裹
+                custom_weights=custom_weights,  # AI驱动的自定义权重
             )
 
             # 提取批次编码（节点调度可能失败，不影响主结果）
@@ -154,6 +158,7 @@ class ReplanService:
         original_route_code: str,
         replan_reason: str,
         excluded_vehicles: Optional[List[str]] = None,
+        custom_weights: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         重路径规划（F006）
@@ -171,6 +176,7 @@ class ReplanService:
             original_route_code: 原路径规划业务编号
             replan_reason: 重规划原因
             excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
+            custom_weights: 自定义权重参数（可选，用于AI驱动的重规划）
         
         Returns:
             统一响应格式 dict
@@ -219,6 +225,7 @@ class ReplanService:
                 dispatch_codes=dispatch_codes,
                 db=db,
                 excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
+                custom_weights=custom_weights,  # AI驱动的自定义权重
             )
 
             # 检查路径规划是否成功

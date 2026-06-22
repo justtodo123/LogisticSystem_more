@@ -46,12 +46,13 @@ def async_client(test_db):
 @pytest.mark.asyncio
 async def test_ai_parse_with_mock(async_client, test_users):
     """
-    测试AI解析接口（Mock DeepSeek API）
+    测试AI解析接口（Mock DeepSeek API + 调度链路）
     
     流程：
     1. Mock DeepSeek API返回成功响应
-    2. 调用POST /api/ai/parse
-    3. 验证响应格式正确
+    2. Mock 调度链路避免空数据库执行失败
+    3. 调用POST /api/ai/parse
+    4. 验证响应格式正确
     """
     # Mock DeepSeek API响应
     mock_response = {
@@ -63,48 +64,44 @@ async def test_ai_parse_with_mock(async_client, test_users):
     }
     
     # 正确Mock httpx.AsyncClient的异步上下文管理器
-    # 注意：response.json() 是同步方法，不是异步方法
     mock_response_obj = Mock()
     mock_response_obj.status_code = 200
-    mock_response_obj.json = Mock(return_value=mock_response)  # json 是同步方法
-    mock_response_obj.raise_for_status = Mock()  # 同步方法
+    mock_response_obj.json = Mock(return_value=mock_response)
+    mock_response_obj.raise_for_status = Mock()
     
     mock_client = AsyncMock()
     mock_client.post = AsyncMock(return_value=mock_response_obj)
     
-    # Mock DEEPSPEEK_API_KEY 使其不为None，这样才会调用httpx.AsyncClient
-    with patch("services.deepseek_service.settings.DEEPSEEK_API_KEY", "fake-api-key"), \
-         patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
-        # 配置__aenter__返回mock_client
-        mock_client_class.return_value.__aenter__.return_value = mock_client
+    # Mock 调度链路（空测试数据库无法执行真实调度）
+    with patch("api.ai._execute_new_schedule", new_callable=AsyncMock) as mock_exec:
+        mock_exec.return_value = "GS20260622001"
         
-        # 调用API
-        client = async_client
-        # 先登录
-        login_resp = await client.post("/api/auth/login", json={
-            "username": "dispatcher",
-            "password": "123456"
-        })
-        assert login_resp.status_code == 200
-        token = login_resp.json()["data"]["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
-        
-        # 调用AI解析接口
-        ai_resp = await client.post(
-            "/api/ai/parse",
-            headers=headers,
-            json={
-                "message": "请为当前待分配订单生成调度方案",
-                "auto_execute": False  # 不自动执行，避免复杂依赖
-            }
-        )
-        
-        # 验证响应
-        assert ai_resp.status_code == 200
-        result = ai_resp.json()
-        assert result["code"] == 0
-        assert "algorithm_params" in result["data"]
-        assert result["meta"]["degraded"] == False
+        with patch("services.deepseek_service.settings.DEEPSEEK_API_KEY", "fake-api-key"), \
+             patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+            
+            client = async_client
+            login_resp = await client.post("/api/auth/login", json={
+                "username": "dispatcher",
+                "password": "123456"
+            })
+            assert login_resp.status_code == 200
+            token = login_resp.json()["data"]["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+            
+            ai_resp = await client.post(
+                "/api/ai/parse",
+                headers=headers,
+                json={
+                    "message": "请为当前待分配订单生成调度方案"
+                }
+            )
+            
+            assert ai_resp.status_code == 200
+            result = ai_resp.json()
+            assert result["code"] == 0
+            assert "algorithm_params" in result["data"]
+            assert result["meta"]["degraded"] == False
 
 
 @pytest.mark.asyncio
@@ -114,43 +111,41 @@ async def test_deepseek_degradation(async_client, test_users):
     
     流程：
     1. Mock DeepSeek API调用失败（连接错误）
-    2. 调用POST /api/ai/parse
-    3. 验证返回degraded=true
+    2. Mock 调度链路避免空数据库执行失败
+    3. 调用POST /api/ai/parse
+    4. 验证返回degraded=true
     """
-    # 正确Mock httpx.AsyncClient的异步上下文管理器
     mock_client = AsyncMock()
     mock_client.post.side_effect = Exception("Connection failed")
     
-    with patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
-        # 配置__aenter__返回mock_client
-        mock_client_class.return_value.__aenter__.return_value = mock_client
+    # Mock 调度链路（空测试数据库无法执行真实调度）
+    with patch("api.ai._execute_new_schedule", new_callable=AsyncMock) as mock_exec:
+        mock_exec.return_value = "GS20260622001"
         
-        # 调用API
-        client = async_client
-        # 先登录
-        login_resp = await client.post("/api/auth/login", json={
-            "username": "dispatcher",
-            "password": "123456"
-        })
-        token = login_resp.json()["data"]["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
-        
-        # 调用AI解析接口
-        ai_resp = await client.post(
-            "/api/ai/parse",
-            headers=headers,
-            json={
-                "message": "测试降级场景",
-                "auto_execute": False
-            }
-        )
-        
-        # 验证降级
-        result = ai_resp.json()
-        assert result["code"] == 0  # 降级不应该报错
-        assert result["meta"]["degraded"] == True
-        assert result["meta"]["degraded_reason"] is not None
-        assert "algorithm_params" in result["data"]  # 应该使用默认参数
+        with patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+            
+            client = async_client
+            login_resp = await client.post("/api/auth/login", json={
+                "username": "dispatcher",
+                "password": "123456"
+            })
+            token = login_resp.json()["data"]["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+            
+            ai_resp = await client.post(
+                "/api/ai/parse",
+                headers=headers,
+                json={
+                    "message": "测试降级场景"
+                }
+            )
+            
+            result = ai_resp.json()
+            assert result["code"] == 0
+            assert result["meta"]["degraded"] == True
+            assert result["meta"]["degraded_reason"] is not None
+            assert "algorithm_params" in result["data"]
 
 
 @pytest.mark.asyncio
@@ -240,36 +235,34 @@ async def test_ai_parse_response_format(async_client, test_users):
     mock_client = AsyncMock()
     mock_client.post = AsyncMock(return_value=mock_response_obj)
     
-    # Mock DEEPSPEEK_API_KEY 使其不为None
-    with patch("services.deepseek_service.settings.DEEPSEEK_API_KEY", "fake-api-key"), \
-         patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
-        # 配置__aenter__返回mock_client
-        mock_client_class.return_value.__aenter__.return_value = mock_client
+    # Mock 调度链路（空测试数据库无法执行真实调度）
+    with patch("api.ai._execute_new_schedule", new_callable=AsyncMock) as mock_exec:
+        mock_exec.return_value = "GS20260622001"
         
-        client = async_client
-        # 先登录
-        login_resp = await client.post("/api/auth/login", json={
-            "username": "dispatcher",
-            "password": "123456"
-        })
-        token = login_resp.json()["data"]["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
-        
-        # 调用AI解析接口
-        ai_resp = await client.post(
-            "/api/ai/parse",
-            headers=headers,
-            json={
-                "message": "测试响应格式",
-                "auto_execute": False
-            }
-        )
-        
-        # 验证统一响应格式
-        result = ai_resp.json()
-        assert "code" in result
-        assert "message" in result
-        assert "data" in result
-        assert "meta" in result
-        assert "degraded" in result["meta"]
-        assert "degraded_reason" in result["meta"]
+        with patch("services.deepseek_service.settings.DEEPSEEK_API_KEY", "fake-api-key"), \
+             patch("services.deepseek_service.httpx.AsyncClient") as mock_client_class:
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+            
+            client = async_client
+            login_resp = await client.post("/api/auth/login", json={
+                "username": "dispatcher",
+                "password": "123456"
+            })
+            token = login_resp.json()["data"]["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+            
+            ai_resp = await client.post(
+                "/api/ai/parse",
+                headers=headers,
+                json={
+                    "message": "测试响应格式"
+                }
+            )
+            
+            result = ai_resp.json()
+            assert "code" in result
+            assert "message" in result
+            assert "data" in result
+            assert "meta" in result
+            assert "degraded" in result["meta"]
+            assert "degraded_reason" in result["meta"]
