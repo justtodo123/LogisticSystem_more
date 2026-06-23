@@ -415,26 +415,29 @@ class TestReplanService:
         db_session.add(original_route)
         db_session.commit()
 
-        # Mock RouteService.replan_single_route（避免复杂的算法调用）
+        # Mock RouteService.create_route_planning（避免复杂的算法调用）
+        # 注意：RouteService 在 replan_service.py 中通过局部导入，需 mock 原始模块
         with patch(
-            "services.route_service.RouteService.replan_single_route",
+            "services.route_service.RouteService.create_route_planning",
             new_callable=AsyncMock,
         ) as mock_rp:
             mock_rp.return_value = success_response(data={
-                "route_code": "RT_REPLAN_001",
-                "dispatch_code": "ND_REROUTE_001",
-                "vehicle_code": "V_TEST_001",
-                "route_segments": [],
-                "total_distance": 55.0,
-                "total_time": 2.2,
-                "total_emission": 11.0,
-                "algorithm_type": "traditional",
-                "version": 2,
-                "is_replan": True,
-                "replan_reason": "道路拥堵触发重路径规划",
-                "original_route_code": "RT_ORIG_001",
+                "batch_code": "DB_REROUTE_001",
+                "status": "completed",
+                "routes": [{
+                    "route_code": "RT_REPLAN_001",
+                    "dispatch_code": "ND_REROUTE_001",
+                    "vehicle_code": "V_TEST_001",
+                    "route_segments": [],
+                    "total_distance": 55.0,
+                    "total_time": 2.2,
+                    "total_emission": 11.0,
+                    "algorithm_type": "traditional",
+                }]
             })
 
+            # 需要在 mock 返回前预先创建 route 对象到数据库
+            # mock 调用后不会真正创建 Route 记录，所以模拟版本链更新
             result = await ReplanService.reroute(
                 db=db_session,
                 original_route_code="RT_ORIG_001",
@@ -728,24 +731,24 @@ class TestExceptionTriggerReplan:
         db_session.add(event)
         db_session.commit()
 
-        # Mock RouteService.replan_single_route（避免复杂的算法调用）
+        # Mock RouteService（路径指向原始模块）
         with patch(
-            "services.route_service.RouteService.replan_single_route",
+            "services.route_service.RouteService.create_route_planning",
             new_callable=AsyncMock,
         ) as mock_rp:
             mock_rp.return_value = success_response(data={
-                "route_code": "RT_REPLAN_T_001",
-                "dispatch_code": "ND_REROUTE_T_001",
-                "vehicle_code": "V_REROUTE_T_001",
-                "route_segments": [],
-                "total_distance": 55.0,
-                "total_time": 2.2,
-                "total_emission": 11.0,
-                "algorithm_type": "traditional",
-                "version": 2,
-                "is_replan": True,
-                "replan_reason": "道路拥堵触发重路径规划",
-                "original_route_code": "RT_REROUTE_T_001",
+                "batch_code": "DB_REROUTE_T_001",
+                "status": "completed",
+                "routes": [{
+                    "route_code": "RT_REPLAN_T_001",
+                    "dispatch_code": "ND_REROUTE_T_001",
+                    "vehicle_code": "V_REROUTE_T_001",
+                    "route_segments": [],
+                    "total_distance": 55.0,
+                    "total_time": 2.2,
+                    "total_emission": 11.0,
+                    "algorithm_type": "traditional",
+                }]
             })
 
             result = await ExceptionService.trigger_replan(
