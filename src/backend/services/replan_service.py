@@ -225,23 +225,23 @@ class ReplanService:
         custom_weights: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        重路径规划（F006  only）
-
-        流程（修复后）：
+        重路径规划（F006）
+        
+        流程：
         1. 读取原路径规划（Route）
-        2. 通过 dispatch_id 找到关联的 NodeDispatch
-        3. 直接调用 RouteService.replan_single_route()（不经过 batch/dispatch/GS 查询链路）
-        4. 返回新路径规划编码
-
-        **关键保证**：不创建新的 global_schedule / dispatch_batch / node_dispatches。
-
+        2. 通过 dispatch_id 找到关联的 dispatch_batch
+        3. 获取同批次下所有 dispatch_codes
+        4. 调用现有 RouteService.create_route_planning()（不修改它）
+        5. 更新新路径规划的版本链字段
+        6. 返回新路径规划编码
+        
         Args:
             db: 数据库会话
             original_route_code: 原路径规划业务编号
             replan_reason: 重规划原因
             excluded_vehicles: 排除的车辆编码列表（可选，用于重规划规避异常车辆）
             custom_weights: 自定义权重参数（可选，用于AI驱动的重规划）
-
+        
         Returns:
             统一响应格式 dict
         """
@@ -257,7 +257,7 @@ class ReplanService:
                     message=f"原路径规划不存在: {original_route_code}",
                 )
 
-            # 2. 通过 dispatch_id 找到关联的调度明细
+            # 2. 通过 dispatch_id 找到关联的 dispatch_batch
             dispatch = db.query(NodeDispatch).filter(
                 NodeDispatch.id == original_route.dispatch_id
             ).first()
@@ -268,28 +268,57 @@ class ReplanService:
                     message=f"原路径规划关联的调度明细不存在",
                 )
 
-            # 3. 调用轻量重规划方法（不经过 batch/dispatch/GS 查询链路）
+            batch = db.query(DispatchBatch).filter(
+                DispatchBatch.id == dispatch.dispatch_batch_id
+            ).first()
+
+            if not batch:
+                return error_response(
+                    code=40001,
+                    message=f"原路径规划关联的调度批次不存在",
+                )
+
+            # 3. 获取同批次下所有 dispatch_codes（仅重规划当前 dispatch 的路线）
+            dispatch_codes = [dispatch.dispatch_code]
+
+            # 4. 调用现有路径规划服务（不修改它）
             from services.route_service import RouteService
 
-            route_result = await RouteService.replan_single_route(
-                dispatch_id=dispatch.id,
-                original_route_code=original_route_code,
-                replan_reason=replan_reason,
+            route_result = await RouteService.create_route_planning(
+                batch_code=batch.batch_code,
+                dispatch_codes=dispatch_codes,
                 db=db,
                 excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
-                custom_weights=custom_weights,
+                custom_weights=custom_weights,  # AI驱动的自定义权重
             )
 
+            # 检查路径规划是否成功
             if route_result.get("code") != 0:
                 return route_result
 
-            data = route_result["data"]
-            new_route_code = data.get("route_code")
+            new_routes_data = route_result["data"].get("routes", [])
+            new_route_codes = [r["route_code"] for r in new_routes_data]
+
+            # 5. 更新新路径规划的版本链字段
+            for rc in new_route_codes:
+                new_route = db.query(Route).filter(
+                    Route.route_code == rc
+                ).first()
+                if new_route:
+                    new_route.version = original_route.version + 1
+                    new_route.parent_id = original_route.id
+                    new_route.replan_reason = replan_reason
+                    new_route.is_replan = True
+
+            db.commit()
+
+            new_route_code = new_route_codes[0] if new_route_codes else None
 
             return success_response(data={
-                "route_codes": [new_route_code] if new_route_code else [],
+                "batch_code": batch.batch_code,
+                "route_codes": new_route_codes,
                 "new_route_code": new_route_code,
-                "version": data.get("version", original_route.version + 1),
+                "version": original_route.version + 1,
                 "is_replan": True,
                 "replan_reason": replan_reason,
                 "original_route_code": original_route_code,

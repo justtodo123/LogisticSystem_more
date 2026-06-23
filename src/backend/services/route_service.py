@@ -15,9 +15,6 @@ from models.dispatch_batch import DispatchBatch
 from models.node_dispatch import NodeDispatch
 from models.vehicle import Vehicle
 from utils.response import success_response, error_response
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class RouteService:
@@ -120,93 +117,6 @@ class RouteService:
         except Exception as e:
             # 不在这里调用 db.rollback()，由调用者处理
             return error_response(code=40001, message=f"路径规划失败：{str(e)}")
-    
-    @staticmethod
-    async def replan_single_route(
-        dispatch_id: int,
-        original_route_code: str,
-        replan_reason: str,
-        db: Session,
-        excluded_vehicles: Optional[List[str]] = None,
-        custom_weights: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """
-        重规划单条路线（reroute 专用轻量方法）
-
-        与 create_route_planning() 的关键区别：
-        - 不查询 DispatchBatch、不遍历 dispatches 列表
-        - 直接针对单个 dispatch_id 调用 F006 算法
-        - 在创建 Route 时直接设置版本链字段（version / parent_id / is_replan / replan_reason）
-        - 不涉及任何 global_schedule / dispatch_batch / node_dispatches 的创建或修改
-
-        Args:
-            dispatch_id: 已有 NodeDispatch 的内部 id
-            original_route_code: 原路线编码（用于版本链父级查找）
-            replan_reason: 重规划原因
-            db: 数据库会话
-            excluded_vehicles: 排除的车辆编码列表（可选，F006 MVP 暂不使用）
-            custom_weights: 自定义权重参数（可选）
-
-        Returns:
-            统一响应格式 dict
-        """
-        try:
-            # 1. 查询原路线（获取版本号、父级 id）
-            original_route = db.query(Route).filter(
-                Route.route_code == original_route_code
-            ).first()
-
-            if not original_route:
-                return error_response(
-                    code=40401,
-                    message=f"原路线不存在: {original_route_code}",
-                )
-
-            # 2. 直接调用 F006 算法（不经过 batch/dispatch 查询链路）
-            route_data = run_route_planning(db, dispatch_id, custom_weights=custom_weights)
-
-            # 3. 创建新 Route 记录，一步到位设置版本链字段
-            route = Route(
-                route_code=route_data["route_code"],
-                dispatch_id=route_data["dispatch_id"],
-                vehicle_id=route_data["vehicle_id"],
-                route_segments=route_data["route_segments"],
-                total_distance=route_data["total_distance"],
-                total_time=route_data["total_time"],
-                total_emission=route_data["total_emission"],
-                algorithm_type=route_data["algorithm_type"],
-                version=original_route.version + 1,
-                parent_id=original_route.id,
-                replan_reason=replan_reason,
-                is_replan=True,
-            )
-            db.add(route)
-            db.commit()
-            logger.info(
-                "reroute created route=%s dispatch_id=%s parent=%s version=%s reason=%s",
-                route_data["route_code"], dispatch_id,
-                original_route_code, route.version, replan_reason,
-            )
-
-            # 4. 构建响应
-            return success_response(data={
-                "route_code": route_data["route_code"],
-                "dispatch_code": route_data["dispatch_code"],
-                "vehicle_code": route_data["vehicle_code"],
-                "route_segments": route_data["route_segments"],
-                "total_distance": route_data["total_distance"],
-                "total_time": route_data["total_time"],
-                "total_emission": route_data["total_emission"],
-                "algorithm_type": route_data["algorithm_type"],
-                "version": route.version,
-                "is_replan": True,
-                "replan_reason": replan_reason,
-                "original_route_code": original_route_code,
-            })
-
-        except Exception as e:
-            logger.error("replan_single_route failed: %s", str(e))
-            return error_response(code=40001, message=f"重规划路线失败: {str(e)}")
     
     @staticmethod
     async def get_routes(
@@ -386,11 +296,6 @@ class RouteService:
         
         routes = query.all()
         
-        # 3.5 只保留最高版本：按 dispatch_id 分组，每组只保留 version 最大的
-        if routes:
-            max_version = max(r.version for r in routes)
-            routes = [r for r in routes if r.version == max_version]
-        
         # 4. 构建响应（每个 Route 包含 coordinates 数组）
         route_list = []
         for route in routes:
@@ -415,10 +320,7 @@ class RouteService:
                 "route_code": route.route_code,
                 "batch_code": batch_code_value,
                 "coordinates": coordinates,
-                "total_distance": float(route.total_distance),
-                "version": route.version,
-                "is_replan": route.is_replan,
-                "replan_reason": route.replan_reason,
+                "total_distance": float(route.total_distance)
             })
         
         # 5. 返回成功响应

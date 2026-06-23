@@ -73,43 +73,31 @@ def _calculate_storage_time(
     return 2.0 + distance_l0_l1 / 100.0
 
 
+# 内存计数器
+_schedule_seq: int = 0
+_schedule_date: str = ""
+
+
 def _generate_schedule_code(db: Session) -> str:
-    """
-    生成调度方案编号，格式：GS + YYYYMMDD + 3位序号
-
-    每次调用都查询数据库当前最大编号 + 检查当前事务中未提交对象，
-    与其他编号生成器（route/batch/dispatch）策略一致，无全局内存计数器。
-    """
-    from models.global_schedule import GlobalSchedule
-
+    """生成调度方案编号，格式：GS + YYYYMMDD + 3位序号"""
+    global _schedule_seq, _schedule_date
     today_str = datetime.now().strftime("%Y%m%d")
-    prefix = f"GS{today_str}"
-
-    # 查询数据库中已存在的最大 schedule_code
-    max_record = (
-        db.query(GlobalSchedule.schedule_code)
-        .filter(GlobalSchedule.schedule_code.like(f"{prefix}%"))
-        .order_by(GlobalSchedule.schedule_code.desc())
-        .first()
-    )
-
-    # 同时检查当前事务中已添加但未提交的 GlobalSchedule 对象
-    max_seq_in_transaction = 0
-    for obj in db.new:
-        if isinstance(obj, GlobalSchedule) and obj.schedule_code and obj.schedule_code.startswith(prefix):
-            try:
-                seq = int(obj.schedule_code[-3:])
-                max_seq_in_transaction = max(max_seq_in_transaction, seq)
-            except ValueError:
-                pass
-
-    if max_record and max_record[0]:
-        db_max_seq = int(max_record[0][-3:])
-        max_seq = max(db_max_seq + 1, max_seq_in_transaction + 1)
-    else:
-        max_seq = max(1, max_seq_in_transaction + 1)
-
-    return f"{prefix}{max_seq:03d}"
+    if _schedule_date != today_str:
+        _schedule_date = today_str
+        from models.global_schedule import GlobalSchedule
+        prefix = f"GS{today_str}"
+        max_record = (
+            db.query(GlobalSchedule.schedule_code)
+            .filter(GlobalSchedule.schedule_code.like(f"{prefix}%"))
+            .order_by(GlobalSchedule.schedule_code.desc())
+            .first()
+        )
+        if max_record and max_record[0]:
+            _schedule_seq = int(max_record[0][-3:])
+        else:
+            _schedule_seq = 0
+    _schedule_seq += 1
+    return f"GS{today_str}{_schedule_seq:03d}"
 
 
 def global_schedule(
