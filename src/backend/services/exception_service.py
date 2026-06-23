@@ -457,8 +457,13 @@ class ExceptionService:
                 )
 
             # 更新 exception_event.replan_batch_code
+            # - redispatch: 写入新的 schedule_code 或 batch_code
+            # - reroute: 写入新的 route_code（不写入旧 batch_code）
             if isinstance(result, dict) and result.get("data"):
-                new_code = result["data"].get("schedule_code") or result["data"].get("batch_code")
+                if action == "reroute":
+                    new_code = result["data"].get("new_route_code")
+                else:
+                    new_code = result["data"].get("schedule_code") or result["data"].get("batch_code")
                 if new_code:
                     event.replan_batch_code = new_code
                     db.commit()
