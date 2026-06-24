@@ -16,6 +16,7 @@ from api.routes import router as routes_router
 from api.simulation import router as simulation_router
 from api.exception_events import router as exceptions_router
 from api.ai import router as ai_router
+from api.arrival_confirm import router as arrival_confirm_router
 from utils.response import error_response
 
 
@@ -72,6 +73,9 @@ app.include_router(exceptions_router)
 
 # 注册 AI 助手路由
 app.include_router(ai_router)
+
+# 注册到货确认路由
+app.include_router(arrival_confirm_router)
 
 
 # ─── 全局异常处理器 ───────────────────────────────────────────────
