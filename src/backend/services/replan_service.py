@@ -115,15 +115,23 @@ class ReplanService:
                 algorithm=algorithm,
                 db=db,
                 excluded_nodes=excluded_nodes if excluded_nodes else None,
-                is_replan=has_event,  # 仅异常驱动时查询 exception 订单；AI 重规划时 order_codes 已指定
+                is_replan=True,  # redispatch 始终是重规划，需跳过 active 方案检查
                 custom_weights=custom_weights,  # AI驱动的自定义权重
             )
 
-            # 检查调度是否成功
+            # 检查预览调度是否成功
             if schedule_result.get("code") != 0:
                 return schedule_result
 
             new_schedule_code = schedule_result["data"]["schedule_code"]
+
+            # 5.5 确认方案（draft → active，执行 F021 打包）
+            confirm_result = await ScheduleService.confirm_schedule(
+                schedule_code=new_schedule_code,
+                db=db,
+            )
+            if confirm_result.get("code") != 0:
+                return confirm_result
 
             # 7. 更新新版调度方案的版本链字段
             new_schedule = db.query(GlobalSchedule).filter(
