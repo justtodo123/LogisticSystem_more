@@ -16,6 +16,13 @@ from models.vehicle import Vehicle
 from models.driver import Driver
 from models.order import Order
 from models.goods import Goods
+from models.package import Package
+from models.global_schedule import GlobalSchedule
+from models.dispatch_batch import DispatchBatch
+from models.node_dispatch import NodeDispatch
+from models.route import Route
+from models.exception_event import ExceptionEvent
+from models.log_event import LogEvent
 
 
 async def init_demo_data(db: Session):
@@ -49,7 +56,14 @@ async def init_demo_data(db: Session):
 
 async def _cleanup_old_data(db: Session):
     """清理旧数据（按依赖逆序删除）"""
-    # 删除顺序：先删子表，再删父表
+    # 删除顺序：先删调度结果子表，再删业务表，最后删基础数据
+    db.query(ExceptionEvent).delete()
+    db.query(LogEvent).delete()
+    db.query(Route).delete()
+    db.query(NodeDispatch).delete()
+    db.query(DispatchBatch).delete()
+    db.query(GlobalSchedule).delete()
+    db.query(Package).delete()
     db.query(Goods).delete()
     db.query(Order).delete()
     db.query(Vehicle).delete()
