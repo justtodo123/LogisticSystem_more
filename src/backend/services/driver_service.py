@@ -8,6 +8,7 @@ from schemas.driver import DriverCreate, DriverUpdate, DriverResponse
 from core.error_codes import (CODE_SUCCESS, CODE_INTERNAL_ERROR, CODE_CONFLICT,
                              CODE_NODE_NOT_FOUND, CODE_DRIVER_NOT_FOUND,
                              CODE_DRIVER_STATUS_NOT_ALLOWED)
+from services.state_machine import transition_driver_status
 
 
 class DriverService:
@@ -165,7 +166,10 @@ class DriverService:
                     return {"code": CODE_NODE_NOT_FOUND, "message": "节点不存在", "data": None}
                 driver.node_id = node.id
             if driver_update.status is not None:
-                driver.status = driver_update.status
+                try:
+                    transition_driver_status(db, driver, driver_update.status)
+                except ValueError as e:
+                    return {"code": CODE_DRIVER_STATUS_NOT_ALLOWED, "message": str(e), "data": None}
 
             driver.updated_at = datetime.now()
             db.commit()

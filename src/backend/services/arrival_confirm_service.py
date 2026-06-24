@@ -16,6 +16,12 @@ from models.order import Order
 from models.global_schedule import GlobalSchedule
 from models.exception_event import ExceptionEvent
 from schemas.arrival_confirm import ArrivalConfirmRequest, BatchArrivalConfirmRequest
+from services.state_machine import (
+    transition_package_status,
+    transition_goods_status,
+    transition_order_status,
+    check_and_update_order_status,
+)
 
 
 class ArrivalConfirmService:
@@ -66,7 +72,7 @@ class ArrivalConfirmService:
         # 2. 正常路径
         if is_normal:
             # 2.1 更新包裹状态
-            package.status = "delivered"
+            transition_package_status(db, package, "delivered")
 
             # 2.2 处理货物：检查是否到目的地
             triggered_repacking = False
@@ -95,10 +101,10 @@ class ArrivalConfirmService:
                 # 检查是否到目的地
                 if goods.node_id == order.destination_node_id:
                     # 已到目的地
-                    goods.status = "delivered"
+                    transition_goods_status(db, goods, "delivered")
                 else:
                     # 未到目的地：pending_pack，触发 F021 重新打包
-                    goods.status = "pending_pack"
+                    transition_goods_status(db, goods, "pending_pack")
 
                     # 2.3 触发 F021 重新打包
                     result = ArrivalConfirmService._trigger_repacking(db, schedule_code)
@@ -109,9 +115,7 @@ class ArrivalConfirmService:
             # 2.4 检查订单是否完成（所有货物都已 delivered）
             for item in goods_items:
                 order_code = item["order_code"]
-                order = db.query(Order).filter(Order.order_code == order_code).first()
-                if order:
-                    ArrivalConfirmService._check_order_completion(db, order)
+                check_and_update_order_status(db, order_code)
 
             return {
                 "package_code": package_code,
@@ -124,7 +128,7 @@ class ArrivalConfirmService:
         # 3. 异常路径
         else:
             # 3.1 更新包裹状态
-            package.status = "exception"
+            transition_package_status(db, package, "exception")
 
             goods_items = package.goods_items
             if isinstance(goods_items, str):
@@ -142,7 +146,7 @@ class ArrivalConfirmService:
                 if not goods:
                     continue
 
-                goods.status = "exception"
+                transition_goods_status(db, goods, "exception")
 
                 # 3.3 写入 exception_events（审计用，不触发 replan）
                 import time
@@ -165,7 +169,7 @@ class ArrivalConfirmService:
                 # 3.4 更新订单状态
                 order = db.query(Order).filter(Order.order_code == order_code).first()
                 if order and order.status != "exception":
-                    order.status = "exception"
+                    transition_order_status(db, order, "exception")
                     order_status = "exception"
 
                 # 3.5 级联下游包裹（若存在）
@@ -311,7 +315,7 @@ class ArrivalConfirmService:
                 current_index = path.index(from_node_code)
                 if current_index + 1 >= len(path):
                     # 已到目的地，无需重新打包
-                    goods.status = "delivered"
+                    transition_goods_status(db, goods, "delivered")
                     continue
                 to_node_code = path[current_index + 1]
             except ValueError:
@@ -384,7 +388,7 @@ class ArrivalConfirmService:
 
             # 3.5 更新货物状态
             for item in group:
-                item["goods"].status = "packed"
+                transition_goods_status(db, item["goods"], "packed")
 
         return new_package_codes[0] if new_package_codes else None
 
@@ -401,7 +405,7 @@ class ArrivalConfirmService:
         all_delivered = all(g.status == "delivered" for g in all_goods)
 
         if all_delivered and order.status == "delivering":
-            order.status = "completed"
+            transition_order_status(db, order, "completed")
 
     @staticmethod
     def _cascade_exception_packages(
@@ -494,7 +498,7 @@ class ArrivalConfirmService:
                         
                         # 6.5 若当前包裹的 to_node 在异常包裹的 to_node 之后，则标记为异常
                         if pkg_to_index > to_index:
-                            pkg.status = "exception"
+                            transition_package_status(db, pkg, "exception")
                             
                             # 6.6 更新货物状态
                             for pkg_item in pkg_goods_items:
@@ -502,7 +506,7 @@ class ArrivalConfirmService:
                                     Goods.goods_code == pkg_item["goods_code"]
                                 ).first()
                                 if goods:
-                                    goods.status = "exception"
+                                    transition_goods_status(db, goods, "exception")
                             
                             # 6.7 记录日志
                             import logging

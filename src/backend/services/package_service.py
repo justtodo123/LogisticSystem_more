@@ -11,6 +11,7 @@ from schemas.package import PackageRepack, PackageResponse
 from core.error_codes import (CODE_SUCCESS, CODE_INTERNAL_ERROR,
                              CODE_PACKAGE_NOT_FOUND, CODE_PACKAGE_STATUS_NOT_ALLOWED,
                              CODE_GOODS_NOT_FOUND, CODE_NODE_NOT_FOUND)
+from services.state_machine import transition_package_status
 
 
 class PackageService:
@@ -178,7 +179,7 @@ class PackageService:
             db.flush()
 
             # 5. 原包裹状态改为 exception
-            pkg.status = "exception"
+            transition_package_status(db, pkg, "exception")
             pkg.updated_at = datetime.now()
             
             db.commit()

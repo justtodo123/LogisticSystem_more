@@ -20,7 +20,13 @@ from models.driver import Driver
 from models.node_dispatch import NodeDispatch
 from models.dispatch_batch import DispatchBatch
 from utils.response import success_response, error_response
-from services.state_machine import update_batch_status
+from services.state_machine import (
+    update_batch_status,
+    transition_package_status,
+    transition_vehicle_status,
+    transition_driver_status,
+    check_and_update_order_status,
+)
 
 
 class SimulationService:
@@ -88,7 +94,7 @@ class SimulationService:
                     )
                 
                 # 3. 更新包裹状态：in_transit → delivered
-                package.status = "delivered"
+                transition_package_status(db, package, "delivered")
                 delivered_package_codes.append(package.package_code)
                 
                 # 4. 更新货物状态（根据是否送达目的地）
@@ -151,7 +157,7 @@ class SimulationService:
                     # 所有包裹都已送达，车辆变为 idle
                     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
                     if vehicle and vehicle.status == "delivering":
-                        vehicle.status = "idle"
+                        transition_vehicle_status(db, vehicle, "idle")
                         
                         # 6. 检查司机状态（车辆 idle 后 driver → idle）
                         # 查询该车辆的司机（从 node_dispatches 中找）
@@ -161,7 +167,7 @@ class SimulationService:
                         if dispatch and dispatch.driver_id:
                             driver = db.query(Driver).filter(Driver.id == dispatch.driver_id).first()
                             if driver and driver.status == "busy":
-                                driver.status = "idle"
+                                transition_driver_status(db, driver, "idle")
             
             # 7. 检查订单状态（所有货物送达后 order → completed）
             delivered_order_codes = []
@@ -177,7 +183,7 @@ class SimulationService:
                 all_delivered = all(g.status == "delivered" for g in all_goods)
                 
                 if all_delivered and order.status == "delivering":
-                    order.status = "completed"
+                    check_and_update_order_status(db, order.order_code)
                     delivered_order_codes.append(order.order_code)
             
             # 8. 更新批次状态（第一次送达完成后）

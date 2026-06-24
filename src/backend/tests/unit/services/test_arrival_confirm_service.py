@@ -276,19 +276,24 @@ class TestConfirmArrivalBatch:
     async def test_confirm_arrival_batch_success(self, db_session, test_nodes, test_orders, test_goods):
         """
         测试批量确认成功：
-        1. 使用 fixture 货物 G007（属于 O004），更新为 in_transit
-        2. 创建多个测试包裹（状态为 in_transit）
+        1. 使用 fixture 货物 G007/G008（属于 O004）和 G005（属于 O003），更新为 in_transit
+        2. 创建 3 个测试包裹（状态为 in_transit），各自使用不同 goods
         3. 调用 confirm_arrival_batch
         4. 验证所有包裹状态变为 delivered
         """
         # 1. 准备测试数据
-        # 1.1 更新 fixture 货物
-        goods = test_goods["G007"]  # G007 -> O004
-        goods.status = "in_transit"
-        goods.node_id = test_nodes["SC001"].id
+        # 1.1 更新多个 fixture 货物为 in_transit
+        goods_list = {
+            "G005": test_goods["G005"],   # O003
+            "G007": test_goods["G007"],   # O004
+            "G008": test_goods["G008"],   # O004
+        }
+        for code, g in goods_list.items():
+            g.status = "in_transit"
+            g.node_id = test_nodes["SC001"].id
         db_session.commit()
 
-        # 1.2 创建 GlobalSchedule
+        # 1.2 创建 GlobalSchedule（含所有三条 goods_schedules）
         global_schedule = GlobalSchedule(
             schedule_code="GS_TEST_BATCH_OK",
             order_codes=json.dumps([]),
@@ -300,15 +305,22 @@ class TestConfirmArrivalBatch:
             version=1,
             is_replan=False,
             goods_schedules=json.dumps([
-                {"goods_code": "G007", "order_code": "O004", "path": ["SC001", "SO001", "SO010"]}
+                {"goods_code": "G005", "order_code": "O003", "path": ["SC002", "SO001", "SO010"]},
+                {"goods_code": "G007", "order_code": "O004", "path": ["SC001", "SO001", "SO010"]},
+                {"goods_code": "G008", "order_code": "O004", "path": ["SC001", "SO001", "SO010"]},
             ])
         )
         db_session.add(global_schedule)
         db_session.commit()
 
-        # 1.3 创建多个测试包裹
+        # 1.3 创建 3 个测试包裹（各自使用不同 goods）
         packages = []
-        for i in range(3):
+        package_goods_map = [
+            {"goods_code": "G005", "order_code": "O003"},
+            {"goods_code": "G007", "order_code": "O004"},
+            {"goods_code": "G008", "order_code": "O004"},
+        ]
+        for i, goods_item in enumerate(package_goods_map):
             package = Package(
                 package_code=f"PKG_TEST_BATCH_{i}",
                 from_node_id=test_nodes["SC001"].id,
@@ -317,7 +329,7 @@ class TestConfirmArrivalBatch:
                 volume=0.5,
                 status="in_transit",
                 schedule_id=global_schedule.id,
-                goods_items=[{"goods_code": "G007", "order_code": "O004"}]
+                goods_items=[goods_item]
             )
             db_session.add(package)
             packages.append(package)
