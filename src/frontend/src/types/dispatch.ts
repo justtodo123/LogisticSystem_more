@@ -40,6 +40,8 @@ export interface DispatchBatchSummary {
 export interface DispatchTask {
   from_node_code: string
   to_node_code: string
+  from_node_name?: string
+  to_node_name?: string
   package_codes: string[]
   is_return?: boolean
 }
