@@ -103,31 +103,52 @@ class ArrivalConfirmService:
                     # 已到目的地
                     transition_goods_status(db, goods, "delivered")
                 else:
-                    # 未到目的地：pending_pack，触发 F021 重新打包
+                    # 未到目的地：pending_pack
                     transition_goods_status(db, goods, "pending_pack")
 
-                    # 2.3 触发 F021 重新打包
-                    result = ArrivalConfirmService._trigger_repacking(db, schedule_code)
-                    if result:
-                        triggered_repacking = True
-                        new_package_code = result
+            # 2.3 触发 F021 重新打包（必须在所有货物设为 pending_pack 之后调用，
+            #     才能按 order_code 正确分组所有同订单货物到同一个 L1→L2 包裹中）
+            #     注意：Session 配置了 autoflush=False，必须先 flush 确保 pending_pack
+            #     状态写入数据库，否则 _trigger_repacking 的 db.query 查询不到
+            db.flush()
+            result = ArrivalConfirmService._trigger_repacking(db, schedule_code)
+            if result:
+                triggered_repacking = True
+                new_package_code = result
 
             # 2.4 检查订单是否完成（所有货物都已 delivered）
             for item in goods_items:
                 order_code = item["order_code"]
                 check_and_update_order_status(db, order_code)
 
+            # 2.5 根据数据库中实际货物状态确定响应字段
+            #     priority: delivered 仅当所有货物均为 delivered；
+            #     否则（有 packed / pending_pack）返回 packed
+            goods_statuses = set()
+            for item in goods_items:
+                g = db.query(Goods).filter(Goods.goods_code == item["goods_code"]).first()
+                if g:
+                    goods_statuses.add(g.status)
+            if "delivered" in goods_statuses and not (goods_statuses & {"packed", "pending_pack"}):
+                goods_status = "delivered"
+            else:
+                goods_status = "packed"
+
             return {
                 "package_code": package_code,
                 "status": "delivered",
-                "goods_status": "pending_pack" if not triggered_repacking else "delivered",
+                "goods_status": goods_status,
                 "triggered_repacking": triggered_repacking,
                 "new_package_code": new_package_code
             }
 
         # 3. 异常路径
         else:
-            # 3.1 更新包裹状态
+            import logging
+            import time
+            import random
+
+            # 3.1 更新包裹状态（delivered → exception 允许）
             transition_package_status(db, package, "exception")
 
             goods_items = package.goods_items
@@ -136,6 +157,7 @@ class ArrivalConfirmService:
                 goods_items = json.loads(goods_items)
 
             order_status = None
+            processed_orders = set()  # 去重：同一订单只更新一次
 
             # 3.2 处理货物
             for item in goods_items:
@@ -146,34 +168,43 @@ class ArrivalConfirmService:
                 if not goods:
                     continue
 
-                transition_goods_status(db, goods, "exception")
+                # 3.2a 货物转为 exception
+                #      - in_transit / packed / pending_pack: 正常转换
+                #      - delivered: force=True 强制转换（异常场景：货物已到终点但包裹异常）
+                needs_force = (goods.status == "delivered")
+                if goods.status == "delivered":
+                    logging.warning(
+                        f"货物 {goods_code} 已送达，force=True 回退为 exception（包裹 {package_code} 异常）"
+                    )
+                transition_goods_status(db, goods, "exception", force=needs_force)
 
-                # 3.3 写入 exception_events（审计用，不触发 replan）
-                import time
-                import random
-                event_code = f"EX{int(time.time() * 1000)}{random.randint(100, 999)}"
-                # 包裹异常的推荐操作：reroute（重新路径规划）
-                recommended_action = "reroute"
-                exception_event = ExceptionEvent(
-                    event_code=event_code,
-                    exception_type="package",
-                    exception_subtype=exception_subtype,
-                    target_type="package",
-                    target_code=package_code,
-                    recommended_action=recommended_action,
-                    related_schedule_code=schedule_code,
-                    description=remark if remark else ""
-                )
-                db.add(exception_event)
+                # 3.3 更新订单状态（去重）
+                if order_code not in processed_orders:
+                    processed_orders.add(order_code)
+                    order = db.query(Order).filter(Order.order_code == order_code).first()
+                    if order and order.status != "exception":
+                        # delivering → exception: 正常转换
+                        # completed → exception: force=True（异常场景：订单已完成但后补标记异常）
+                        order_needs_force = (order.status == "completed")
+                        transition_order_status(db, order, "exception", force=order_needs_force)
+                        order_status = "exception"
 
-                # 3.4 更新订单状态
-                order = db.query(Order).filter(Order.order_code == order_code).first()
-                if order and order.status != "exception":
-                    transition_order_status(db, order, "exception")
-                    order_status = "exception"
-
-                # 3.5 级联下游包裹（若存在）
+                # 3.4 级联下游包裹（若存在）
                 ArrivalConfirmService._cascade_exception_packages(db, schedule_code, package_code)
+
+            # 3.5 统一写入异常事件（包裹级审计）
+            event_code = f"EX{int(time.time() * 1000)}{random.randint(100, 999)}"
+            exception_event = ExceptionEvent(
+                event_code=event_code,
+                exception_type="package",
+                exception_subtype=exception_subtype,
+                target_type="package",
+                target_code=package_code,
+                recommended_action="reroute",
+                related_schedule_code=schedule_code,
+                description=remark if remark else ""
+            )
+            db.add(exception_event)
 
             return {
                 "package_code": package_code,
@@ -257,9 +288,9 @@ class ArrivalConfirmService:
     @staticmethod
     def _trigger_repacking(db: Session, schedule_code: str) -> Optional[str]:
         """
-        触发 F021 重新打包
-        
-        当 confirm-arrival（正常）后，若货物未到目的地，触发 F021 重新打包：
+        触发 F021 重新打包（P1-3：确认到货后动态生成 L1→L2 包裹）
+
+        当 confirm-arrival（正常）后，若货物未到目的地，生成新的 L1→L2 包裹：
         1. 遍历 global_schedule.goods_schedules
         2. 对每条 goods_schedule：
            - 若 goods.status == pending_pack：
@@ -268,13 +299,15 @@ class ArrivalConfirmService:
                生成新的下游包裹（packed）
            - 更新 goods.status = packed（F021 完成后）
         3. 若 goods.status == exception：跳过，不参与重新打包
-        
+        4. **P1-3 关键**：L1→L2 包裹不在初始 F021 预生成，而是此处动态创建。
+           同一订单多个货物到达时，优先复用已创建的 L1→L2 包裹。
+
         Args:
             db: 数据库会话
             schedule_code: 调度方案编号
-            
+
         Returns:
-            新包裹编号（若生成了新包裹），否则 None
+            新包裹编号（若生成了或复用了包裹），否则 None
         """
         # 1. 查询 global_schedule
         schedule = db.query(GlobalSchedule).filter(
@@ -288,10 +321,12 @@ class ArrivalConfirmService:
             import json
             goods_schedules = json.loads(goods_schedules)
 
-        # 2. 按 from_node → to_node 聚合（L1→L2 阶段，同一订单的货物必须打成一个包裹）
+        # 2. 按 order_code 聚合（P1-3: L1→L2 按订单分组，同订单货物打成一个包裹）
         from collections import defaultdict
-        repacking_groups = defaultdict(list)  # key: (from_node_code, to_node_code), value: [gs, ...]
-        
+        import json as _json
+
+        repacking_groups = defaultdict(list)  # key: order_code
+
         for gs in goods_schedules:
             goods_code = gs["goods_code"]
             goods = db.query(Goods).filter(Goods.goods_code == goods_code).first()
@@ -300,17 +335,17 @@ class ArrivalConfirmService:
 
             # 2.1 确定 from_node 和 to_node
             from_node_id = goods.node_id
-            
+
             # 从 path 中取下一个节点
             path = gs["path"]  # path 中是 node_code 字符串列表
-            
+
             # 查询 from_node_code
             from models.node import Node
             from_node = db.query(Node).filter(Node.id == from_node_id).first()
             if not from_node:
                 continue
             from_node_code = from_node.node_code
-            
+
             try:
                 current_index = path.index(from_node_code)
                 if current_index + 1 >= len(path):
@@ -322,43 +357,96 @@ class ArrivalConfirmService:
                 # from_node 不在 path 中，跳过
                 continue
 
-            # 按 (from_node_code, to_node_code) 聚合
-            key = (from_node_code, to_node_code)
-            repacking_groups[key].append({
+            # 按 order_code 聚合
+            order_code = gs["order_code"]
+            repacking_groups[order_code].append({
                 "gs": gs,
                 "goods": goods,
                 "from_node_id": from_node_id,
+                "from_node_code": from_node_code,
+                "to_node_code": to_node_code,
                 "to_node_id": None  # 稍后查询
             })
 
-        # 3. 生成新包裹（按聚合组）
-        new_package_codes = []
-        
-        for (from_node_code, to_node_code), group in repacking_groups.items():
-            # 3.1 查询 to_node_id
+        # 3. 生成或复用 L1→L2 包裹（按订单分组）
+        created_or_reused_codes = []
+
+        for order_code, group in repacking_groups.items():
+            if not group:
+                continue
+
+            # 3.1 取第一个元素的 from/to node（同订单所有货物路径相同）
+            first = group[0]
+            from_node_code = first["from_node_code"]
+            to_node_code = first["to_node_code"]
+
+            # 查询 to_node_id
             to_node = db.query(Node).filter(Node.node_code == to_node_code).first()
             if not to_node:
                 continue
             to_node_id = to_node.id
-            
-            # 3.2 查询 from_node_id
+
+            # 查询 from_node_id
             from_node = db.query(Node).filter(Node.node_code == from_node_code).first()
             if not from_node:
                 continue
             from_node_id = from_node.id
 
-            # 3.3 检查是否已存在相同 from_node → to_node 的包裹
-            existing_package = db.query(Package).filter(
+            # 3.2 查找是否已有 L1→L2 包裹（同一批次 confirm 中先到达的货物已创建）
+            #     P1-3: 包裹由 _trigger_repacking 动态创建，状态为 packed；
+            #     查找需通过 goods_items 中的 order_code 精确定位
+            candidates = db.query(Package).filter(
                 Package.schedule_id == schedule.id,
                 Package.from_node_id == from_node_id,
                 Package.to_node_id == to_node_id,
-                Package.status.in_(["pending_pack", "packed"])
-            ).first()
+                Package.status == "packed"
+            ).all()
 
-            if not existing_package:
-                # 3.4 生成新包裹
+            matched_package = None
+            for candidate in candidates:
+                items = candidate.goods_items
+                if isinstance(items, str):
+                    items = _json.loads(items)
+                if items:
+                    for item in items:
+                        if item.get("order_code") == order_code:
+                            matched_package = candidate
+                            break
+                if matched_package:
+                    break
+
+            if matched_package:
+                # 3.3a 复用已有包裹：合并新货物到 goods_items
+                existing_items = matched_package.goods_items
+                if isinstance(existing_items, str):
+                    existing_items = _json.loads(existing_items)
+                existing_goods_codes = {item["goods_code"] for item in existing_items}
+
+                new_goods_added = False
+                for item in group:
+                    gs = item["gs"]
+                    if gs["goods_code"] not in existing_goods_codes:
+                        existing_items.append({
+                            "goods_code": gs["goods_code"],
+                            "order_code": gs["order_code"]
+                        })
+                        new_goods_added = True
+
+                if new_goods_added:
+                    matched_package.goods_items = existing_items
+                    # 更新重量和体积
+                    total_weight = sum(float(item["goods"].weight) for item in group)
+                    total_volume = sum(float(item["goods"].volume) for item in group)
+                    matched_package.weight = round(
+                        float(matched_package.weight) + total_weight, 3)
+                    matched_package.volume = round(
+                        float(matched_package.volume) + total_volume, 3)
+
+                created_or_reused_codes.append(matched_package.package_code)
+            else:
+                # 3.3b 生成新包裹（首次为该订单创建 L1→L2 包裹）
                 import time
-                new_code = f"PKG{int(time.time() * 1000)}{len(new_package_codes)}"
+                new_code = f"PKG{int(time.time() * 1000)}{len(created_or_reused_codes)}"
 
                 # 计算重量和体积
                 total_weight = sum(float(item["goods"].weight) for item in group)
@@ -377,20 +465,25 @@ class ArrivalConfirmService:
                     package_code=new_code,
                     weight=total_weight,
                     volume=total_volume,
-                    status="packed",  # 关键：新包裹状态为 packed
+                    status="packed",
                     from_node_id=from_node_id,
                     to_node_id=to_node_id,
-                    schedule_id=schedule.id,  # 关键：设置 schedule_id
+                    schedule_id=schedule.id,
                     goods_items=goods_items
                 )
                 db.add(new_package)
-                new_package_codes.append(new_code)
+                created_or_reused_codes.append(new_code)
 
-            # 3.5 更新货物状态
+            # 3.4 更新货物状态
             for item in group:
-                transition_goods_status(db, item["goods"], "packed")
+                if item["goods"].status == "pending_pack":
+                    transition_goods_status(db, item["goods"], "packed")
 
-        return new_package_codes[0] if new_package_codes else None
+        # 3.5 确保所有更改持久化（autoflush=False 环境必须显式 flush）
+        db.flush()
+
+        # 返回值：优先返回新创建的包裹 code，其次复用已存在的
+        return created_or_reused_codes[0] if created_or_reused_codes else None
 
     @staticmethod
     def _check_order_completion(db: Session, order: Order) -> None:

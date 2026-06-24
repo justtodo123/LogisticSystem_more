@@ -2,6 +2,7 @@
 服务单元测试：state_machine（状态机服务）
 
 测试目标：
+- 全实体状态转换合法/非法参数化测试（策略1）
 - update_batch_status() 的状态转换合法性校验
 - update_orders_after_f007() 订单状态更新
 - update_goods_after_f021() 货物状态更新
@@ -17,6 +18,14 @@ from models.base import Base
 from models.dispatch_batch import DispatchBatch
 from services.state_machine import (
     update_batch_status,
+    _validate,
+    ORDER_TRANSITIONS,
+    GOODS_TRANSITIONS,
+    PACKAGE_TRANSITIONS,
+    BATCH_TRANSITIONS,
+    SCHEDULE_TRANSITIONS,
+    VEHICLE_TRANSITIONS,
+    DRIVER_TRANSITIONS,
 )
 
 
@@ -312,3 +321,148 @@ class TestResetGoodsForReplan:
         goods = _create_test_goods(self.db, code="G002", status="delivered", order_id=self.order.id, node=self.node)
         reset_goods_for_replan(self.db, ["O001"])
         assert goods.status == "pending_pack"
+
+
+# ══════════════════════════════════════════════════════════════════
+# 策略1：全实体状态转换参数化测试
+# ══════════════════════════════════════════════════════════════════
+
+# 所有合法转换（current_status, target_status, entity_name）
+ALL_VALID_TRANSITIONS = [
+    # ── Order ──
+    ("pending", "delivering", "订单"),
+    ("pending", "exception", "订单"),
+    ("delivering", "completed", "订单"),
+    ("delivering", "exception", "订单"),
+    ("exception", "delivering", "订单"),
+    # ── Goods ──
+    ("pending_pack", "packed", "货物"),
+    ("pending_pack", "exception", "货物"),
+    ("packed", "in_transit", "货物"),
+    ("packed", "exception", "货物"),
+    ("in_transit", "pending_pack", "货物"),
+    ("in_transit", "delivered", "货物"),
+    ("in_transit", "exception", "货物"),
+    ("exception", "pending_pack", "货物"),
+    ("exception", "packed", "货物"),
+    ("exception", "in_transit", "货物"),
+    # ── Package ──
+    ("pending_pack", "packed", "包裹"),
+    ("pending_pack", "exception", "包裹"),
+    ("packed", "in_transit", "包裹"),
+    ("packed", "exception", "包裹"),
+    ("in_transit", "delivered", "包裹"),
+    ("in_transit", "exception", "包裹"),
+    ("delivered", "exception", "包裹"),   # Bug1 修复后
+    ("exception", "pending_pack", "包裹"),
+    # ── Batch ──
+    ("pending", "l0_l1_done", "批次"),
+    ("pending", "completed", "批次"),
+    ("pending", "failed", "批次"),
+    ("l0_l1_done", "completed", "批次"),
+    ("l0_l1_done", "failed", "批次"),
+    # ── Schedule ──
+    ("draft", "active", "全局调度方案"),
+    # ── Vehicle ──
+    ("idle", "delivering", "车辆"),
+    ("idle", "maintenance", "车辆"),
+    ("idle", "disabled", "车辆"),
+    ("delivering", "idle", "车辆"),
+    ("delivering", "disabled", "车辆"),
+    ("maintenance", "idle", "车辆"),
+    # ── Driver ──
+    ("idle", "busy", "司机"),
+    ("busy", "idle", "司机"),
+]
+
+# 关键非法转换（应触发 ValueError）
+ALL_INVALID_TRANSITIONS = [
+    # ── Order ──
+    ("completed", "delivering", "订单"),
+    ("completed", "exception", "订单"),
+    ("delivering", "pending", "订单"),
+    # ── Goods ──
+    ("delivered", "in_transit", "货物"),
+    ("delivered", "pending_pack", "货物"),
+    ("packed", "delivered", "货物"),       # 必须经 in_transit
+    # ── Package ──
+    ("delivered", "in_transit", "包裹"),   # 不可逆
+    ("delivered", "packed", "包裹"),        # 不可逆
+    ("packed", "delivered", "包裹"),        # 必须经 in_transit
+    ("completed", "delivering", "批次"),    # 该实体无 completed
+    # ── Batch ──
+    ("completed", "pending", "批次"),
+    ("failed", "pending", "批次"),
+    ("failed", "l0_l1_done", "批次"),
+    # ── Schedule ──
+    ("active", "draft", "全局调度方案"),
+    # ── Vehicle ──
+    ("disabled", "idle", "车辆"),
+    ("disabled", "delivering", "车辆"),
+    # ── Driver ──
+    ("busy", "delivering", "司机"),
+]
+
+# 状态名 → TRANSITIONS 字典映射
+ENTITY_LOOKUP = {
+    "订单":     ORDER_TRANSITIONS,
+    "货物":     GOODS_TRANSITIONS,
+    "包裹":     PACKAGE_TRANSITIONS,
+    "批次":     BATCH_TRANSITIONS,
+    "全局调度方案": SCHEDULE_TRANSITIONS,
+    "车辆":     VEHICLE_TRANSITIONS,
+    "司机":     DRIVER_TRANSITIONS,
+}
+
+
+class TestAllValidTransitions:
+    """参数化测试：所有合法状态转换（不抛异常）"""
+
+    @pytest.mark.parametrize("current,target,entity", ALL_VALID_TRANSITIONS)
+    def test_valid_transition_does_not_raise(self, current, target, entity):
+        """每条合法转换应被 _validate 接受"""
+        transitions = ENTITY_LOOKUP[entity]
+        try:
+            _validate(transitions, current, target, entity)
+        except ValueError as e:
+            pytest.fail(f"合法转换 {current}→{target} ({entity}) 意外失败: {e}")
+
+    @pytest.mark.parametrize("current,target,entity", ALL_VALID_TRANSITIONS)
+    def test_idempotent_same_state(self, current, target, entity):
+        """同状态幂等：current == target 时 _validate 应直接返回"""
+        # 选一个合法目标做幂等测试（用 current 自身）
+        transitions = ENTITY_LOOKUP[entity]
+        _validate(transitions, current, current, entity)  # 不应抛异常
+
+
+class TestAllInvalidTransitions:
+    """参数化测试：关键非法状态转换（应抛 ValueError）"""
+
+    @pytest.mark.parametrize("current,target,entity", ALL_INVALID_TRANSITIONS)
+    def test_invalid_transition_raises(self, current, target, entity):
+        """每条非法转换应触发 ValueError"""
+        transitions = ENTITY_LOOKUP[entity]
+        with pytest.raises(ValueError, match=f"非法{entity}状态转换"):
+            _validate(transitions, current, target, entity)
+
+
+class TestTransitionMapCompleteness:
+    """验证 TRANSITIONS 字典的内部一致性"""
+
+    def test_all_entities_have_transitions(self):
+        """每个实体都有对应的转换映射"""
+        for entity, transitions in ENTITY_LOOKUP.items():
+            assert isinstance(transitions, dict), f"{entity} 转换映射不是 dict"
+            assert len(transitions) > 0, f"{entity} 转换映射为空"
+
+    def test_no_self_loop_needed_in_allowed_list(self):
+        """同状态转换由 _validate 幂等处理，不需要显式列出 current→current"""
+        for entity, transitions in ENTITY_LOOKUP.items():
+            for current, allowed in transitions.items():
+                assert current not in allowed, \
+                    f"{entity}.{current} 的允许列表中不应包含自身（幂等由 _validate 处理）"
+
+    def test_package_delivered_can_go_to_exception(self):
+        """Bug1 回归：delivered → exception 必须在 PACKAGE_TRANSITIONS 中"""
+        assert "exception" in PACKAGE_TRANSITIONS["delivered"], \
+            "BUG回归: PACKAGE_TRANSITIONS[delivered] 缺少 'exception' 目标"

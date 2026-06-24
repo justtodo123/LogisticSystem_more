@@ -69,12 +69,11 @@ class TestPackagingNormal:
                 assert "order_code" in item
         
         # ── 验证包裹数量 ──
-        # 应该生成 L0→L1 和 L1→L2 的包裹
-        # G001: SC001→SO001 (L0→L1), SO001→SO010 (L1→L2)
-        # G002: SC001→SO001 (L0→L1), SO001→SO011 (L1→L2)
-        # G003: SC002→SO002 (L0→L1), SO002→SO012 (L1→L2)
-        # 所以总共应该有多于3个包裹（因为L0→L1和L1→L2是分开的）
-        assert len(result) >= 3
+        # P1-3: F021 初始仅生成 L0→L1 包裹，L1→L2 由 confirm-arrival repacking 动态创建
+        # G001+G002: SC001→SO001 (合并为1个 L0→L1 包裹)
+        # G003: SC002→SO002 (1个 L0→L1 包裹)
+        # 总共 2 个包裹
+        assert len(result) == 2
 
     @pytest.mark.unit
     def test_packaging_l0_l1_merge(self, db_session, test_nodes, test_orders, test_goods):
@@ -122,74 +121,7 @@ class TestPackagingNormal:
         
         assert found_merged, "G001 和 G002 应该从 SC001 到 SO001，被打在同一个 L0→L1 包裹中"
 
-    @pytest.mark.unit
-    def test_packaging_l1_l2_by_order(self, db_session, test_nodes, test_orders, test_goods):
-        """
-        测试 L1→L2 按同订单合并：
-        - 同一订单的货物必须打成一个包裹
-        """
-        # 给 O001 添加第二个货物，使 O001 有两个货物
-        from models.goods import Goods
-        goods2 = Goods(
-            goods_code="G001_B",
-            goods_name="测试货物A2",
-            goods_type="普通",
-            weight=3.0,
-            volume=0.1,
-            node_id=test_nodes["SC001"].id,
-            order_id=test_orders["O001"].id,
-            status="pending_pack",
-        )
-        db_session.add(goods2)
-        db_session.commit()
-        db_session.refresh(test_orders["O001"])
-        
-        # 构造 goods_schedules 输入（G001 和 G001_B 都属于 O001）
-        goods_schedules = [
-            {
-                "goods_code": "G001",
-                "order_code": "O001",
-                "path": ["SC001", "SO001", "SO010"],
-            },
-            {
-                "goods_code": "G001_B",
-                "order_code": "O001",
-                "path": ["SC001", "SO001", "SO010"],
-            },
-            {
-                "goods_code": "G002",
-                "order_code": "O002",
-                "path": ["SC001", "SO001", "SO011"],
-            },
-        ]
-        
-        # 执行 F021
-        result = packaging(
-            schedule_result={"goods_schedules": goods_schedules},
-            schedule_id=1,
-            db=db_session,
-        )
-        
-        # 查找 L1→L2 的包裹（from_node 是 sorting_center，level=1）
-        from models.node import Node
-        l1_l2_packages = []
-        for pkg in result:
-            from_node = db_session.query(Node).filter(Node.id == pkg.from_node_id).first()
-            if from_node and from_node.node_type == "sorting_center":
-                from models.sorting_center import SortingCenter
-                sc = db_session.query(SortingCenter).filter(SortingCenter.node_id == from_node.id).first()
-                if sc and sc.level == 1:
-                    l1_l2_packages.append(pkg)
-        
-        # O001 的两个货物应该被打在同一个 L1→L2 包裹中
-        found_merged = False
-        for pkg in l1_l2_packages:
-            goods_codes = [item["goods_code"] for item in pkg.goods_items]
-            if "G001" in goods_codes and "G001_B" in goods_codes:
-                found_merged = True
-                break
-        
-        assert found_merged, "同一订单 O001 的货物应该被打在同一个 L1→L2 包裹中"
+
 
 
 class TestPackagingEdgeCases:

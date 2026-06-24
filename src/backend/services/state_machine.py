@@ -61,7 +61,7 @@ PACKAGE_TRANSITIONS = {
     "pending_pack": ["packed", "exception"],
     "packed":       ["in_transit", "exception"],
     "in_transit":   ["delivered", "exception"],
-    "delivered":    [],
+    "delivered":    ["exception"],     # confirm-arrival 异常路径
     "exception":    ["pending_pack"],  # 重规划重置
 }
 
@@ -534,7 +534,8 @@ def check_and_update_order_status(db: Session, order_code: str) -> None:
     # 检查是否所有货物都已delivered
     all_delivered = all(g.status == 'delivered' for g in goods_list)
     
-    if all_delivered:
+    # 异常订单不走 completed（ORDER_TRANSITIONS["exception"] = ["delivering"]）
+    if all_delivered and order.status != "exception":
         transition_order_status(db, order, 'completed')
 
 

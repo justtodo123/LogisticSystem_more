@@ -98,7 +98,10 @@ class TestConfirmArrival:
         # 3. 验证结果
         assert result["package_code"] == "PKG_TEST_001"
         assert result["status"] == "delivered"
-        assert "goods_status" in result
+        # Bug3 回归：goods 在 SC001（非目的地 SO010）→ 触发 repacking → goods_status = "packed"
+        assert result["goods_status"] == "packed", \
+            f"Bug3 回归: repacking 场景应返回 'packed'，实际返回 '{result['goods_status']}'"
+        assert result["triggered_repacking"] is True
 
         # 4. 显式 flush 确保状态持久化，再 refresh 验证
         db_session.flush()
@@ -199,6 +202,239 @@ class TestConfirmArrival:
         assert exception_event is not None
         assert exception_event.exception_type == "package"
         assert exception_event.exception_subtype == "damaged"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_confirm_arrival_normal_at_destination(self, db_session, test_nodes, test_orders, test_goods):
+        """
+        测试正常到货确认（货物已到最终目的地，不触发 repacking）—— Bug3 分支覆盖
+
+        场景：货物 G001 当前在 SO010（恰好是 O001 目的地），
+              confirm-arrival 正常确认 → goods.status = delivered
+        验证：goods_status 响应字段为 "delivered"（非颠倒的 "pending_pack"）
+        """
+        # 1. 准备：货物 G001 已到达目的地 SO010（O001 的 destination_node）
+        goods = test_goods["G001"]
+        goods.status = "in_transit"
+        goods.node_id = test_nodes["SO010"].id  # SO010 是 O001 的目的地
+
+        # 1.2 创建 GlobalSchedule
+        global_schedule = GlobalSchedule(
+            schedule_code="GS_TEST_DEST",
+            order_codes=json.dumps([]),
+            total_distance=0.0,
+            total_time=0.0,
+            total_goods=0,
+            score=0.0,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+            goods_schedules=json.dumps([
+                {"goods_code": "G001", "order_code": "O001",
+                 "path": ["SC001", "SO001", "SO010"]}
+            ]),
+        )
+        db_session.add(global_schedule)
+        db_session.commit()
+
+        # 1.3 创建包裹（L1→L2，到达 SO010）
+        package = Package(
+            package_code="PKG_TEST_DEST_001",
+            from_node_id=test_nodes["SO001"].id,
+            to_node_id=test_nodes["SO010"].id,
+            weight=10.0,
+            volume=0.5,
+            status="in_transit",
+            schedule_id=global_schedule.id,
+            goods_items=[{"goods_code": "G001", "order_code": "O001"}],
+        )
+        db_session.add(package)
+        db_session.commit()
+
+        # 2. 调用 confirm_arrival
+        result = ArrivalConfirmService.confirm_arrival(
+            db=db_session,
+            schedule_code="GS_TEST_DEST",
+            package_code="PKG_TEST_DEST_001",
+            is_normal=True,
+        )
+
+        # 3. 验证 goods_status = "delivered"（Bug3 回归）
+        assert result["goods_status"] == "delivered", \
+            f"Bug3 回归: 到目的地应返回 'delivered'，实际返回 '{result['goods_status']}'"
+        assert result["triggered_repacking"] is False
+
+        # 4. 验证数据库状态
+        db_session.flush()
+        db_session.refresh(package)
+        assert package.status == "delivered"
+        db_session.refresh(goods)
+        assert goods.status == "delivered"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_confirm_arrival_exception_on_delivered_package(self, db_session, test_nodes, test_orders, test_goods):
+        """
+        测试异常到货确认（包裹状态为 delivered）—— Bug1 回归
+
+        场景：包裹已 delivered，但后续发现货物异常需要标记 exception。
+              confirm-arrival 异常确认 → delivered → exception
+        验证：delivered → exception 转换不抛 ValueError（Bug1 修复后）
+        """
+        # 1. 准备：货物 G003（属于 O002）
+        goods = test_goods["G003"]
+        goods.status = "in_transit"
+        goods.node_id = test_nodes["SC001"].id
+
+        # 1.2 创建 GlobalSchedule
+        global_schedule = GlobalSchedule(
+            schedule_code="GS_TEST_DEL_EX",
+            order_codes=json.dumps([]),
+            total_distance=0.0,
+            total_time=0.0,
+            total_goods=0,
+            score=0.0,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+            goods_schedules=json.dumps([
+                {"goods_code": "G003", "order_code": "O002",
+                 "path": ["SC001", "SO001", "SO010"]}
+            ]),
+        )
+        db_session.add(global_schedule)
+        db_session.commit()
+
+        # 1.3 创建包裹（状态为 delivered，模拟已送达但后续需标记异常）
+        package = Package(
+            package_code="PKG_TEST_DEL_EX",
+            from_node_id=test_nodes["SC001"].id,
+            to_node_id=test_nodes["SO001"].id,
+            weight=10.0,
+            volume=0.5,
+            status="delivered",  # Bug1 场景：已 delivered 的包裹需要标记异常
+            schedule_id=global_schedule.id,
+            goods_items=[{"goods_code": "G003", "order_code": "O002"}],
+        )
+        db_session.add(package)
+        db_session.commit()
+
+        # 2. 调用 confirm_arrival（异常确认 on delivered 包裹）
+        result = ArrivalConfirmService.confirm_arrival(
+            db=db_session,
+            schedule_code="GS_TEST_DEL_EX",
+            package_code="PKG_TEST_DEL_EX",
+            is_normal=False,
+            exception_subtype="damaged",
+        )
+
+        # 3. 验证：不抛 ValueError（Bug1 回归）
+        assert result["status"] == "exception"
+        assert result["goods_status"] == "exception"
+
+        # 4. 验证数据库状态
+        db_session.flush()
+        db_session.refresh(package)
+        assert package.status == "exception", \
+            f"Bug1 回归: delivered → exception 应成功，实际 {package.status}"
+
+        db_session.refresh(goods)
+        assert goods.status == "exception"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_confirm_arrival_exception_when_goods_already_delivered(self, db_session, test_nodes, test_orders, test_goods):
+        """
+        测试异常确认时货物已 delivered —— force=True 强制回退
+
+        场景：L2 终点确认后，货物 goods=delivered + 订单 order=completed。
+              后补标记包裹异常 → 货物和订单均需 force=True 回退为 exception。
+        验证：不抛 ValueError，goods → exception（force=True），
+              order → exception（force=True），exception_event 正常创建。
+        """
+        # 1. 准备：货物 G005（属于 O003），状态已是 delivered（模拟已到终点）
+        goods = test_goods["G005"]
+        goods.status = "delivered"
+        goods.node_id = test_nodes["SO010"].id  # L2 终点
+
+        # 1.1 关联订单设为 completed（模拟已完成送达）
+        order = test_orders["O003"]
+        order.status = "completed"
+
+        # 1.2 创建 GlobalSchedule
+        global_schedule = GlobalSchedule(
+            schedule_code="GS_TEST_GD_DEL",
+            order_codes=json.dumps([]),
+            total_distance=0.0,
+            total_time=0.0,
+            total_goods=0,
+            score=0.0,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+            goods_schedules=json.dumps([
+                {"goods_code": "G005", "order_code": "O003",
+                 "path": ["SC001", "SO001", "SO010"]}
+            ]),
+        )
+        db_session.add(global_schedule)
+        db_session.commit()
+
+        # 1.3 创建包裹（状态为 in_transit，goods 已 delivered）
+        package = Package(
+            package_code="PKG_TEST_GD_DEL",
+            from_node_id=test_nodes["SO001"].id,
+            to_node_id=test_nodes["SO010"].id,
+            weight=10.0,
+            volume=0.5,
+            status="in_transit",
+            schedule_id=global_schedule.id,
+            goods_items=[{"goods_code": "G005", "order_code": "O003"}],
+        )
+        db_session.add(package)
+        db_session.commit()
+
+        # 2. 调用 confirm_arrival（异常确认，goods 已是 delivered，order 已是 completed）
+        result = ArrivalConfirmService.confirm_arrival(
+            db=db_session,
+            schedule_code="GS_TEST_GD_DEL",
+            package_code="PKG_TEST_GD_DEL",
+            is_normal=False,
+            exception_subtype="damaged",
+            remark="L2 异常，货物已提前送达，需 force 回退",
+        )
+
+        # 3. 核心断言：不抛 ValueError，正常返回
+        assert result["status"] == "exception", \
+            f"包裹应标记为 exception，实际: {result['status']}"
+        assert result["goods_status"] == "exception", \
+            f"goods_status 应为 exception，实际: {result['goods_status']}"
+        assert result["order_status"] == "exception", \
+            f"order_status 应为 exception，实际: {result['order_status']}"
+
+        # 4. 验证：goods → exception（force=True 强制回退）
+        db_session.flush()
+        db_session.refresh(goods)
+        assert goods.status == "exception", \
+            f"delivered goods 应 force 回退为 exception，实际: {goods.status}"
+
+        # 5. 验证：order → exception（force=True 强制回退）
+        db_session.refresh(order)
+        assert order.status == "exception", \
+            f"completed order 应 force 回退为 exception，实际: {order.status}"
+
+        # 6. 验证：包裹 → exception
+        db_session.refresh(package)
+        assert package.status == "exception", \
+            f"包裹应标记为 exception，实际: {package.status}"
+
+        # 7. 验证：异常事件已创建
+        db_session.flush()
+        event = db_session.query(ExceptionEvent).filter(
+            ExceptionEvent.target_code == "PKG_TEST_GD_DEL"
+        ).first()
+        assert event is not None, "应创建异常事件记录"
+        assert event.exception_type == "package"
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -481,6 +717,105 @@ class TestTriggerRepacking:
         # 4. 验证货物状态更新
         db_session.refresh(goods)
         assert goods.status == "packed"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_trigger_repacking_with_existing_package(self, db_session, test_nodes, test_orders, test_goods):
+        """
+        测试触发 F021 重新打包（复用同一订单已创建的 L1→L2 包裹）—— P1-3 分支覆盖
+
+        场景：batch confirm 时同一订单的两个货物分别在不同包裹中到达 L1。
+             第一个 _trigger_repacking 调用创建 L1→L2 包裹，
+             第二个调用复用现有包裹并将新 goods 合并进去。
+        验证：同订单货物最终在一个 L1→L2 包裹中，goods 均为 packed。
+        """
+        # 1. 准备货物 G003（属于 O002）和 G004（也属于 O002），均在 SO001 待重新打包
+        goods_g003 = test_goods["G003"]  # O002
+        goods_g003.status = "pending_pack"
+        goods_g003.node_id = test_nodes["SO001"].id
+
+        goods_g004 = test_goods["G004"]  # O002
+        goods_g004.status = "pending_pack"
+        goods_g004.node_id = test_nodes["SO001"].id
+
+        # 1.1 创建 GlobalSchedule
+        global_schedule = GlobalSchedule(
+            schedule_code="GS_TEST_REPACK_MERGE",
+            order_codes=json.dumps([]),
+            total_distance=0.0,
+            total_time=0.0,
+            total_goods=0,
+            score=0.0,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+            goods_schedules=json.dumps([
+                {"goods_code": "G003", "order_code": "O002",
+                 "path": ["SC001", "SO001", "SO011"]},
+                {"goods_code": "G004", "order_code": "O002",
+                 "path": ["SC001", "SO001", "SO011"]},
+            ]),
+        )
+        db_session.add(global_schedule)
+        db_session.commit()
+
+        # 2. 第一次调用 _trigger_repacking（模拟第一个包裹 confirm-arrival）
+        result1 = ArrivalConfirmService._trigger_repacking(
+            db=db_session,
+            schedule_code="GS_TEST_REPACK_MERGE"
+        )
+        assert result1 is not None, "第一次调用应创建新 L1→L2 包裹"
+
+        # 验证：包裹已创建，G003+G004 均在同一个包裹中（一次调用处理所有 pending_pack goods）
+        db_session.flush()
+        db_session.refresh(goods_g003)
+        assert goods_g003.status == "packed"
+        db_session.refresh(goods_g004)
+        assert goods_g004.status == "packed"
+
+        # 验证：仅创建了 1 个包裹（同订单合并）
+        new_packages = db_session.query(Package).filter(
+            Package.schedule_id == global_schedule.id,
+            Package.status == "packed"
+        ).all()
+        assert len(new_packages) == 1, \
+            f"同订单 O002 应仅生成 1 个 L1→L2 包裹，实际 {len(new_packages)} 个"
+        assert new_packages[0].from_node_id == test_nodes["SO001"].id
+        assert new_packages[0].to_node_id == test_nodes["SO011"].id
+
+        # 验证 goods_items 包含两个货物
+        pkg = new_packages[0]
+        gi = pkg.goods_items if isinstance(pkg.goods_items, list) else json.loads(pkg.goods_items)
+        goods_codes_in_pkg = {item["goods_code"] for item in gi}
+        assert "G003" in goods_codes_in_pkg
+        assert "G004" in goods_codes_in_pkg
+
+        # 3. 模拟第二个包裹到站后新 goods 加入（同一订单 O002 的第三个货物）
+        #    将 G003 回退为 pending_pack 模拟"第二批到达"场景
+        goods_g003.status = "pending_pack"
+        db_session.commit()
+
+        result2 = ArrivalConfirmService._trigger_repacking(
+            db=db_session,
+            schedule_code="GS_TEST_REPACK_MERGE"
+        )
+
+        # 4. 验证：复用已有包裹（不创建新包裹）
+        assert result2 is not None, "第二次调用应复用已有包裹"
+        assert result2 == pkg.package_code, \
+            f"应返回已有包裹 code {pkg.package_code}，实际 {result2}"
+
+        # 验证包裹总数仍为 1（未创建新包裹）
+        db_session.flush()
+        all_packages = db_session.query(Package).filter(
+            Package.schedule_id == global_schedule.id,
+            Package.status == "packed"
+        ).all()
+        assert len(all_packages) == 1, "不应创建重复包裹"
+
+        # 验证 G003 重新变为 packed
+        db_session.refresh(goods_g003)
+        assert goods_g003.status == "packed"
 
 
 class TestCascadeExceptionPackages:

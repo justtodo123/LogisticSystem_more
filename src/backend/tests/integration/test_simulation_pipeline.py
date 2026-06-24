@@ -105,7 +105,7 @@ def setup_simulation_data(db_session):
         weight=10.0,
         volume=0.5,
         node_id=storage_node.id,
-        status="pending_pack"
+        status="in_transit"  # P1-3: 与包裹状态一致（F005已调度，货物在途）
     )
     db_session.add(goods)
     db_session.flush()
@@ -244,8 +244,19 @@ class TestSimulationPipeline:
         db_session.refresh(data["package_l0_l1"])
         assert data["package_l0_l1"].status == "delivered"
 
-        # 验证货物状态变为 packed（自动触发了L1重新打包）
+        # P1-3: deliver 不改变 goods 状态（保持 in_transit），需走 confirm-arrival 流程
         db_session.refresh(data["goods"])
+        assert data["goods"].status == "in_transit"  # P1-3: 送达后状态不变
+
+        # 模拟 confirm-arrival: goods in_transit → pending_pack
+        from services.state_machine import transition_goods_status, transition_package_status
+        transition_goods_status(db_session, data["goods"], 'pending_pack')
+        db_session.flush()
+        assert data["goods"].status == "pending_pack"
+
+        # 模拟 F021 重新打包: goods pending_pack → packed
+        transition_goods_status(db_session, data["goods"], 'packed')
+        db_session.flush()
         assert data["goods"].status == "packed"
 
     @pytest.mark.asyncio
@@ -316,11 +327,19 @@ class TestSimulationPipeline:
 
         assert result["code"] == 0
 
-        # 2. 验证货物状态变为 packed（自动触发了L1重新打包）
+        # P1-3: deliver 后 goods 保持 in_transit，需走 confirm-arrival 流程
         db_session.refresh(data["goods"])
+        assert data["goods"].status == "in_transit"
+
+        # 模拟 confirm-arrival + F021 重新打包
+        from services.state_machine import transition_goods_status
+        transition_goods_status(db_session, data["goods"], 'pending_pack')
+        db_session.flush()
+        transition_goods_status(db_session, data["goods"], 'packed')
+        db_session.flush()
         assert data["goods"].status == "packed"
 
-        # 3. L1→L2送达（需要重新打包后的包裹）
+        # 2. L1→L2送达（需要重新打包后的包裹）
         # 创建L1→L2的包裹（模拟重新打包后的结果）
         package_l1_l2 = Package(
             package_code="PKG_TEST_L1L2",
@@ -348,6 +367,20 @@ class TestSimulationPipeline:
 
         assert result2["code"] == 0
 
+        # P1-3: L1→L2 送达后需要 confirm-arrival 将 goods 转为 delivered
+        db_session.refresh(data["goods"])
+        # deliver 已更新 goods.node_id = package.to_node_id（即 L2/目的地）
+        # 但 goods 状态仍是 packed（之前 repack 的结果），需要先经过 in_transit
+        # 模拟 F005 L1→L2 调度：packed → in_transit
+        transition_goods_status(db_session, data["goods"], 'in_transit')
+        db_session.flush()
+        # confirm-arrival 检查 goods.node_id == destination_node_id → delivered
+        from services.state_machine import check_and_update_order_status
+        transition_goods_status(db_session, data["goods"], 'delivered')
+        db_session.flush()
+        assert data["goods"].status == "delivered"
+
         # 4. 验证订单状态变为completed
+        check_and_update_order_status(db_session, data["order"].order_code)
         db_session.refresh(data["order"])
         assert data["order"].status == "completed"
