@@ -32,7 +32,7 @@ P1-2 为全局调度增加**预览 → 确认**两步流：
 ```json
 {
   "order_codes": ["O001", "O002"],  // 可选；不传则自动筛选 status=pending 订单
-  "algorithm": "traditional",         // 可选，默认 traditional
+  "algorithm": "traditional",         // ✅ 必填
   "preview": true                      // ✅ 必填：预览模式
 }
 ```
@@ -40,7 +40,7 @@ P1-2 为全局调度增加**预览 → 确认**两步流：
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `order_codes` | `List[str]` | 否 | 订单编号列表；不传则处理所有 `status=pending` 订单 |
-| `algorithm` | `str` | 否 | 算法类型，默认 `traditional` |
+| `algorithm` | `str` | **是** | 算法类型：`traditional` / `deepseek` |
 | `preview` | `bool` | **是** | `true`=预览模式；P1-2 已移除直接落库功能，必须传 `true` |
 
 > ⚠️ **P1-2 breaking change**：不再支持无 `preview` 参数的直接落库。前端必须先 preview → confirm。

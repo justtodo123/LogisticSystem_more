@@ -35,8 +35,8 @@ class GlobalScheduleRequest(BaseModel):
         description="订单编号列表，不传则处理所有 status=pending 的订单",
     )
     algorithm: str = Field(
-        default="traditional",
-        description="算法类型：traditional / deepseek（阶段3仅支持 traditional）",
+        ...,
+        description="算法类型：traditional / deepseek",
     )
     preview: bool = Field(
         default=True,
