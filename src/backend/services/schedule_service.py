@@ -290,7 +290,6 @@ class ScheduleService:
             
             print(f"[DEBUG] gs.id={gs.id}, gs.score={gs.score}, raw_score={raw_score}, max_possible={max_possible}, score_display={score_display}")
             print(f"[DEBUG] gs.goods_schedules type={type(gs.goods_schedules)}, len={len(gs.goods_schedules) if isinstance(gs.goods_schedules, list) else 'N/A'}")
-            print(f"[DEBUG] goods_schedules_data len={len(goods_schedules_data) if isinstance(goods_schedules_data, list) else 'N/A'}")
 
             # 查询关联 packages
             packages = (
@@ -345,16 +344,16 @@ class ScheduleService:
                 # 获取货物描述
                 g = goods_map.get(item["goods_code"])
 
-            new_goods_schedules.append({
-                "goods_code": item["goods_code"],
-                "goods_name": g.goods_name if g else None,
-                "goods_type": g.goods_type if g else None,
-                "weight": float(g.weight) if g else None,
-                "volume": float(g.volume) if g else None,
-                "node_code": g.node.node_code if g and g.node else None,
-                "order_code": item["order_code"],
-                "path": path_with_name,
-            })
+                new_goods_schedules.append({
+                    "goods_code": item["goods_code"],
+                    "goods_name": g.goods_name if g else None,
+                    "goods_type": g.goods_type if g else None,
+                    "weight": float(g.weight) if g else None,
+                    "volume": float(g.volume) if g else None,
+                    "node_code": g.node.node_code if g and g.node else None,
+                    "order_code": item["order_code"],
+                    "path": path_with_name,
+                })
 
             pkg_list = []
             for pkg in packages:
