@@ -290,6 +290,7 @@ class ScheduleService:
             
             print(f"[DEBUG] gs.id={gs.id}, gs.score={gs.score}, raw_score={raw_score}, max_possible={max_possible}, score_display={score_display}")
             print(f"[DEBUG] gs.goods_schedules type={type(gs.goods_schedules)}, len={len(gs.goods_schedules) if isinstance(gs.goods_schedules, list) else 'N/A'}")
+            print(f"[DEBUG] goods_schedules_data len={len(goods_schedules_data) if isinstance(goods_schedules_data, list) else 'N/A'}")
 
             # 查询关联 packages
             packages = (
