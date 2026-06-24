@@ -22,8 +22,72 @@ from models.global_schedule import GlobalSchedule
 from models.order import Order
 from models.goods import Goods
 from models.package import Package
+from models.node import Node
 from utils.response import success_response, error_response
 from services.state_machine import update_orders_after_f007, update_goods_after_f021
+
+
+# ── Score 归一化：内存缓存历史最大 score ──
+_max_score_cache: Optional[float] = None
+
+
+def _refresh_max_score(db: Session) -> float:
+    """
+    查询数据库历史最大 score，更新内存缓存，返回 max_possible。
+    
+    逻辑：
+    1. 若 _max_score_cache 为 None（首次调用或进程重启），全表查询最大值
+    2. 将传入的 raw_score 与缓存比较，取大者更新缓存
+    3. 返回当前缓存值（即历史最大 score）
+    
+    Args:
+        db: 数据库会话（仅在首次查询时使用）
+        
+    Returns:
+        历史最大 score（若表中无数据则返回 1.0 避免除零）
+    """
+    global _max_score_cache
+    if _max_score_cache is None:
+        max_record = db.query(GlobalSchedule.score).order_by(
+            GlobalSchedule.score.desc()
+        ).first()
+        _max_score_cache = float(max_record[0]) if max_record and max_record[0] else 1.0
+    return _max_score_cache
+
+
+def _calc_score_display(raw_score: float, max_possible: float) -> int:
+    """
+    计算归一化百分制分数（0~100，越高越好）。
+    
+    公式：score_display = 100 - min(100, raw_score / max_possible × 100)
+    - raw_score 越小（越好），score_display 越大
+    - 最优（raw_score=0）：score_display=100
+    - 最差（raw_score=max_possible）：score_display=0
+    
+    Args:
+        raw_score: 原始 score（越小越好）
+        max_possible: 历史最大 score
+        
+    Returns:
+        归一化分数（0~100 整数）
+    """
+    if max_possible <= 0:
+        return 100
+    ratio = raw_score / max_possible * 100.0
+    display = 100 - min(100.0, ratio)
+    return max(0, int(round(display)))
+
+
+def _update_max_score_if_needed(raw_score: float) -> None:
+    """
+    比较 raw_score 与缓存的最大值，若更大则更新缓存。
+    
+    Args:
+        raw_score: 本次计算的原始 score
+    """
+    global _max_score_cache
+    if _max_score_cache is not None and raw_score > _max_score_cache:
+        _max_score_cache = raw_score
 
 
 class ScheduleService:
@@ -103,12 +167,19 @@ class ScheduleService:
 
             db.commit()
 
+            # ── 计算 score_display（归一化百分制）──
+            raw_score = float(schedule_result["score"])
+            max_possible = _refresh_max_score(db)
+            _update_max_score_if_needed(raw_score)
+            score_display = _calc_score_display(raw_score, max_possible)
+
             return success_response(data={
                 "schedule_code": schedule_result["schedule_code"],
                 "total_distance": schedule_result["total_distance"],
                 "total_time": schedule_result["total_time"],
                 "total_goods": schedule_result["total_goods"],
-                "score": schedule_result["score"],
+                "score": raw_score,
+                "score_display": score_display,
                 "package_count": len(packages),
                 "version": 1,
                 "is_replan": is_replan,
@@ -149,6 +220,9 @@ class ScheduleService:
                 GlobalSchedule.order_codes.cast(str).like(f"%{order_code}%")
             )
 
+        # 获取历史最大 score（用于归一化）
+        max_possible = _refresh_max_score(db)
+
         total = query.count()
         schedules = (
             query.order_by(desc(GlobalSchedule.created_at))
@@ -162,12 +236,15 @@ class ScheduleService:
             pkg_count = db.query(Package).filter(
                 Package.schedule_id == gs.id
             ).count()
+            raw_score = float(gs.score)
+            score_display = _calc_score_display(raw_score, max_possible)
             items.append({
                 "schedule_code": gs.schedule_code,
                 "total_distance": float(gs.total_distance),
                 "total_time": float(gs.total_time),
                 "total_goods": gs.total_goods,
-                "score": float(gs.score),
+                "score": raw_score,
+                "score_display": score_display,
                 "package_count": pkg_count,
                 "version": gs.version,
                 "is_replan": gs.is_replan,
@@ -196,46 +273,118 @@ class ScheduleService:
         Returns:
             统一响应格式 dict
         """
-        gs = (
-            db.query(GlobalSchedule)
-            .filter(GlobalSchedule.schedule_code == schedule_code)
-            .first()
-        )
+        try:
+            gs = (
+                db.query(GlobalSchedule)
+                .filter(GlobalSchedule.schedule_code == schedule_code)
+                .first()
+            )
 
-        if not gs:
-            return error_response(code=40401, message=f"调度方案不存在: {schedule_code}")
+            if not gs:
+                return error_response(code=40401, message=f"调度方案不存在: {schedule_code}")
 
-        # 查询关联 packages
-        packages = (
-            db.query(Package)
-            .filter(Package.schedule_id == gs.id)
-            .all()
-        )
+            # 计算 score_display（归一化百分制）
+            max_possible = _refresh_max_score(db)
+            raw_score = float(gs.score)
+            score_display = _calc_score_display(raw_score, max_possible)
+            
+            print(f"[DEBUG] gs.id={gs.id}, gs.score={gs.score}, raw_score={raw_score}, max_possible={max_possible}, score_display={score_display}")
+            print(f"[DEBUG] gs.goods_schedules type={type(gs.goods_schedules)}, len={len(gs.goods_schedules) if isinstance(gs.goods_schedules, list) else 'N/A'}")
 
-        pkg_list = []
-        for pkg in packages:
-            from_node = pkg.from_node
-            to_node = pkg.to_node
-            pkg_list.append({
-                "package_code": pkg.package_code,
-                "weight": float(pkg.weight),
-                "volume": float(pkg.volume),
-                "status": pkg.status,
-                "from_node_code": from_node.node_code if from_node else None,
-                "to_node_code": to_node.node_code if to_node else None,
-                "goods_items": pkg.goods_items,
+            # 查询关联 packages
+            packages = (
+                db.query(Package)
+                .filter(Package.schedule_id == gs.id)
+                .all()
+            )
+
+            # 重新构建 goods_schedules（含 node_name 和货物描述）
+            # 1. 收集所有的 node_code 和 goods_code
+            all_node_codes = set()
+            all_goods_codes = set()
+            goods_schedules_data = gs.goods_schedules
+            if not isinstance(goods_schedules_data, list):
+                return error_response(code=50001, message=f"goods_schedules 格式错误，应为列表，实际为 {type(goods_schedules_data)}")
+            
+            for item in goods_schedules_data:
+                if not isinstance(item, dict):
+                    continue
+                path = item.get("path", [])
+                if not isinstance(path, list):
+                    continue
+                for nc in path:
+                    if isinstance(nc, str):
+                        all_node_codes.add(nc)
+                goods_code = item.get("goods_code")
+                if goods_code and isinstance(goods_code, str):
+                    all_goods_codes.add(goods_code)
+
+            # 2. 批量查询 Node 和 Goods
+            nodes_map = {
+                n.node_code: n
+                for n in db.query(Node).filter(Node.node_code.in_(all_node_codes)).all()
+            }
+            goods_map = {
+                g.goods_code: g
+                for g in db.query(Goods).filter(Goods.goods_code.in_(all_goods_codes)).all()
+            }
+
+            # 3. 构建新的 goods_schedules
+            new_goods_schedules = []
+            for item in goods_schedules_data:
+                # 构建 path 对象数组（含 node_name）
+                path_with_name = []
+                for nc in item["path"]:
+                    n = nodes_map.get(nc)
+                    path_with_name.append({
+                        "node_code": nc,
+                        "node_name": n.name if n else nc,
+                    })
+
+                # 获取货物描述
+                g = goods_map.get(item["goods_code"])
+
+            new_goods_schedules.append({
+                "goods_code": item["goods_code"],
+                "goods_name": g.goods_name if g else None,
+                "goods_type": g.goods_type if g else None,
+                "weight": float(g.weight) if g else None,
+                "volume": float(g.volume) if g else None,
+                "node_code": g.node.node_code if g and g.node else None,
+                "order_code": item["order_code"],
+                "path": path_with_name,
             })
 
-        return success_response(data={
-            "schedule_code": gs.schedule_code,
-            "total_distance": float(gs.total_distance),
-            "total_time": float(gs.total_time),
-            "total_goods": gs.total_goods,
-            "score": float(gs.score),
-            "package_count": len(pkg_list),
-            "version": gs.version,
-            "is_replan": gs.is_replan,
-            "goods_schedules": gs.goods_schedules,
-            "packages": pkg_list,
-            "created_at": gs.created_at.isoformat() if gs.created_at else None,
-        })
+            pkg_list = []
+            for pkg in packages:
+                from_node = pkg.from_node
+                to_node = pkg.to_node
+                pkg_list.append({
+                    "package_code": pkg.package_code,
+                    "weight": float(pkg.weight),
+                    "volume": float(pkg.volume),
+                    "status": pkg.status,
+                    "from_node_code": from_node.node_code if from_node else None,
+                    "to_node_code": to_node.node_code if to_node else None,
+                    "goods_items": pkg.goods_items,
+                })
+
+            return success_response(data={
+                "schedule_code": gs.schedule_code,
+                "total_distance": float(gs.total_distance),
+                "total_time": float(gs.total_time),
+                "total_goods": gs.total_goods,
+                "score": raw_score,
+                "score_display": score_display,
+                "package_count": len(pkg_list),
+                "version": gs.version,
+                "is_replan": gs.is_replan,
+                "goods_schedules": new_goods_schedules,
+                "packages": pkg_list,
+                "created_at": gs.created_at.isoformat() if gs.created_at else None,
+            })
+        except Exception as e:
+            print(f"[ERROR] get_global_schedule failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return error_response(code=50000, message=f"获取调度方案详情失败: {str(e)}")

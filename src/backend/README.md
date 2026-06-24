@@ -4,8 +4,8 @@
 
 ## 项目状态
 
-**当前阶段**：阶段 8（AI 助手与收尾 F014）✅ 已完成  
-**项目状态**：🎉 全部 8 阶段 MVP 开发完成
+**当前阶段**：P1-1（调度展示优化）✅ 已完成  
+**项目状态**：🎉 全部 8 阶段 MVP + P1-1 开发完成
 
 **阶段8最新更新** (2026-06-23)：
 - ✅ **AI 自然语言调度完成**：`POST /api/ai/parse` 接收自然语言 → DeepSeek 解析为算法参数 → 自动执行完整调度链路
@@ -17,6 +17,15 @@
 - ✅ **DeepSeek 调用埋点**：每次调用记录到 `log_events`（成功/失败/degraded）
 - ✅ **批量重规划**：`schedule_codes` 支持多条，逐条生成新版本
 - ✅ **P1 占位**：`/api/ai/explain`、`/api/ai/review`、`/api/ai/analyze-exception` 返回 501
+
+**P1-1 最新更新** (2026-06-24)：
+- ✅ **P1-05 score 归一化**：全局调度方案 API 响应新增 `score_display` 字段（0~100 整数，越高越好），保留原 `score` 字段确保向后兼容
+- ✅ **P1-06 全局方案 DTO 优化**：`GET /api/schedule/global/{code}` 响应中 `goods_schedules.path` 从字符串数组改为对象数组（含 `node_code` + `node_name`）
+- ✅ **P1-06 货物描述字段**：`goods_schedules` 每项新增 `goods_name`、`goods_type`、`weight`、`volume`、`node_code`、`order_code`
+- ✅ **P1-07 节点调度 DTO 优化**：`tasks` 新增 `from_node_name`、`to_node_name`，`package_codes` 展开为 `package_details`（含包裹详情和货物详情）
+- ✅ **P1-07 过滤参数**：`GET /api/schedule/batches/{code}` 新增 `vehicle_code`、`level_phase` 过滤参数
+- ✅ **P1-07 新增端点**：`GET /batches/{batch_code}/dispatches`、`GET /{schedule_code}/dispatches`、`GET /dispatches/{dispatch_code}`
+- ✅ **API 契约文档**：更新 `docs/api-contract/api-contract-p1-1.md` 记录所有变更
 
 **阶段4最新更新** (2026-06-17)：
 - **阶段4实现范围**：仅完整实现 `demo_mode=true`，`demo_mode=false` 完整流程推迟到阶段6
@@ -287,21 +296,28 @@ src/backend/
 | `PUT` | `/api/nodes/sorting-centers/{code}` | 编辑分拣中心 | Bearer Token (dispatcher) |
 | `DELETE` | `/api/nodes/sorting-centers/{code}` | 删除分拣中心 | Bearer Token (dispatcher) |
 
-#### 全局调度（阶段 3）
+#### 全局调度（阶段 3 + P1-1 优化）
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
 | `POST` | `/api/schedule/global` | 触发全局调度 (F007 + F021) | Bearer Token (dispatcher) |
-| `GET` | `/api/schedule/global` | 历史调度方案列表（分页） | Bearer Token |
-| `GET` | `/api/schedule/global/{code}` | 调度方案详情（含 goods_schedules + packages） | Bearer Token |
+| `GET` | `/api/schedule/global` | 历史调度方案列表（分页，含 score_display） | Bearer Token |
+| `GET` | `/api/schedule/global/{code}` | 调度方案详情（含 goods_schedules + packages + score_display） | Bearer Token |
 
-#### 节点调度（阶段 4）
+> **P1-1 优化**：`GET /api/schedule/global/{code}` 响应中 `goods_schedules.path` 改为对象数组（含 `node_code` + `node_name`），每项新增 `goods_name`、`goods_type`、`weight`、`volume`、`node_code`、`order_code`；所有全局调度接口返回 `score_display`（0~100 归一化百分制）
+
+#### 节点调度（阶段 4 + P1-1 优化）
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
 | `POST` | `/api/schedule/node-dispatch` | 触发节点调度 (F005) | Bearer Token (dispatcher) |
 | `GET` | `/api/schedule/batches` | 调度批次列表（分页、筛选） | Bearer Token |
-| `GET` | `/api/schedule/batches/{code}` | 调度批次详情（含 dispatches） | Bearer Token |
+| `GET` | `/api/schedule/batches/{code}` | 调度批次详情（含 dispatches，支持过滤） | Bearer Token |
+| `GET` | `/api/schedule/batches/{batch_code}/dispatches` | 按批次查询调度明细（P1-07 新增） | Bearer Token |
+| `GET` | `/api/schedule/{schedule_code}/dispatches` | 按方案查询所有调度明细（P1-07 新增） | Bearer Token |
+| `GET` | `/api/schedule/dispatches/{dispatch_code}` | 查询单个调度明细详情（P1-07 新增） | Bearer Token |
+
+> **P1-1 优化**：`GET /api/schedule/batches/{code}` 响应中 `tasks` 新增 `from_node_name`、`to_node_name`，`package_codes` 展开为 `package_details`（含包裹详情和货物详情）；支持 `vehicle_code`、`level_phase` 过滤参数
 
 #### 路径规划（阶段 5）
 
