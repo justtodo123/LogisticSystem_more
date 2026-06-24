@@ -23,6 +23,7 @@ from models.order import Order
 from models.goods import Goods
 from models.package import Package
 from utils.response import success_response, error_response
+from services.state_machine import update_orders_after_f007, update_goods_after_f021
 
 
 class ScheduleService:
@@ -87,10 +88,7 @@ class ScheduleService:
             db.flush()  # 获取 global_schedule_obj.id
 
             # ── 3a. F007 完成 → 更新订单状态：pending→delivering（正常）或 exception→delivering（重规划） ──
-            for order_code in schedule_result["order_codes"]:
-                order = db.query(Order).filter(Order.order_code == order_code).first()
-                if order:
-                    order.status = "delivering"
+            update_orders_after_f007(db, schedule_result["order_codes"])
 
             # ── 3b. 写入 packages ──
             # 包裹状态由 packaging() 算法决定：
@@ -101,20 +99,7 @@ class ScheduleService:
                 db.add(pkg)
 
             # F021 完成后更新货物状态：pending_pack→packed（正常）或 exception→packed（重规划）
-            # 从生成的包裹中提取货物代码，只更新真正被打包的货物（防御性编程）
-            packed_goods_codes = set()
-            for pkg in packages:
-                for item in pkg.goods_items:
-                    packed_goods_codes.add(item["goods_code"])
-            
-            for gc in packed_goods_codes:
-                goods = db.query(Goods).filter(Goods.goods_code == gc).first()
-                if goods:
-                    # 正常调度时只更新 pending_pack 货物，重规划时只更新 exception 货物
-                    if is_replan and goods.status == "exception":
-                        goods.status = "packed"
-                    elif not is_replan and goods.status == "pending_pack":
-                        goods.status = "packed"
+            update_goods_after_f021(db, global_schedule_obj.id, is_replan)
 
             db.commit()
 

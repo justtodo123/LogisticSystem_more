@@ -21,6 +21,7 @@ from models.node_dispatch import NodeDispatch
 from models.dispatch_batch import DispatchBatch
 from models.vehicle import Vehicle
 from utils.response import success_response, error_response
+from services.state_machine import reset_goods_for_replan, mark_old_entities_exception, update_batch_status
 
 
 class ReplanService:
@@ -103,18 +104,8 @@ class ReplanService:
             #     但原方案已将货物推进到 packed/in_transit/delivered，
             #     需要全部回退才能重新打包。
             if not has_event:
-                orders = db.query(Order).filter(
-                    Order.order_code.in_(order_codes)
-                ).all()
-                order_ids = [o.id for o in orders]
-                db.query(Goods).filter(
-                    Goods.order_id.in_(order_ids),
-                    Goods.status.in_(["packed", "in_transit", "delivered"])
-                ).update(
-                    {"status": "pending_pack"},
-                    synchronize_session=False
-                )
-                db.flush()
+                # AI 重规划：重置货物状态，使其重新参与 F007 调度
+                reset_goods_for_replan(db, order_codes)
 
             # 5. 调用现有服务层（不修改它们）
             from services.schedule_service import ScheduleService
@@ -147,16 +138,7 @@ class ReplanService:
                 db.commit()
 
             # 7.5 将原方案包裹标记为 exception（已被重规划替代）
-            #     无论 AI 重规划还是异常驱动重规划，新方案创建成功后，
-            #     原方案包裹即被替代，标记为 exception 避免歧义。
-            db.query(Package).filter(
-                Package.schedule_id == original.id,
-                Package.status.in_(["packed", "pending_pack", "in_transit"])
-            ).update(
-                {"status": "exception"},
-                synchronize_session=False
-            )
-            db.commit()
+            mark_old_entities_exception(db, original.id)
 
             # 6. 继续调用节点调度（获取该方案的完整结果）
             #    AI 重规划(has_event=False)：demo_mode=True 完成全链路 L0→L1→L2
@@ -191,15 +173,7 @@ class ReplanService:
                 route_error = route_result.get("message", "未知错误") if isinstance(route_result, dict) else str(route_result)
                 return error_response(code=40001, message=f"路径规划失败：{route_error}")
 
-            # 8. 将原方案的 dispatch_batches 标记为 failed（已被重规划替代）
-            #    新方案 dispatch 成功后，旧批次即被取代。
-            db.query(DispatchBatch).filter(
-                DispatchBatch.global_schedule_id == original.id,
-                DispatchBatch.status.in_(["pending", "l0_l1_done", "completed"])
-            ).update(
-                {"status": "failed"},
-                synchronize_session=False
-            )
+            # 8. 旧批次状态已由 mark_old_entities_exception() 更新为 failed
             db.commit()
 
             return success_response(data={

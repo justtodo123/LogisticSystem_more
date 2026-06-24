@@ -20,6 +20,7 @@ from models.driver import Driver
 from models.node_dispatch import NodeDispatch
 from models.dispatch_batch import DispatchBatch
 from utils.response import success_response, error_response
+from services.state_machine import update_batch_status
 
 
 class SimulationService:
@@ -228,7 +229,7 @@ class SimulationService:
         for batch_id in batch_ids:
             batch = db.query(DispatchBatch).filter(DispatchBatch.id == batch_id).first()
             if batch and batch.status in ['pending', 'l0_l1_done']:
-                batch.status = 'l0_l1_done'
+                update_batch_status(db, batch, 'l0_l1_done')
         
         db.flush()
 
