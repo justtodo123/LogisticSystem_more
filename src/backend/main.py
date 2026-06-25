@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -119,6 +120,20 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     return JSONResponse(
         status_code=status_code,
         content=error_response(code, message),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """将 Pydantic 参数校验错误转为统一响应格式"""
+    errors = exc.errors()
+    detail = "; ".join(
+        f"{'.'.join(str(loc) for loc in e['loc'])}: {e['msg']}"
+        for e in errors
+    )
+    return JSONResponse(
+        status_code=422,
+        content=error_response(40000, "参数校验失败", {"detail": detail}),
     )
 
 

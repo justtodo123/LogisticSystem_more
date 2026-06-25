@@ -129,12 +129,12 @@ class AiParseResponse(BaseModel):
     degraded_reason: Optional[str] = None           # 降级原因
 
 
-# ==================== P1：方案解释（预留） ====================
+# ==================== P1：方案解释（已实现） ====================
 
 class AiExplainRequest(BaseModel):
     """方案解释请求模型（F015，P1）"""
-    schedule_code: str
-    detail_level: str = "brief"  # brief / detailed
+    schedule_code: Optional[str] = None  # 调度方案编码（可选）
+    batch_code: Optional[str] = None     # 调度批次编码（可选）
 
 
 class AiExplainResponse(BaseModel):
@@ -142,27 +142,27 @@ class AiExplainResponse(BaseModel):
     explanation: str
     key_decisions: List[str]
     potential_risks: List[str]
+    suggestions: List[str]  # 优化建议
 
 
-# ==================== P1：方案审查（预留） ====================
+# ==================== P1：方案审查（已实现） ====================
 
 class AiReviewRequest(BaseModel):
     """方案审查请求模型（F016，P1）"""
-    schedule_code: str
-    check_items: List[str] = ["timeout", "overload", "carbon"]
+    schedule_code: Optional[str] = None  # 调度方案编码（可选）
+    batch_code: Optional[str] = None     # 调度批次编码（可选）
 
 
 class AiReviewResponse(BaseModel):
     """方案审查响应模型（F016，P1）"""
-    risks: List[Dict[str, Any]]
-    suggestions: List[str]
+    risks: List[Dict[str, Any]]  # 风险列表（每个风险包含type、description、severity、suggestion）
 
 
-# ==================== P1：异常分析（预留） ====================
+# ==================== P1：异常分析（已实现） ====================
 
 class AiAnalyzeExceptionRequest(BaseModel):
     """异常分析请求模型（F017，P1）"""
-    exception_event_code: str
+    event_code: str  # 异常事件编码（必填）
 
 
 class AiAnalyzeExceptionResponse(BaseModel):

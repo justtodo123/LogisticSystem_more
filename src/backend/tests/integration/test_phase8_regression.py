@@ -190,7 +190,9 @@ async def test_log_events_recording(async_client, test_users, test_db):
 @pytest.mark.asyncio
 async def test_p1_placeholder_endpoints(async_client, test_users):
     """
-    测试P1占位接口返回501
+    测试P1接口参数校验（F015/F016/F017 已在阶段8/9实现）
+    注意：这些端点不再是占位符，已实现完整功能。
+    空参数应返回相应的参数校验失败错误码。
     """
     client = async_client
     # 先登录
@@ -201,14 +203,19 @@ async def test_p1_placeholder_endpoints(async_client, test_users):
     token = login_resp.json()["data"]["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     
-    # 测试P1占位接口
-    endpoints = ["/api/ai/explain", "/api/ai/review", "/api/ai/analyze-exception"]
-    
-    for endpoint in endpoints:
+    # F015 explain / F016 review: 至少需要一个参数，业务校验返回 40001
+    for endpoint in ["/api/ai/explain", "/api/ai/review"]:
         resp = await client.post(endpoint, headers=headers, json={})
-        assert resp.status_code == 200  # FastAPI返回200，但code=50100
+        assert resp.status_code == 200
         result = resp.json()
-        assert result["code"] == 50100  # 50100表示功能正在开发中
+        assert result["code"] == 40001  # schedule_code和batch_code至少一个必须提供
+    
+    # F017 analyze-exception: event_code 为必填字段，Pydantic 校验失败
+    # FastAPI 将 422 转为统一响应 code=40000
+    resp = await client.post("/api/ai/analyze-exception", headers=headers, json={})
+    assert resp.status_code == 422
+    result = resp.json()
+    assert result["code"] == 40000  # Pydantic 校验失败：event_code 必填
 
 
 @pytest.mark.asyncio

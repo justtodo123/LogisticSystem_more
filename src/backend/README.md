@@ -37,7 +37,7 @@
 - ✅ **DeepSeek 降级策略**：API 调用失败自动 fallback 默认参数，`meta.degraded=true` 明确告知用户
 - ✅ **DeepSeek 调用埋点**：每次调用记录到 `log_events`（成功/失败/degraded）
 - ✅ **批量重规划**：`schedule_codes` 支持多条，逐条生成新版本
-- ✅ **P1 占位**：`/api/ai/explain`、`/api/ai/review`、`/api/ai/analyze-exception` 返回 501
+- ✅ **P1 AI 解释/审查/异常分析**：`/api/ai/explain`（F015）、`/api/ai/review`（F016）、`/api/ai/analyze-exception`（F017）全部实现，含 DeepSeek 降级策略
 
 **P1-1 最新更新** (2026-06-24)：
 - ✅ **P1-05 score 归一化**：全局调度方案 API 响应新增 `score_display` 字段（0~100 整数，越高越好），保留原 `score` 字段确保向后兼容
@@ -647,9 +647,9 @@ src/backend/
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
 | `POST` | `/api/ai/parse` | 自然语言解析 → 调度执行（F014，P0 核心） | Bearer Token |
-| `POST` | `/api/ai/explain` | 方案解释（F015，P1 占位 501） | Bearer Token |
-| `POST` | `/api/ai/review` | 方案审查（F016，P1 占位 501） | Bearer Token |
-| `POST` | `/api/ai/analyze-exception` | 异常分析（F017，P1 占位 501） | Bearer Token |
+| `POST` | `/api/ai/explain` | 方案解释（F015，已实现 — 含 DeepSeek 降级策略） | Bearer Token |
+| `POST` | `/api/ai/review` | 方案审查（F016，已实现 — 含 DeepSeek 降级策略） | Bearer Token |
+| `POST` | `/api/ai/analyze-exception` | 异常分析（F017，已实现 — 含 DeepSeek 降级策略） | Bearer Token |
 
 ##### POST /api/ai/parse — 三步模型
 
@@ -1105,7 +1105,7 @@ alembic downgrade -1
 | DeepSeek 埋点 | 每次调用记录到 `log_events` | ✅ |
 | DeepSeek 降级 | API 失败 → fallback 默认参数 → `meta.degraded=true` | ✅ |
 | 批量重规划 | `schedule_codes` 多条逐条生成新版本 | ✅ |
-| P1 占位 | `/explain`、`/review`、`/analyze-exception` 返回 501 | ✅ |
+| P1 AI 功能 | `/explain`、`/review`、`/analyze-exception` 全部实现 + 降级策略 | ✅ |
 | 权限 | dispatcher 可调用、manager 返回 403 | ✅ |
 | 版本链 | 重规划后 version+1、parent_id 正确、is_replan=true | ✅ |
 
@@ -1186,3 +1186,4 @@ alembic downgrade -1
 - [P1-2 API 契约文档](../../docs/api-contract/api-contract-p1-2.md)（V1.0）
 - [P1-3 开发文档](../../My_doc/P1-3开发文档.md)（V1.0）
 - [P1-3 API 契约文档](../../docs/api-contract/api-contract-p1-3.md)（V1.1）
+- [完整 API 契约文档](../../docs/api-contract/api-contract-full.md)（V1.0，阶段 1–8 + P1-1/2/3 全部端点）
