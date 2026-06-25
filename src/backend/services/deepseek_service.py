@@ -17,7 +17,7 @@ from config.database import settings
 logger = logging.getLogger(__name__)
 
 # DeepSeek 提示词模板
-SYSTEM_PROMPT = """你是一个物流调度专家。根据用户需求和当前系统状态，生成算法参数JSON。
+SYSTEM_PROMPT = """你是一个物流调度专家。根据用户需求和当前系统状态，生成全局调度算法参数JSON。
 
 你必须严格按照以下JSON格式输出，不要输出任何其他内容：
 
@@ -30,27 +30,19 @@ SYSTEM_PROMPT = """你是一个物流调度专家。根据用户需求和当前�
       "time": 0.3,
       "package_count": 0.2
     }
-  },
-  "node_dispatch": {
-    "algorithm": "traditional",
-    "weights": {
-      "distance": 0.5,
-      "time": 0.3,
-      "package_count": 0.2
-    }
-  },
-  "route_planning": {
-    "algorithm": "traditional",
-    "max_iterations": 1000
   }
 }
 ```
 
-权重说明：
+权重说明（global_schedule 模块）：
 - distance: 距离权重（越大越倾向缩短总距离）
 - time: 时间权重（越大越倾向缩短总时间）
 - package_count: 包裹数权重（越大越倾向减少包裹数/合并包裹）
 - 三个权重之和应为 1.0（如 0.5+0.3+0.2=1.0）
+
+注意：
+- node_dispatch 和 route_planning 模块使用系统默认参数，不通过AI覆盖。
+- 你只需返回 global_schedule 部分的参数。
 
 如果提供了历史参考方案：
 - 分析各方案的评分优劣，找出表现最好的方案的权重特征
@@ -59,7 +51,7 @@ SYSTEM_PROMPT = """你是一个物流调度专家。根据用户需求和当前�
 
 如果是重规划目标方案：
 - 分析当前方案的不足（距离/时间/包裹数哪项拖后腿）
-- 生成能针对性改善目标方案的优化参数
+- 生成能针对性改善目标方案的 global_schedule 优化参数
 
 如果用户需求不明确，使用默认参数（traditional算法，标准权重）。
 """
@@ -298,7 +290,7 @@ class DeepSeekService:
     @staticmethod
     def _load_default_params() -> Dict:
         """
-        加载默认算法参数
+        加载默认算法参数（只含 global_schedule，node_dispatch/route_planning 使用系统默认值）
         
         Returns:
             默认算法参数字典
@@ -311,17 +303,5 @@ class DeepSeekService:
                     "time": 0.3,
                     "package_count": 0.2
                 }
-            },
-            "node_dispatch": {
-                "algorithm": "traditional",
-                "weights": {
-                    "distance": 0.5,
-                    "time": 0.3,
-                    "package_count": 0.2
-                }
-            },
-            "route_planning": {
-                "algorithm": "traditional",
-                "max_iterations": 1000
             }
         }

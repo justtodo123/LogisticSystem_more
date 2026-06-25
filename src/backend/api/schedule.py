@@ -35,8 +35,12 @@ class GlobalScheduleRequest(BaseModel):
         description="订单编号列表，不传则处理所有 status=pending 的订单",
     )
     algorithm: str = Field(
-        default="traditional",
-        description="算法类型：traditional / deepseek（阶段3仅支持 traditional）",
+        ...,
+        description="算法类型：traditional / deepseek",
+    )
+    preview: bool = Field(
+        default=True,
+        description="预览模式：true=生成 draft 不落库（默认）；P1-2 已移除直接落库功能",
     )
 
 
@@ -60,6 +64,7 @@ async def create_global_schedule(
         order_codes=body.order_codes,
         algorithm=body.algorithm,
         db=db,
+        preview=body.preview,
     )
     
     # 记录埋点
@@ -84,6 +89,7 @@ async def list_global_schedules(
     page: int = Query(default=1, ge=1, description="页码"),
     page_size: int = Query(default=20, ge=1, le=100, description="每页数量"),
     order_code: Optional[str] = Query(default=None, description="按订单编号筛选"),
+    status: Optional[str] = Query(default=None, description="按状态筛选（active/draft，默认过滤 draft）"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -96,6 +102,7 @@ async def list_global_schedules(
         page=page,
         page_size=page_size,
         order_code=order_code,
+        status=status,
         db=db,
     )
 
@@ -251,6 +258,40 @@ async def get_dispatch_detail(
     """
     return await DispatchService.get_dispatch_detail(
         dispatch_code=dispatch_code,
+        db=db,
+    )
+
+
+@router.post("/confirm/{schedule_code}")
+async def confirm_schedule(
+    schedule_code: str,
+    current_user: User = Depends(require_dispatcher),
+    db: Session = Depends(get_db),
+):
+    """
+    确认 draft 调度方案（执行 F021 + 状态更新）
+    
+    需要角色：dispatcher
+    """
+    return await ScheduleService.confirm_schedule(
+        schedule_code=schedule_code,
+        db=db,
+    )
+
+
+@router.delete("/draft/{schedule_code}")
+async def discard_draft(
+    schedule_code: str,
+    current_user: User = Depends(require_dispatcher),
+    db: Session = Depends(get_db),
+):
+    """
+    丢弃 draft 调度方案
+    
+    需要角色：dispatcher
+    """
+    return await ScheduleService.discard_draft(
+        schedule_code=schedule_code,
         db=db,
     )
 

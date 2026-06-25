@@ -4,6 +4,11 @@
 所有状态变更必须通过本模块的函数完成，算法层和服务层不直接修改 .status 字段。
 
 状态流转规则（修正版）：
+0. P1-2 调度方案生命周期:
+   - 预览创建 → global_schedules.status = draft（仅存方案，不执行打包/状态更新）
+   - 确认确认 → draft → active（执行 F021 + 状态更新）
+   - 丢弃 draft → 物理删除记录（返回 "discarded" 瞬态值）
+   - active 方案不可变（immutable）
 1. F007完成 → 订单状态: pending/exception → delivering
 2. F021完成 → 货物状态: pending_pack/exception → packed
                包裹状态: L0→L1: pending_pack → packed
@@ -398,6 +403,49 @@ def check_and_update_order_status(db: Session, order_code: str) -> None:
     if all_delivered:
         order.status = 'completed'
         db.flush()
+
+
+def transition_global_schedule_status(
+    db: Session,
+    gs: GlobalSchedule,
+    new_status: str,
+    force: bool = False,
+) -> None:
+    """
+    统一更新全局调度方案状态，包含状态转换合法性校验。
+
+    合法转换：
+      draft        → active（确认方案）
+      active       → （不可转换，immutable）
+      draft → 物理删除（由调用方 db.delete() 处理，不进此函数）
+
+    禁止转换：
+      active       → draft / 其他（方案已生效不可回退）
+      draft        → draft（幂等跳过）
+      active       → active（幂等跳过）
+
+    Args:
+        db: 数据库会话
+        gs: 全局调度方案 ORM 对象
+        new_status: 目标状态（"draft" / "active"）
+        force: 强制更新（跳过校验，用于数据修复场景）
+    """
+    # 同状态幂等：直接返回
+    if gs.status == new_status:
+        return
+
+    valid = {
+        "draft":  ["active"],   # draft 只能 → active
+        "active": [],            # active 不可变
+    }
+
+    if not force and new_status not in valid.get(gs.status, []):
+        raise ValueError(
+            f"非法全局调度方案状态转换: {gs.schedule_code} {gs.status} → {new_status}"
+        )
+
+    gs.status = new_status
+    db.flush()
 
 
 def update_batch_status(

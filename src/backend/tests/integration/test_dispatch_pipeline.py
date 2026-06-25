@@ -23,22 +23,31 @@ class TestDispatchPipeline:
     @pytest.mark.asyncio
     async def test_dispatch_pipeline_success(self, db_session, test_nodes, test_orders, test_goods, test_vehicles, test_drivers):
         """
-        测试完整节点调度流水线：
-        1. 先执行全局调度，生成包裹
-        2. 执行节点调度（第一次，L0→L1）
-        3. 验证返回成功，生成 batch_code
-        4. 验证 dispatch_batches 表有记录
-        5. 验证 node_dispatches 表有记录
+        测试完整节点调度流水线（P1-2 预览→确认→调度）：
+        1. 预览创建 draft 方案
+        2. 确认方案（draft → active，执行 F021）
+        3. 执行节点调度（第一次，L0→L1）
+        4. 验证返回成功，生成 batch_code
+        5. 验证 dispatch_batches 表有记录
+        6. 验证 node_dispatches 表有记录
         """
-        # 先执行全局调度
+        # 先执行预览
         schedule_result = await ScheduleService.create_global_schedule(
             order_codes=None,
             algorithm="traditional",
             db=db_session,
+            preview=True,
         )
         assert schedule_result["code"] == 0
         schedule_code = schedule_result["data"]["schedule_code"]
-        
+
+        # 确认方案
+        confirm_result = await ScheduleService.confirm_schedule(
+            schedule_code=schedule_code,
+            db=db_session,
+        )
+        assert confirm_result["code"] == 0
+
         # 执行节点调度
         result = await DispatchService.create_node_dispatch(
             schedule_code=schedule_code,
@@ -104,17 +113,25 @@ class TestDispatchPipeline:
     @pytest.mark.asyncio
     async def test_dispatch_pipeline_transaction_rollback(self, db_session, test_nodes, test_orders, test_goods):
         """
-        测试节点调度事务回滚：
+        测试节点调度事务回滚（P1-2 预览→确认→调度）：
         如果调度过程中出现异常，事务应该回滚
         """
-        # 先执行全局调度
+        # 先执行预览
         schedule_result = await ScheduleService.create_global_schedule(
             order_codes=None,
             algorithm="traditional",
             db=db_session,
+            preview=True,
         )
         assert schedule_result["code"] == 0
         schedule_code = schedule_result["data"]["schedule_code"]
+
+        # 确认方案
+        confirm_result = await ScheduleService.confirm_schedule(
+            schedule_code=schedule_code,
+            db=db_session,
+        )
+        assert confirm_result["code"] == 0
         
         # Mock 节点调度服务抛出异常
         from unittest.mock import patch
@@ -142,22 +159,31 @@ class TestDispatchPipeline:
     @pytest.mark.asyncio
     async def test_dispatch_pipeline_demo_mode_false(self, db_session, test_nodes, test_orders, test_goods, test_vehicles, test_drivers):
         """
-        测试 demo_mode=False 的完整节点调度流水线：
-        1. 先执行全局调度，生成包裹
-        2. 执行节点调度（demo_mode=False，只执行L0→L1）
-        3. 模拟L0→L1送达
-        4. 再次执行节点调度（应该执行L1→L2）
-        5. 模拟L1→L2送达
-        6. 验证订单状态变为completed
+        测试 demo_mode=False 的完整节点调度流水线（P1-2 预览→确认→调度）：
+        1. 预览创建 draft 方案
+        2. 确认方案
+        3. 执行节点调度（demo_mode=False，只执行L0→L1）
+        4. 模拟L0→L1送达
+        5. 再次执行节点调度（应该执行L1→L2）
+        6. 模拟L1→L2送达
+        7. 验证订单状态变为completed
         """
-        # 先执行全局调度
+        # 先执行预览
         schedule_result = await ScheduleService.create_global_schedule(
             order_codes=None,
             algorithm="traditional",
             db=db_session,
+            preview=True,
         )
         assert schedule_result["code"] == 0
         schedule_code = schedule_result["data"]["schedule_code"]
+
+        # 确认方案
+        confirm_result = await ScheduleService.confirm_schedule(
+            schedule_code=schedule_code,
+            db=db_session,
+        )
+        assert confirm_result["code"] == 0
         
         # 执行节点调度（demo_mode=False，只执行L0→L1）
         result = await DispatchService.create_node_dispatch(

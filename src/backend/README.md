@@ -4,10 +4,21 @@
 
 ## 项目状态
 
-**当前阶段**：P1-1（调度展示优化）✅ 已完成  
-**项目状态**：🎉 全部 8 阶段 MVP + P1-1 开发完成
+**当前阶段**：P1-2（全局调度增强）✅ 已完成  
+**项目状态**：🎉 全部 8 阶段 MVP + P1-1 + P1-2 开发完成
 
-**阶段8最新更新** (2026-06-23)：
+**P1-2 最新更新** (2026-06-24)：
+- ✅ **预览 → 确认两步流**：`POST /api/schedule/global` 默认 preview 模式，生成 draft 方案（仅 F007，不打包）
+- ✅ **确认接口**：`POST /api/schedule/confirm/{code}` 执行 F021 打包 + 状态更新，draft → active
+- ✅ **丢弃接口**：`DELETE /api/schedule/draft/{code}` 手动丢弃未确认 draft 方案
+- ✅ **active 重复检查**：同一批订单已存在 active 方案时拒绝 preview，避免冲突
+- ✅ **confirm 状态校验**：订单状态已变化时拒绝确认（40003），异常时自动删除 draft（50001）
+- ✅ **`global_schedules` 新增 `status` 字段**：`draft` / `active`，Alembic 迁移 c78f9b436833
+- ✅ **列表默认过滤**：`GET /api/schedule/global` 默认仅返回 `status=active` 方案
+- ✅ **重规划兼容**：`is_replan=True` 跳过 active 检查，confirm 允许 delivering 状态订单
+- ✅ **测试全部通过**：298/298 测试通过（含 P1-2 新增的 confirm/discard/replan 用例）
+
+**P1-1 最新更新** (2026-06-24)：
 - ✅ **AI 自然语言调度完成**：`POST /api/ai/parse` 接收自然语言 → DeepSeek 解析为算法参数 → 自动执行完整调度链路
 - ✅ **四种参数模式**：`ai`（纯 DeepSeek 解析）/ `manual`（纯手动权重）/ `hybrid`（AI + 权重覆盖）/ `default`（默认参数）
 - ✅ **两种执行模式**：新建调度（全部 pending 订单）+ 版本化重规划（指定 `schedule_codes`）
@@ -251,7 +262,7 @@ src/backend/
 
 ## API 接口
 
-### 已实现（阶段 1-5）
+### 已实现（阶段 1-8 + P1-1 + P1-2）
 
 #### 认证与权限（阶段 1）
 
@@ -296,15 +307,19 @@ src/backend/
 | `PUT` | `/api/nodes/sorting-centers/{code}` | 编辑分拣中心 | Bearer Token (dispatcher) |
 | `DELETE` | `/api/nodes/sorting-centers/{code}` | 删除分拣中心 | Bearer Token (dispatcher) |
 
-#### 全局调度（阶段 3 + P1-1 优化）
+#### 全局调度（阶段 3 + P1-1 优化 + P1-2 增强）
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| `POST` | `/api/schedule/global` | 触发全局调度 (F007 + F021) | Bearer Token (dispatcher) |
-| `GET` | `/api/schedule/global` | 历史调度方案列表（分页，含 score_display） | Bearer Token |
-| `GET` | `/api/schedule/global/{code}` | 调度方案详情（含 goods_schedules + packages + score_display） | Bearer Token |
+| `POST` | `/api/schedule/global` | 预览调度方案 (F007)，生成 draft，不打包不更新状态 | Bearer Token (dispatcher) |
+| `POST` | `/api/schedule/confirm/{code}` | 确认 draft 方案，执行 F021 打包 + 状态更新 → active | Bearer Token (dispatcher) |
+| `DELETE` | `/api/schedule/draft/{code}` | 丢弃未确认的 draft 方案 | Bearer Token (dispatcher) |
+| `GET` | `/api/schedule/global` | 历史方案列表（分页，含 score_display，默认过滤 draft） | Bearer Token |
+| `GET` | `/api/schedule/global/{code}` | 调度方案详情（含 goods_schedules + packages + score_display + status） | Bearer Token |
 
 > **P1-1 优化**：`GET /api/schedule/global/{code}` 响应中 `goods_schedules.path` 改为对象数组（含 `node_code` + `node_name`），每项新增 `goods_name`、`goods_type`、`weight`、`volume`、`node_code`、`order_code`；所有全局调度接口返回 `score_display`（0~100 归一化百分制）
+>
+> **P1-2 增强**：全局调度改为两步流（preview → confirm），响应新增 `status` 字段（`draft` / `active`）；列表默认过滤 draft；支持 `?status=draft` 查询预览方案
 
 #### 节点调度（阶段 4 + P1-1 优化）
 
@@ -691,11 +706,10 @@ src/backend/
   "code": 0, "message": "success",
   "data": {
     "schedule_code": "GS20260623010",
-    "replan_results": [{"original_schedule_code": "GS20260623008", "new_schedule_code": "GS20260623010"}],
     "algorithm_params": {...},
     "mode": "ai",
     "is_replan": true,
-    "executed": true,
+    "status": "draft",
     "reference_codes": ["GS20260623008"]
   },
   "meta": {"degraded": false, "degraded_reason": null}
@@ -752,6 +766,8 @@ src/backend/
 | `0` | 200 | 成功 |
 | `40000` | 400 | 参数校验失败 |
 | `40001` | 200 | 全局调度失败（业务错误，如"没有找到符合条件的订单"） |
+| `40002` | 200 | 已有活跃方案，不允许重复调度（P1-2 新增） |
+| `40003` | 200 | 订单状态已变化，请重新预览（P1-2 新增） |
 | `40100` | 200 | 用户名或密码错误（登录接口） |
 | `40100` | 401 | 未登录或 Token 无效 |
 | `40101` | 401 | Token 已过期，请重新登录 |
@@ -759,6 +775,7 @@ src/backend/
 | `40400` | 404 | 资源不存在 |
 | `40401` | 200 | 调度方案不存在 |
 | `50000` | 500 | 服务器内部错误 |
+| `50001` | 200 | 确认失败，draft 已丢弃，请重新预览（P1-2 新增） |
 
 > **注意**：所有 HTTP 异常（401/403/404/422/500）均由 `main.py` 中 `StarletteHTTPException` 全局异常处理器统一转为 `{code, message, data, meta}` 格式，前端可统一通过 `code` 字段判断，无需关注 HTTP 状态码差异。
 
@@ -823,6 +840,14 @@ alembic downgrade -1
 2. **重规划仅调度 exception 状态实体**：`is_replan=True` 标记传入各服务层，仅对 `exception` 状态的订单/包裹进行调度，正常配送中的实体不受影响。
 3. **reroute 不修改状态**：与 redispatch 不同，reroute 不重置订单/货物/包裹为 exception，仅生成新路线记录。原路线保留用于对比。
 4. **repack_at_l1 精确匹配修复**：修复 `.first()` 改为 `.all()` + `order_code` 精确匹配，解决多订单同路线场景下包裹错误复用导致遗漏的 BUG。
+
+### P1-2 设计决策
+
+1. **两步流替代直接落库**：P1-2 移除 `POST /api/schedule/global` 的直接落库模式，改为 preview（仅 F007，draft）→ confirm（F021 打包 + 状态更新，active）。用户在确认前可丢弃 draft 方案。
+2. **active 方案唯一性**：同一批订单在同一时间仅允许一个 active 方案，防止调度冲突。重规划（is_replan=True）跳过此检查。
+3. **confirm 原子性**：confirm 中的 F021 打包 + 订单/货物状态更新在单事务中执行。若失败，draft 方案自动删除，用户需重新 preview。
+4. **状态校验机制**：confirm 时校验订单状态是否仍为 pending/exception（重规划时允许 delivering），状态已变化则拒绝确认并返回 40003。
+5. **draft 物理删除**：丢弃 draft 时直接物理删除记录（不软删除），避免垃圾数据累积。删除成功后仅返回瞬态 `status: "discarded"` 告知前端。
 
 ### 阶段 8 设计决策
 
@@ -1056,6 +1081,31 @@ alembic downgrade -1
 | 权限 | dispatcher 可调用、manager 返回 403 | ✅ |
 | 版本链 | 重规划后 version+1、parent_id 正确、is_replan=true | ✅ |
 
+### P1-2 自测（预览/确认模式）
+
+测试时间：2026-06-24，结果：**298/298 通过（100%）**
+
+#### 新增功能测试
+
+| 类别 | 测试项 | 结果 |
+|------|--------|------|
+| 预览模式 | preview=True 生成 draft，订单状态不变，package_count=0 | ✅ |
+| 确认流程 | confirm 后 status→active，订单→delivering，包裹生成 | ✅ |
+| 拒绝确认 | 订单状态已变化 confirm 返回 40003，draft 被删除 | ✅ |
+| 异常回滚 | confirm 异常时 draft 被删除，返回 50001 | ✅ |
+| 丢弃 draft | DELETE draft 成功删除，active 方案拒绝 | ✅ |
+| 重复预览 | 同批订单已有 active 方案时返回 40002 | ✅ |
+| 列表过滤 | 默认不返回 draft，?status=draft 可查预览方案 | ✅ |
+| 重规划兼容 | is_replan 跳过 active 检查，confirm 允许 delivering 状态 | ✅ |
+
+#### 回归验证
+
+| 类别 | 测试数 | 结果 |
+|------|--------|------|
+| 阶段 1-8 全部测试 | 298 | ✅ 100% 通过 |
+| P1-1 优化测试 | 包含 | ✅ 无回归 |
+| P1-2 新增用例 | 包含 | ✅ 全部通过 |
+
 ## 相关文档
 
 - [项目宪章](../../.codebuddy/CODEBUDDY.md)
@@ -1074,3 +1124,4 @@ alembic downgrade -1
 - [阶段 7 开发文档](../../My_doc/阶段7开发文档.md)（V3.0）
 - [阶段 7 API 契约文档](../../docs/api-contract/api-contract-phase7.md)（V1.0）
 - [阶段 8 API 契约文档](../../docs/api-contract/api-contract-phase8.md)（V1.0）
+- [P1-2 API 契约文档](../../docs/api-contract/api-contract-p1-2.md)（V1.0）

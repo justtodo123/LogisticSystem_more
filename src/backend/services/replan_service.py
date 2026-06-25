@@ -34,6 +34,7 @@ class ReplanService:
         replan_reason: str,
         event: Optional[ExceptionEvent] = None,
         custom_weights: Optional[Dict[str, Any]] = None,
+        draft_only: bool = False,
     ) -> Dict[str, Any]:
         """
         重调度（F007→F021→F005→F006）
@@ -53,6 +54,7 @@ class ReplanService:
             replan_reason: 重规划原因
             event: 异常事件对象（可选，用于提取排除参数）
             custom_weights: 自定义权重参数（可选，用于AI驱动的重规划）
+            draft_only: 仅生成 draft 方案（跳过 confirm/F021/F005/F006）
 
         Returns:
             统一响应格式 dict
@@ -103,7 +105,8 @@ class ReplanService:
             #     packaging(is_replan=False) 只查 pending_pack 的货物，
             #     但原方案已将货物推进到 packed/in_transit/delivered，
             #     需要全部回退才能重新打包。
-            if not has_event:
+            #    draft_only=True 时不重置（仅生成草案，不改变现有状态）
+            if not has_event and not draft_only:
                 # AI 重规划：重置货物状态，使其重新参与 F007 调度
                 reset_goods_for_replan(db, order_codes)
 
@@ -115,15 +118,44 @@ class ReplanService:
                 algorithm=algorithm,
                 db=db,
                 excluded_nodes=excluded_nodes if excluded_nodes else None,
-                is_replan=has_event,  # 仅异常驱动时查询 exception 订单；AI 重规划时 order_codes 已指定
+                is_replan=True,  # redispatch 始终是重规划，需跳过 active 方案检查
                 custom_weights=custom_weights,  # AI驱动的自定义权重
             )
 
-            # 检查调度是否成功
+            # 检查预览调度是否成功
             if schedule_result.get("code") != 0:
                 return schedule_result
 
             new_schedule_code = schedule_result["data"]["schedule_code"]
+
+            # draft_only：设置版本链后立即返回（不执行 confirm/F021/F005/F006）
+            if draft_only:
+                new_schedule = db.query(GlobalSchedule).filter(
+                    GlobalSchedule.schedule_code == new_schedule_code
+                ).first()
+                if new_schedule:
+                    new_schedule.version = original.version + 1
+                    new_schedule.parent_id = original.id
+                    new_schedule.replan_reason = replan_reason
+                    new_schedule.is_replan = True
+                    db.commit()
+                return success_response(data={
+                    "schedule_code": new_schedule_code,
+                    "new_schedule_code": new_schedule_code,
+                    "status": "draft",
+                    "version": new_schedule.version if new_schedule else original.version + 1,
+                    "is_replan": True,
+                    "replan_reason": replan_reason,
+                    "original_schedule_code": original_schedule_code,
+                })
+
+            # 5.5 确认方案（draft → active，执行 F021 打包）
+            confirm_result = await ScheduleService.confirm_schedule(
+                schedule_code=new_schedule_code,
+                db=db,
+            )
+            if confirm_result.get("code") != 0:
+                return confirm_result
 
             # 7. 更新新版调度方案的版本链字段
             new_schedule = db.query(GlobalSchedule).filter(
