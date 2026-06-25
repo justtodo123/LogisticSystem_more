@@ -21,6 +21,7 @@ from models.node_dispatch import NodeDispatch
 from models.dispatch_batch import DispatchBatch
 from models.vehicle import Vehicle
 from utils.response import success_response, error_response
+from services.state_machine import reset_goods_for_replan, mark_old_entities_exception, update_batch_status
 
 
 class ReplanService:
@@ -33,6 +34,7 @@ class ReplanService:
         replan_reason: str,
         event: Optional[ExceptionEvent] = None,
         custom_weights: Optional[Dict[str, Any]] = None,
+        draft_only: bool = False,
     ) -> Dict[str, Any]:
         """
         重调度（F007→F021→F005→F006）
@@ -52,6 +54,7 @@ class ReplanService:
             replan_reason: 重规划原因
             event: 异常事件对象（可选，用于提取排除参数）
             custom_weights: 自定义权重参数（可选，用于AI驱动的重规划）
+            draft_only: 仅生成 draft 方案（跳过 confirm/F021/F005/F006）
 
         Returns:
             统一响应格式 dict
@@ -102,19 +105,10 @@ class ReplanService:
             #     packaging(is_replan=False) 只查 pending_pack 的货物，
             #     但原方案已将货物推进到 packed/in_transit/delivered，
             #     需要全部回退才能重新打包。
-            if not has_event:
-                orders = db.query(Order).filter(
-                    Order.order_code.in_(order_codes)
-                ).all()
-                order_ids = [o.id for o in orders]
-                db.query(Goods).filter(
-                    Goods.order_id.in_(order_ids),
-                    Goods.status.in_(["packed", "in_transit", "delivered"])
-                ).update(
-                    {"status": "pending_pack"},
-                    synchronize_session=False
-                )
-                db.flush()
+            #    draft_only=True 时不重置（仅生成草案，不改变现有状态）
+            if not has_event and not draft_only:
+                # AI 重规划：重置货物状态，使其重新参与 F007 调度
+                reset_goods_for_replan(db, order_codes)
 
             # 5. 调用现有服务层（不修改它们）
             from services.schedule_service import ScheduleService
@@ -124,15 +118,44 @@ class ReplanService:
                 algorithm=algorithm,
                 db=db,
                 excluded_nodes=excluded_nodes if excluded_nodes else None,
-                is_replan=has_event,  # 仅异常驱动时查询 exception 订单；AI 重规划时 order_codes 已指定
+                is_replan=True,  # redispatch 始终是重规划，需跳过 active 方案检查
                 custom_weights=custom_weights,  # AI驱动的自定义权重
             )
 
-            # 检查调度是否成功
+            # 检查预览调度是否成功
             if schedule_result.get("code") != 0:
                 return schedule_result
 
             new_schedule_code = schedule_result["data"]["schedule_code"]
+
+            # draft_only：设置版本链后立即返回（不执行 confirm/F021/F005/F006）
+            if draft_only:
+                new_schedule = db.query(GlobalSchedule).filter(
+                    GlobalSchedule.schedule_code == new_schedule_code
+                ).first()
+                if new_schedule:
+                    new_schedule.version = original.version + 1
+                    new_schedule.parent_id = original.id
+                    new_schedule.replan_reason = replan_reason
+                    new_schedule.is_replan = True
+                    db.commit()
+                return success_response(data={
+                    "schedule_code": new_schedule_code,
+                    "new_schedule_code": new_schedule_code,
+                    "status": "draft",
+                    "version": new_schedule.version if new_schedule else original.version + 1,
+                    "is_replan": True,
+                    "replan_reason": replan_reason,
+                    "original_schedule_code": original_schedule_code,
+                })
+
+            # 5.5 确认方案（draft → active，执行 F021 打包）
+            confirm_result = await ScheduleService.confirm_schedule(
+                schedule_code=new_schedule_code,
+                db=db,
+            )
+            if confirm_result.get("code") != 0:
+                return confirm_result
 
             # 7. 更新新版调度方案的版本链字段
             new_schedule = db.query(GlobalSchedule).filter(
@@ -147,16 +170,7 @@ class ReplanService:
                 db.commit()
 
             # 7.5 将原方案包裹标记为 exception（已被重规划替代）
-            #     无论 AI 重规划还是异常驱动重规划，新方案创建成功后，
-            #     原方案包裹即被替代，标记为 exception 避免歧义。
-            db.query(Package).filter(
-                Package.schedule_id == original.id,
-                Package.status.in_(["packed", "pending_pack", "in_transit"])
-            ).update(
-                {"status": "exception"},
-                synchronize_session=False
-            )
-            db.commit()
+            mark_old_entities_exception(db, original.id)
 
             # 6. 继续调用节点调度（获取该方案的完整结果）
             #    AI 重规划(has_event=False)：demo_mode=True 完成全链路 L0→L1→L2
@@ -191,15 +205,7 @@ class ReplanService:
                 route_error = route_result.get("message", "未知错误") if isinstance(route_result, dict) else str(route_result)
                 return error_response(code=40001, message=f"路径规划失败：{route_error}")
 
-            # 8. 将原方案的 dispatch_batches 标记为 failed（已被重规划替代）
-            #    新方案 dispatch 成功后，旧批次即被取代。
-            db.query(DispatchBatch).filter(
-                DispatchBatch.global_schedule_id == original.id,
-                DispatchBatch.status.in_(["pending", "l0_l1_done", "completed"])
-            ).update(
-                {"status": "failed"},
-                synchronize_session=False
-            )
+            # 8. 旧批次状态已由 mark_old_entities_exception() 更新为 failed
             db.commit()
 
             return success_response(data={

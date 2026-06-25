@@ -8,7 +8,17 @@ defineProps<{
 </script>
 
 <template>
-  <el-row v-loading="loading" :gutter="16" class="summary-row">
+  <div v-loading="loading" class="summary-wrap">
+    <div
+      v-if="summary && (summary.version != null || summary.is_replan)"
+      class="summary-meta"
+    >
+      <span v-if="summary.version != null" class="summary-version">
+        版本 v{{ summary.version }}
+      </span>
+      <el-tag v-if="summary.is_replan" type="warning" size="small">重规划</el-tag>
+    </div>
+    <el-row :gutter="16" class="summary-row">
     <el-col :xs="12" :sm="6">
       <el-card shadow="never" class="summary-card">
         <div class="summary-label">总距离 (km)</div>
@@ -39,27 +49,51 @@ defineProps<{
         </div>
       </el-card>
     </el-col>
-  </el-row>
+    <el-col :xs="12" :sm="6">
+      <el-card shadow="never" class="summary-card">
+        <div class="summary-label">包裹数</div>
+        <div class="summary-value">{{ summary?.package_count ?? '—' }}</div>
+      </el-card>
+    </el-col>
+    </el-row>
+  </div>
 </template>
 
 <style scoped>
+.summary-wrap {
+  margin-bottom: 0;
+}
+
+.summary-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--section-gap, 12px);
+}
+
+.summary-version {
+  font-size: 14px;
+  color: var(--text-regular, #606266);
+}
+
 .summary-row {
   margin-bottom: 0;
 }
 
 .summary-card {
   text-align: center;
+  border-radius: var(--card-radius, 6px);
 }
 
 .summary-label {
   font-size: 13px;
-  color: #909399;
+  color: var(--text-secondary, #909399);
   margin-bottom: 8px;
 }
 
 .summary-value {
   font-size: 22px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary, #303133);
 }
 </style>

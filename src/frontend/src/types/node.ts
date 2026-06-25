@@ -14,6 +14,10 @@ export interface NodeItem {
   created_at?: string
 }
 
+export interface NodeDetail extends NodeItem {
+  updated_at?: string
+}
+
 export interface StorageCenterPayload {
   node_code: string
   name: string

@@ -73,6 +73,12 @@ const router = createRouter({
           meta: { nodeType: 'sorting_center', title: '分拣中心' },
         },
         {
+          path: 'exceptions',
+          name: 'Exceptions',
+          component: () => import('@/views/exceptions/ExceptionList.vue'),
+          meta: { title: '异常管理' },
+        },
+        {
           path: 'health',
           name: 'HealthCheck',
           component: () => import('@/views/HealthCheck.vue'),

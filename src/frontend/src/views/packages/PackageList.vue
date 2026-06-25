@@ -1,15 +1,32 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import PageToolbar from '@/components/crud/PageToolbar.vue'
 import DataTable from '@/components/crud/DataTable.vue'
 import TablePagination from '@/components/crud/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
 import { listNodes } from '@/api/nodes'
-import { listPackages } from '@/api/packages'
+import { listPackages, getPackage } from '@/api/packages'
+import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
+import PackageDetailBody from '@/components/detail/PackageDetailBody.vue'
+import { useEntityDetail } from '@/composables/useEntityDetail'
+import { simulateDeliver } from '@/api/simulation'
+import { useAuthStore } from '@/stores/auth'
 import { PACKAGE_STATUS_MAP, PACKAGE_STATUS_OPTIONS } from '@/constants/status'
 import type { NodeItem } from '@/types/node'
-import type { PackageGoodsItem, PackageItem, PackageStatus } from '@/types/package'
+import type { PackageDetail, PackageGoodsItem, PackageItem, PackageStatus } from '@/types/package'
 import { formatDateTime } from '@/utils/format'
+
+const authStore = useAuthStore()
+const deliveringCode = ref('')
+
+const {
+  visible: detailVisible,
+  loading: detailLoading,
+  data: detailData,
+  title: detailTitle,
+  open: openPackageDetail,
+} = useEntityDetail<PackageDetail>((code) => getPackage(code))
 
 const {
   items,
@@ -45,6 +62,31 @@ function statusTag(status: PackageStatus): string {
 function formatGoodsCodes(items?: PackageGoodsItem[]): string {
   if (!items?.length) return '—'
   return items.map((g) => g.goods_code).join('、')
+}
+
+async function deliverPackage(row: PackageItem): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `确认模拟送达包裹 ${row.package_code}？`,
+      '模拟送达',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+
+  deliveringCode.value = row.package_code
+  try {
+    const result = await simulateDeliver({ package_code: row.package_code })
+    ElMessage.success(
+      result.message ?? `已模拟送达 ${result.packages_delivered} 个包裹`,
+    )
+    await applyFilters()
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '模拟送达失败')
+  } finally {
+    deliveringCode.value = ''
+  }
 }
 </script>
 
@@ -132,6 +174,26 @@ function formatGoodsCodes(items?: PackageGoodsItem[]): string {
           </span>
         </template>
       </el-table-column>
+      <el-table-column label="操作" width="150" fixed="right">
+        <template #default="{ row }">
+          <el-button
+            type="primary"
+            link
+            @click="openPackageDetail(row.package_code, `包裹 · ${row.package_code}`)"
+          >
+            查看
+          </el-button>
+          <el-button
+            v-if="authStore.isDispatcher && row.status === 'in_transit'"
+            type="primary"
+            link
+            :loading="deliveringCode === row.package_code"
+            @click="deliverPackage(row)"
+          >
+            模拟送达
+          </el-button>
+        </template>
+      </el-table-column>
     </DataTable>
 
     <TablePagination
@@ -141,6 +203,14 @@ function formatGoodsCodes(items?: PackageGoodsItem[]): string {
       @update:page="onPageChange"
       @update:page-size="onSizeChange"
     />
+
+    <EntityDetailDrawer
+      v-model="detailVisible"
+      :title="detailTitle"
+      :loading="detailLoading"
+    >
+      <PackageDetailBody v-if="detailData" :data="detailData" />
+    </EntityDetailDrawer>
   </div>
 </template>
 

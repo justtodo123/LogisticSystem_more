@@ -3,7 +3,10 @@ F021 打包算法
 
 将 F007 输出的货物调度计划打包为包裹：
 - L0 → L1：按 (from_node_code, to_node_code) 节点对打包
-- L1 → L2：按 order_code 打包（同一订单货物必须打成一个包裹）
+
+注意：L1→L2 包裹不在初始 F021 中生成，而是在 confirm-arrival 触发
+_trigger_repacking 时按 order_code 动态创建。这符合 P1-3 规范：
+"L1→L2 包裹在 confirm-arrival 后才生成"。
 """
 from typing import List, Dict, Any
 from collections import defaultdict
@@ -72,9 +75,8 @@ def packaging(
     """
     F021 打包算法
 
-    根据 F007 输出的 goods_schedules，生成两类包裹：
-    1. L0 → L1 包裹：按 (L0_code, L1_code) 节点对分组
-    2. L1 → L2 包裹：按 order_code 分组（同一订单货物打成一个包裹）
+    根据 F007 输出的 goods_schedules，生成 L0→L1 包裹（按节点对分组）。
+    L1→L2 包裹不在初始 F021 中生成，而是在 confirm-arrival 触发 repacking 时创建。
 
     Args:
         schedule_result: F007 输出的调度结果，必须包含 "goods_schedules"
@@ -223,37 +225,5 @@ def packaging(
                 schedule_id=schedule_id,
             )
             packages.append(pkg)
-
-    # ── 2. L1 → L2 打包：按 order_code 分组 ──
-    l1_l2_groups: Dict[str, list] = defaultdict(list)
-    for gs in goods_schedules:
-        l1_l2_groups[gs["order_code"]].append(gs)
-
-    for order_code, gs_list in l1_l2_groups.items():
-        # 同一订单所有货物的 L1 和 L2 相同（硬约束保证）
-        l1_code = gs_list[0]["path"][1]
-        l2_code = gs_list[0]["path"][2]
-        from_node = node_map.get(l1_code)
-        to_node = node_map.get(l2_code)
-        if not from_node or not to_node:
-            continue
-
-        total_weight, total_volume = _sum_weight_volume(gs_list)
-
-        pkg = Package(
-            package_code=_generate_package_code(db, counter),
-            weight=round(total_weight, 3),
-            volume=round(total_volume, 3),
-            status="pending_pack",  # L1→L2包裹：货物尚在L0，需等货物到达L1后才能实际打包
-            from_node_id=from_node.id,
-            to_node_id=to_node.id,
-            from_longitude=from_node.longitude,
-            from_latitude=from_node.latitude,
-            to_longitude=to_node.longitude,
-            to_latitude=to_node.latitude,
-            goods_items=_make_goods_items(gs_list),
-            schedule_id=schedule_id,
-        )
-        packages.append(pkg)
 
     return packages

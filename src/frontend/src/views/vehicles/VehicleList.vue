@@ -10,10 +10,14 @@ import { listNodes } from '@/api/nodes'
 import {
   createVehicle,
   deleteVehicle,
+  getVehicle,
   listVehicles,
   suggestVehicleCode,
   updateVehicle,
 } from '@/api/vehicles'
+import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
+import VehicleDetailBody from '@/components/detail/VehicleDetailBody.vue'
+import { useEntityDetail } from '@/composables/useEntityDetail'
 import {
   ENERGY_TYPE_OPTIONS,
   VEHICLE_STATUS_MAP,
@@ -21,9 +25,17 @@ import {
 } from '@/constants/status'
 import { useAuthStore } from '@/stores/auth'
 import type { NodeItem } from '@/types/node'
-import type { Vehicle, VehicleStatus } from '@/types/vehicle'
+import type { Vehicle, VehicleDetail, VehicleStatus } from '@/types/vehicle'
 
 const authStore = useAuthStore()
+
+const {
+  visible: detailVisible,
+  loading: detailLoading,
+  data: detailData,
+  title: detailTitle,
+  open: openVehicleDetail,
+} = useEntityDetail<VehicleDetail>((code) => getVehicle(code))
 
 const {
   items,
@@ -232,22 +244,26 @@ function statusTag(status: VehicleStatus): string {
         label="最后到达节点"
         width="120"
       />
-      <el-table-column
-        v-if="authStore.isDispatcher"
-        label="操作"
-        width="140"
-        fixed="right"
-      >
+      <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
           <el-button
-            type="danger"
+            type="primary"
             link
-            :disabled="row.status === 'delivering'"
-            @click="handleDelete(row)"
+            @click="openVehicleDetail(row.vehicle_code, `车辆 · ${row.vehicle_code}`)"
           >
-            删除
+            查看
           </el-button>
+          <template v-if="authStore.isDispatcher">
+            <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
+            <el-button
+              type="danger"
+              link
+              :disabled="row.status === 'delivering'"
+              @click="handleDelete(row)"
+            >
+              删除
+            </el-button>
+          </template>
         </template>
       </el-table-column>
     </DataTable>
@@ -331,6 +347,14 @@ function statusTag(status: VehicleStatus): string {
         </el-button>
       </template>
     </el-dialog>
+
+    <EntityDetailDrawer
+      v-model="detailVisible"
+      :title="detailTitle"
+      :loading="detailLoading"
+    >
+      <VehicleDetailBody v-if="detailData" :data="detailData" />
+    </EntityDetailDrawer>
   </div>
 </template>
 

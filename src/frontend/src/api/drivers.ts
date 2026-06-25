@@ -1,9 +1,9 @@
 import request from './request'
 import type { ApiListParams, PaginatedResult } from '@/types/common'
-import type { Driver } from '@/types/driver'
+import type { Driver, DriverDetail } from '@/types/driver'
 import { useMockBasicData } from '@/utils/env'
 import { filterAndPaginate } from '@/utils/mock'
-import { getMockDrivers } from '@/utils/mock-store'
+import { getMockDrivers, getMockNodes } from '@/utils/mock-store'
 
 export async function listDrivers(
   params: ApiListParams = {},
@@ -19,5 +19,24 @@ export async function listDrivers(
   const { data } = await request.get<PaginatedResult<Driver>>('/drivers', {
     params,
   })
+  return data
+}
+
+export async function getDriver(driverCode: string): Promise<DriverDetail> {
+  if (useMockBasicData()) {
+    const drivers = await getMockDrivers()
+    const driver = drivers.find((d) => d.driver_code === driverCode)
+    if (!driver) throw new Error('司机不存在')
+    const nodes = await getMockNodes()
+    const node = nodes.find((n) => n.node_code === driver.node_code)
+    return {
+      ...driver,
+      node_name: node?.name ?? driver.node_code,
+      updated_at: driver.updated_at ?? driver.created_at,
+    }
+  }
+  const { data } = await request.get<DriverDetail>(
+    `/drivers/${encodeURIComponent(driverCode)}`,
+  )
   return data
 }

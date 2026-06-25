@@ -1,0 +1,26 @@
+:root {
+  /* 页面与卡片 */
+  --page-bg: #f5f7fa;
+  --card-radius: 6px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+
+  /* 间距 */
+  --section-gap: 12px;
+  --panel-gap: 16px;
+  --block-margin-y: 16px;
+
+  /* 详情抽屉 */
+  --detail-drawer-width: 480px;
+  --detail-label-width: 120px;
+  --detail-empty-size: 64px;
+
+  /* 文字色 */
+  --text-primary: #303133;
+  --text-regular: #606266;
+  --text-secondary: #909399;
+
+  /* 信息条背景 */
+  --meta-bg: #f5f7fa;
+  --meta-border: #ebeef5;
+}

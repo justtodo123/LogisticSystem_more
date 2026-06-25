@@ -74,6 +74,10 @@ def test_vehicle_shortage_scenario(db_session, test_nodes, test_orders, test_goo
     db_session.commit()
     assert len(packages) > 0
     
+    # P1-3: 调用 update_goods_after_f021 将 goods 从 pending_pack 转为 packed
+    from services.state_machine import update_goods_after_f021
+    update_goods_after_f021(db_session, schedule.id)
+    
     # 3. 修改车辆状态：只保留1辆车空闲，其他车辆设为delivering
     vehicles = db_session.query(Vehicle).filter(Vehicle.status == 'idle').all()
     if len(vehicles) > 1:
@@ -173,6 +177,10 @@ async def test_auto_redispatch_after_delivery(db_session, test_nodes, test_order
     db_session.add_all(packages)
     db_session.commit()
     assert len(packages) > 0
+    
+    # P1-3: 调用 update_goods_after_f021 将 goods 从 pending_pack 转为 packed
+    from services.state_machine import update_goods_after_f021
+    update_goods_after_f021(db_session, schedule.id)
     
     # 3. 修改车辆状态：只保留1辆车空闲
     vehicles = db_session.query(Vehicle).filter(Vehicle.status == 'idle').all()
@@ -302,6 +310,10 @@ async def test_recursive_redispatch(db_session, test_nodes, test_orders, test_go
     db_session.add_all(packages)
     db_session.commit()
     assert len(packages) > 0
+    
+    # P1-3: 调用 update_goods_after_f021 将 goods 从 pending_pack 转为 packed
+    from services.state_machine import update_goods_after_f021
+    update_goods_after_f021(db_session, schedule.id)
     
     # 3. 第一次调度：只提供1辆车
     vehicles = db_session.query(Vehicle).filter(Vehicle.status == 'idle').all()
@@ -452,6 +464,12 @@ def test_level_info_in_responses(db_session, test_nodes, test_orders, test_goods
     db_session.commit()
     assert len(packages) > 0
     
+    # P1-3: 调用 update_goods_after_f021 将 goods 从 pending_pack 转为 packed
+    from services.state_machine import update_goods_after_f021, update_orders_after_f007
+    update_goods_after_f021(db_session, schedule.id)
+    # schedule.order_codes 是 JSON 字符串，需要用原始列表
+    update_orders_after_f007(db_session, schedule_result["order_codes"])
+    
     # 3. 执行F005，验证返回结果包含层级信息
     dispatch_result = run_node_dispatch(db_session, schedule_code, demo_mode=True)
     
@@ -529,6 +547,10 @@ async def test_complex_redispatch_scenario(db_session, test_nodes, test_orders, 
     db_session.commit()
     assert len(packages) > 0
     
+    # P1-3: 调用 update_goods_after_f021 将 goods 从 pending_pack 转为 packed
+    from services.state_machine import update_goods_after_f021
+    update_goods_after_f021(db_session, schedule.id)
+    
     # 3. 执行节点调度（F005 第一次，L0→L1）
     # 只提供部分车辆空闲，模拟车辆不足
     vehicles = db_session.query(Vehicle).filter(Vehicle.status == 'idle').all()
@@ -563,18 +585,41 @@ async def test_complex_redispatch_scenario(db_session, test_nodes, test_orders, 
             
             assert result["code"] == 0
     
-    # 5. 验证F021重新打包已触发（L1节点中货物打成包裹）
-    # 模拟送达会自动触发repackaging_at_l1
-    # 查询是否有L1→L2的包裹生成
+    # 5. 验证F021重新打包（L1节点中货物打成包裹）
+    #    P1-3: deliver 后 goods 保持 in_transit，需手动 confirm-arrival + _trigger_repacking
+    from services.state_machine import transition_goods_status
+    from services.arrival_confirm_service import ArrivalConfirmService
+    from models.goods import Goods
+    
+    # 5.1 将已送达 L1 的 goods 转为 pending_pack（模拟 confirm-arrival）
+    l1_goods = db_session.query(Goods).filter(
+        Goods.node_id.in_([
+            test_nodes["SO001"].id,
+            test_nodes["SO002"].id
+        ]),
+        Goods.status == "in_transit"
+    ).all()
+    for g in l1_goods:
+        transition_goods_status(db_session, g, "pending_pack")
+    db_session.flush()
+    
+    # 5.2 P1-3: 调用 _trigger_repacking 动态生成 L1→L2 包裹
+    ArrivalConfirmService._trigger_repacking(
+        db=db_session,
+        schedule_code=schedule_code
+    )
+    db_session.flush()
+    
+    # 5.3 查询 L1→L2 包裹
     l1_to_l2_packages = db_session.query(Package).filter(
-        Package.status.in_(['packed', 'pending_pack']),
+        Package.status == 'packed',
         Package.from_node_id.in_([
             test_nodes["SO001"].id,
             test_nodes["SO002"].id
         ])
     ).all()
     
-    assert len(l1_to_l2_packages) > 0, "L1→L2包裹应为 pending_pack（F021预生成）或 packed（送达后已激活）"
+    assert len(l1_to_l2_packages) > 0, "P1-3: _trigger_repacking 应动态生成 L1→L2 包裹"
     
     # 6. 执行节点调度（F005 第二次，L1→L2）
     # 此时L1节点包裹数量众多，但车辆可能不足

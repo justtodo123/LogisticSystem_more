@@ -21,6 +21,7 @@ class GlobalSchedule(Base):
     parent_id = Column(Integer, ForeignKey("global_schedules.id"), nullable=True)
     replan_reason = Column(String(500), nullable=True)
     is_replan = Column(Boolean, nullable=False, server_default="0")  # False
+    status = Column(String(20), nullable=False, server_default="active")
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
     # 自关联：重规划版本链

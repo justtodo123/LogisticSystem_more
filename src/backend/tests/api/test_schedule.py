@@ -163,14 +163,14 @@ class TestCreateGlobalSchedule:
         )
         token = login_resp.json()["data"]["access_token"]
         
-        # 触发全局调度
+        # 第一阶段：预览（创建 draft）
         response = client.post(
             "/api/schedule/global",
             json={"algorithm": "traditional"},
             headers={"Authorization": f"Bearer {token}"},
         )
         
-        # 验证响应
+        # 验证预览响应
         assert response.status_code == 200
         body = response.json()
         assert body["code"] == 0
@@ -178,7 +178,17 @@ class TestCreateGlobalSchedule:
         assert "schedule_code" in body["data"]
         assert body["data"]["schedule_code"].startswith("GS")
         assert body["data"]["total_goods"] == 2
-        assert body["data"]["package_count"] > 0
+        schedule_code = body["data"]["schedule_code"]
+
+        # 第二阶段：确认（draft → active，执行 F021 打包）
+        confirm_resp = client.post(
+            f"/api/schedule/confirm/{schedule_code}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert confirm_resp.status_code == 200
+        confirm_body = confirm_resp.json()
+        assert confirm_body["code"] == 0
+        assert confirm_body["data"]["package_count"] > 0
 
     @pytest.mark.api
     def test_create_global_schedule_no_pending_orders(self, client, db_session):
@@ -761,6 +771,14 @@ class TestCreateNodeDispatch:
         )
         assert response.status_code == 200
         schedule_code = response.json()["data"]["schedule_code"]
+
+        # 确认方案（draft → active，执行 F021 打包）
+        confirm_resp = client.post(
+            f"/api/schedule/confirm/{schedule_code}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert confirm_resp.status_code == 200
+        assert confirm_resp.json()["code"] == 0
         
         # 触发节点调度
         response = client.post(
@@ -964,6 +982,14 @@ class TestCreateNodeDispatchBoundaries:
         
         if response.status_code == 200 and response.json()["code"] == 0:
             schedule_code = response.json()["data"]["schedule_code"]
+
+            # 确认方案
+            confirm_resp = client.post(
+                f"/api/schedule/confirm/{schedule_code}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert confirm_resp.status_code == 200
+            assert confirm_resp.json()["code"] == 0
             
             # 触发节点调度（没有车辆）
             response = client.post(

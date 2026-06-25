@@ -16,6 +16,13 @@ from models.vehicle import Vehicle
 from models.driver import Driver
 from models.order import Order
 from models.goods import Goods
+from models.package import Package
+from models.global_schedule import GlobalSchedule
+from models.dispatch_batch import DispatchBatch
+from models.node_dispatch import NodeDispatch
+from models.route import Route
+from models.exception_event import ExceptionEvent
+from models.log_event import LogEvent
 
 
 async def init_demo_data(db: Session):
@@ -26,22 +33,22 @@ async def init_demo_data(db: Session):
     # 1. 创建用户（dispatcher、manager）
     await _create_users(db)
     
-    # 2. 创建存储中心（5个）
+    # 2. 创建存储中心（10个）
     await _create_storage_centers(db)
     
-    # 3. 创建1级分拣中心（2个）
+    # 3. 创建1级分拣中心（5个）
     await _create_sorting_centers_l1(db)
     
     # 4. 创建0级分拣中心（50个）
     await _create_sorting_centers_l2(db)
     
-    # 5. 创建车辆（70辆）
+    # 5. 创建车辆（150辆）
     await _create_vehicles(db)
     
-    # 6. 创建司机（70名）
+    # 6. 创建司机（150名）
     await _create_drivers(db)
     
-    # 7. 创建订单（50条）+ 货物（每单2-7个）
+    # 7. 创建订单（100条）+ 货物（每单2-7个）
     await _create_orders_and_goods(db)
     
     print("演示数据初始化完成")
@@ -49,7 +56,14 @@ async def init_demo_data(db: Session):
 
 async def _cleanup_old_data(db: Session):
     """清理旧数据（按依赖逆序删除）"""
-    # 删除顺序：先删子表，再删父表
+    # 删除顺序：先删调度结果子表，再删业务表，最后删基础数据
+    db.query(ExceptionEvent).delete()
+    db.query(LogEvent).delete()
+    db.query(Route).delete()
+    db.query(NodeDispatch).delete()
+    db.query(DispatchBatch).delete()
+    db.query(GlobalSchedule).delete()
+    db.query(Package).delete()
     db.query(Goods).delete()
     db.query(Order).delete()
     db.query(Vehicle).delete()
@@ -92,14 +106,19 @@ async def _create_users(db: Session):
 
 
 async def _create_storage_centers(db: Session):
-    """创建存储中心（5个）"""
-    # 5个存储中心分布在城市四周边缘
+    """创建存储中心（10个）"""
+    # 10个存储中心分布在城市四周边缘
     centers = [
         ("SC001", "武汉存储中心(东)", 30.5, 114.4, 1000, 0),
         ("SC002", "武汉存储中心(南)", 30.4, 114.3, 1000, 0),
         ("SC003", "武汉存储中心(西)", 30.5, 114.2, 1000, 0),
         ("SC004", "武汉存储中心(北)", 30.6, 114.3, 1000, 0),
         ("SC005", "武汉存储中心(中)", 30.5, 114.3, 1000, 0),
+        ("SC006", "武汉存储中心(东北)", 30.55, 114.35, 1000, 0),
+        ("SC007", "武汉存储中心(东南)", 30.45, 114.35, 1000, 0),
+        ("SC008", "武汉存储中心(西南)", 30.45, 114.25, 1000, 0),
+        ("SC009", "武汉存储中心(西北)", 30.55, 114.25, 1000, 0),
+        ("SC010", "武汉存储中心(中南)", 30.5, 114.35, 1000, 0),
     ]
     
     for code, name, lat, lng, capacity, inventory in centers:
@@ -128,11 +147,14 @@ async def _create_storage_centers(db: Session):
 
 
 async def _create_sorting_centers_l1(db: Session):
-    """创建1级分拣中心（2个）"""
-    # 2个1级分拣中心分布在城市南北两端
+    """创建1级分拣中心（5个）"""
+    # 5个1级分拣中心分布在城市各个方位
     centers = [
         ("L1001", "武汉1级分拣中心(北)", 30.55, 114.3, 1, 500, 24),
         ("L1002", "武汉1级分拣中心(南)", 30.45, 114.3, 1, 500, 24),
+        ("L1003", "武汉1级分拣中心(东)", 30.5, 114.37, 1, 500, 24),
+        ("L1004", "武汉1级分拣中心(西)", 30.5, 114.23, 1, 500, 24),
+        ("L1005", "武汉1级分拣中心(中)", 30.5, 114.31, 1, 500, 24),
     ]
     
     for code, name, lat, lng, level, capacity, max_storage_time in centers:
@@ -201,9 +223,13 @@ async def _create_sorting_centers_l2(db: Session):
 
 
 async def _create_vehicles(db: Session):
-    """创建车辆（70辆）"""
-    # 7个节点（5个存储中心+2个1级分拣中心）× 10辆车
-    node_codes = ["SC001", "SC002", "SC003", "SC004", "SC005", "L1001", "L1002"]
+    """创建车辆（150辆）"""
+    # 15个节点（10个存储中心+5个1级分拣中心）× 10辆车
+    node_codes = [
+        "SC001", "SC002", "SC003", "SC004", "SC005",
+        "SC006", "SC007", "SC008", "SC009", "SC010",
+        "L1001", "L1002", "L1003", "L1004", "L1005",
+    ]
     
     vehicle_count = 0
     for node_code in node_codes:
@@ -234,9 +260,13 @@ async def _create_vehicles(db: Session):
 
 
 async def _create_drivers(db: Session):
-    """创建司机（70名）"""
-    # 7个节点（5个存储中心+2个1级分拣中心）× 10名司机
-    node_codes = ["SC001", "SC002", "SC003", "SC004", "SC005", "L1001", "L1002"]
+    """创建司机（150名）"""
+    # 15个节点（10个存储中心+5个1级分拣中心）× 10名司机
+    node_codes = [
+        "SC001", "SC002", "SC003", "SC004", "SC005",
+        "SC006", "SC007", "SC008", "SC009", "SC010",
+        "L1001", "L1002", "L1003", "L1004", "L1005",
+    ]
     
     driver_count = 0
     for node_code in node_codes:
@@ -265,7 +295,7 @@ async def _create_drivers(db: Session):
 
 
 async def _create_orders_and_goods(db: Session):
-    """创建订单（50条）+ 货物（每单2-7个）"""
+    """创建订单（100条）+ 货物（每单2-7个）"""
     # 获取所有0级分拣中心作为目的地（L2节点）
     l2_nodes = db.query(Node).join(SortingCenter).filter(SortingCenter.level == 0).all()
   
@@ -282,7 +312,7 @@ async def _create_orders_and_goods(db: Session):
     order_count = 0
     goods_count = 0
     
-    for i in range(50):
+    for i in range(100):
         # 随机选择目的地节点
         dest_node = random.choice(l2_nodes)
         # 随机选择货物起点节点

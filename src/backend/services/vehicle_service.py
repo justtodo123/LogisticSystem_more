@@ -8,6 +8,7 @@ from schemas.vehicle import VehicleCreate, VehicleUpdate, VehicleResponse
 from core.error_codes import (CODE_SUCCESS, CODE_INTERNAL_ERROR, CODE_CONFLICT,
                              CODE_NODE_NOT_FOUND, CODE_VEHICLE_NOT_FOUND,
                              CODE_VEHICLE_STATUS_NOT_ALLOWED)
+from services.state_machine import transition_vehicle_status
 
 
 class VehicleService:
@@ -190,7 +191,10 @@ class VehicleService:
                     return {"code": CODE_NODE_NOT_FOUND, "message": "最后到达节点不存在", "data": None}
                 vehicle.last_arrived_node_id = last_arrived_node.id
             if vehicle_update.status is not None:
-                vehicle.status = vehicle_update.status
+                try:
+                    transition_vehicle_status(db, vehicle, vehicle_update.status)
+                except ValueError as e:
+                    return {"code": CODE_VEHICLE_STATUS_NOT_ALLOWED, "message": str(e), "data": None}
 
             vehicle.updated_at = datetime.now()
             db.commit()
