@@ -59,11 +59,23 @@ function goDashboard(): void {
           <div>
             <h2 class="page-title">节点到货确认</h2>
             <p class="page-desc">
-              选择调度方案与 L1 分拣中心，确认到站包裹正常或异常；异常将级联影响下游预生成包裹。
+              选择调度方案与 L1 分拣中心，确认到站包裹正常或异常；异常将级联影响下游包裹。
             </p>
           </div>
         </div>
       </template>
+
+      <el-alert
+        v-if="authStore.isDispatcher && !mockMode"
+        type="info"
+        show-icon
+        :closable="false"
+        class="role-alert"
+      >
+        <template #title>
+          联调流程：Dashboard 完成 L0→L1 节点调度后，请<strong>按车或按包裹</strong>模拟送达（勿用「全部送达」），再回本页加载待确认包裹。
+        </template>
+      </el-alert>
 
       <el-alert
         v-if="!authStore.isDispatcher"
