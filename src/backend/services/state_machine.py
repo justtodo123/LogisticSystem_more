@@ -3,7 +3,7 @@
 
 所有状态变更必须通过本模块的函数完成，算法层和服务层不直接修改 .status 字段。
 
-状态流转规则（修正版）：
+状态流转规则（P1-3 版本）：
 0. P1-2 调度方案生命周期:
    - 预览创建 → global_schedules.status = draft（仅存方案，不执行打包/状态更新）
    - 确认确认 → draft → active（执行 F021 + 状态更新）
@@ -15,20 +15,17 @@
                           L1→L2: 新建时 status=pending_pack（激活前不变）
 3. F005调用 → 货物状态: packed → in_transit; 包裹状态: packed → in_transit;
                车辆状态: idle → delivering; 司机状态: idle → busy
-4. 模拟送达（L0→L1）→ L0→L1包裹: in_transit → delivered
-                         货物状态: in_transit → pending_pack
-                         L1→L2包裹: pending_pack（不变，等待L1重新打包激活）
-                         批次状态: pending/l0_l1_done → l0_l1_done
-                         车辆状态: delivering → idle; 司机状态: busy → idle
-5. F021重新打包 → 货物状态: pending_pack → packed
-                         L1→L2包裹: pending_pack → packed（激活）
-6. 模拟送达（L1→L2）→ L1→L2包裹: in_transit → delivered
-                         货物状态: in_transit → delivered
-                         订单状态: delivering → completed（所有货物送达后）
-                         批次状态: l0_l1_done → completed
-                         车辆状态: delivering → idle; 司机状态: busy → idle
-7. 异常事件创建 → 关联订单/货物/包裹 → exception; 关联车辆 → disabled
-8. 重规划 → 旧方案包裹 → exception; 旧批次 → failed; 新方案重新走1-6
+4. simulate_delivery（P1-3 语义）→ 包裹: in_transit → delivered
+                                    货物: node_id 更新，status 保持 in_transit（不改变）
+                                    车辆: delivering → idle; 司机: busy → idle
+5. confirm-arrival（正常→L1）→ 货物: in_transit → pending_pack（触发 L1 重新打包）
+                                   L1→L2包裹: pending_pack → packed（F021 激活）
+6. confirm-arrival（正常→L2）→ 货物: in_transit → delivered
+                               订单: delivering → completed（全部货物送达后）
+7. confirm-arrival（异常）→ 包裹/货物/订单 → exception; 写入 exception_events
+8. 批次状态流转: pending → l0_l1_done（L0→L1 confirm 完成）→ completed/failed
+9. 异常事件创建 → 关联订单/货物/包裹 → exception; 关联车辆 → disabled
+10. 重规划 → 旧方案包裹 → exception; 旧批次 → failed; 新方案重新走1-8
 """
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
