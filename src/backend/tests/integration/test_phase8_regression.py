@@ -54,11 +54,11 @@ async def test_ai_parse_with_mock(async_client, test_users):
     3. 调用POST /api/ai/parse
     4. 验证响应格式正确
     """
-    # Mock DeepSeek API响应
+    # Mock DeepSeek API响应（只返回 global_schedule）
     mock_response = {
         "choices": [{
             "message": {
-                "content": '{"global_schedule": {"algorithm": "traditional", "weights": {"distance": 0.5, "time": 0.3, "package_count": 0.2}}, "node_dispatch": {"algorithm": "traditional", "weights": {"distance": 0.5, "time": 0.3, "package_count": 0.2}}, "route_planning": {"algorithm": "traditional", "max_iterations": 1000}}'
+                "content": '{"global_schedule": {"algorithm": "traditional", "weights": {"distance": 0.5, "time": 0.3, "package_count": 0.2}}}'
             }
         }]
     }
@@ -216,11 +216,11 @@ async def test_ai_parse_response_format(async_client, test_users):
     """
     测试AI解析接口响应格式符合统一规范
     """
-    # Mock DeepSeek API响应
+    # Mock DeepSeek API响应（只返回 global_schedule）
     mock_response = {
         "choices": [{
             "message": {
-                "content": '{"global_schedule": {"algorithm": "traditional"}, "node_dispatch": {"algorithm": "traditional"}, "route_planning": {"algorithm": "traditional"}}'
+                "content": '{"global_schedule": {"algorithm": "traditional", "weights": {"distance": 0.5, "time": 0.3, "package_count": 0.2}}}'
             }
         }]
     }
@@ -271,11 +271,11 @@ async def test_ai_parse_response_format(async_client, test_users):
 @pytest.mark.asyncio
 async def test_ai_parse_dry_run(async_client, test_users):
     """
-    测试 AI 解析接口 dry-run 模式（execute=false）
+    测试 AI 解析接口 dry-run 模式（execute="dry-run"）
 
     验证：
     1. 不调用调度链路 mock（证明未执行）
-    2. 返回 executed=false
+    2. 返回 status=None
     3. 返回解析出的 algorithm_params 和 mode
     """
     # Mock DeepSeek API 响应
@@ -312,18 +312,18 @@ async def test_ai_parse_dry_run(async_client, test_users):
             headers=headers,
             json={
                 "message": "优先缩短距离",
-                "execute": False
+                "execute": "dry-run"
             }
         )
 
         result = ai_resp.json()
         assert result["code"] == 0
         assert "dry-run" in result["message"]
-        assert result["data"]["executed"] == False
         assert result["data"]["mode"] == "ai"
         assert "algorithm_params" in result["data"]
         assert result["data"]["algorithm_params"]["global_schedule"]["weights"]["distance"] == 0.7
-        # 确认为 dry-run 模式（不应有 schedule_code）
+        # 确认为 dry-run 模式（不应有 schedule_code 和 status）
         assert "schedule_code" not in result["data"]
+        assert "status" not in result["data"]
 
 

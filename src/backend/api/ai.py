@@ -31,13 +31,13 @@ async def parse_natural_language(
     db: Session = Depends(get_db)
 ):
     """
-    自然语言解析 → 调度执行（F014）
+    自然语言解析 → 生成 draft 方案（F014）
 
     三步模型：
     1. 确定参数来源 → AI解析 / 手动权重 / 混合 / 默认
     2. 确定执行目标 → schedule_codes 非空=重规划 / 空=新建
-    3. 执行调度链路 → F007 → F021 → F005 → F006
-       （execute=false 时跳过步骤3，仅返回解析参数）
+    3. 生成 draft 方案 → F007（仅预览，不执行 F021/F005/F006）
+       （execute="dry-run" 时跳过步骤3，仅返回解析参数）
     """
     try:
         has_message = bool(request.message and request.message.strip())
@@ -57,56 +57,46 @@ async def parse_natural_language(
             reference_codes = request.schedule_codes
 
         # ── 步骤3：执行 ──
-        if not request.execute:
-            # dry-run 模式：仅返回解析出的参数，不执行调度链路
+        if request.execute == "dry-run":
+            # dry-run 模式：仅返回解析出的参数，不落库
             return {
                 "code": 0, "message": "success (dry-run)",
                 "data": {
                     "algorithm_params": algorithm_params,
                     "mode": mode,
-                    "is_replan": bool(request.schedule_codes),
-                    "executed": False,
-                    "reference_codes": reference_codes,
                 },
                 "meta": {"degraded": degraded, "degraded_reason": degraded_reason},
             }
 
         is_replan = bool(request.schedule_codes)
         if is_replan:
-            # 重规划模式：逐条对指定方案执行版本化重规划
-            replan_results = []
-            first_code = None
-            for code in request.schedule_codes:
-                replan_reason = f"AI驱动重规划: {request.message}" if has_message else "手动权重重规划"
-                result = await _execute_replan(
-                    db=db, original_code=code,
-                    replan_reason=replan_reason,
-                    algorithm_params=algorithm_params,
-                )
-                if result["code"] != 0:
-                    return result
-                replan_results.append({
-                    "original_schedule_code": code,
-                    "new_schedule_code": result["data"]["schedule_code"],
-                })
-                if first_code is None:
-                    first_code = result["data"]["schedule_code"]
+            # 重规划模式：对第一个指定方案生成 draft 版本化重规划
+            # （AI 接口只生成一个 draft 方案，无论 schedule_codes 传入几个）
+            target_code = request.schedule_codes[0]
+            replan_reason = f"AI驱动重规划: {request.message}" if has_message else "手动权重重规划"
+            result = await _execute_replan(
+                db=db, original_code=target_code,
+                replan_reason=replan_reason,
+                algorithm_params=algorithm_params,
+            )
+            if result["code"] != 0:
+                return result
+            new_code = result["data"]["schedule_code"]
 
             return {
                 "code": 0, "message": "success",
                 "data": {
-                    "schedule_code": first_code,
-                    "replan_results": replan_results,
+                    "schedule_code": new_code,
                     "algorithm_params": algorithm_params,
                     "mode": mode,
                     "is_replan": True,
-                    "executed": True,
+                    "status": "draft",
                     "reference_codes": reference_codes,
                 },
                 "meta": {"degraded": degraded, "degraded_reason": degraded_reason},
             }
         else:
-            # 新建模式：对全部 pending 订单创建新方案
+            # 新建模式：对全部 pending 订单创建 draft 方案
             schedule_code = await _execute_new_schedule(
                 db=db, algorithm_params=algorithm_params,
             )
@@ -117,7 +107,7 @@ async def parse_natural_language(
                     "algorithm_params": algorithm_params,
                     "mode": mode,
                     "is_replan": False,
-                    "executed": True,
+                    "status": "draft",
                     "reference_codes": reference_codes,
                 },
                 "meta": {"degraded": degraded, "degraded_reason": degraded_reason},
@@ -179,6 +169,12 @@ async def _resolve_params(
         # default 模式：无 message 无 weights → 默认参数
         mode = "default"
         algorithm_params = DeepSeekService._load_default_params()
+
+    # 输出标准化：无论哪种模式，只保留 global_schedule
+    # （DeepSeek 提示词已裁剪为只返回 global_schedule，
+    #   此处兜底处理手动模式可能传入的多模块 weights）
+    raw = algorithm_params
+    algorithm_params = {"global_schedule": raw.get("global_schedule", {})}
 
     return algorithm_params, mode, degraded, degraded_reason
 
@@ -260,40 +256,19 @@ def _log_deepseek(user_id: int, role: str, success: bool, degraded: bool, db: Se
 
 
 async def _execute_new_schedule(db: Session, algorithm_params: Dict[str, Any]) -> str:
-    """步骤3-new：创建全新调度方案（全部 pending 订单）"""
+    """步骤3-new：创建 draft 调度方案（仅 F007，不执行 F021/F005/F006）"""
     from services.schedule_service import ScheduleService
-    from services.dispatch_service import DispatchService
-    from services.route_service import RouteService
 
-    # F007 + F021
     result = await ScheduleService.create_global_schedule(
         order_codes=None,
         algorithm=algorithm_params.get("global_schedule", {}).get("algorithm", "traditional"),
         db=db,
         custom_weights=algorithm_params,
+        # preview=True 为默认值（P1-2），仅生成 draft，不打包
     )
     if result["code"] != 0:
         raise RuntimeError(f"全局调度失败: {result['message']}")
-    schedule_code = result["data"]["schedule_code"]
-
-    # F005
-    batch_result = await DispatchService.create_node_dispatch(
-        schedule_code=schedule_code, demo_mode=True,
-        db=db, custom_weights=algorithm_params,
-    )
-    if batch_result["code"] != 0:
-        raise RuntimeError(f"节点调度失败: {batch_result['message']}")
-    batch_code = batch_result["data"]["batch_code"]
-
-    # F006
-    route_result = await RouteService.create_route_planning(
-        batch_code=batch_code, dispatch_codes=None,
-        db=db, custom_weights=algorithm_params,
-    )
-    if route_result["code"] != 0:
-        raise RuntimeError(f"路径规划失败: {route_result['message']}")
-
-    return schedule_code
+    return result["data"]["schedule_code"]
 
 
 async def _execute_replan(
@@ -302,13 +277,14 @@ async def _execute_replan(
     replan_reason: str,
     algorithm_params: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """步骤3-replan：对指定方案执行版本化重规划"""
+    """步骤3-replan：对指定方案生成 draft 版本化重规划（仅 F007，不执行 F021/F005/F006）"""
     from services.replan_service import ReplanService
     return await ReplanService.redispatch(
         db=db,
         original_schedule_code=original_code,
         replan_reason=replan_reason,
         custom_weights=algorithm_params,
+        draft_only=True,
     )
 
 
