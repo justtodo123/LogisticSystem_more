@@ -4,8 +4,37 @@
 
 ## 项目状态
 
-**当前阶段**：P1-3（节点到货确认）✅ 已完成  
-**项目状态**：🎉 全部 8 阶段 MVP + P1-1 + P1-2 + P1-3 开发完成
+**当前版本**：MVP（阶段 0～8）+ **P1 必做项** + F015 方案解释（选做）— **已交付**（2026-06-25）  
+**主分支**：`main`  
+**交付文档**：[PRD V2.8](../../docs/prds/04产品需求文档(PRD)-V2.8-P1交付版.md) · [架构 V1.1](../../docs/architecture/系统架构设计说明书-V1.1-P1交付版.md)
+
+| 阶段 | 内容 | 状态 |
+| --- | --- | --- |
+| MVP | F001～F014 主链路 | ✅ |
+| P1-1 | score/DTO/详情 API | ✅ |
+| P1-2 | preview → confirm 两步流 | ✅ |
+| P1-3 | 节点到货确认 + 级联 | ✅ |
+| P1-4 | （前端）界面美化 | ✅ |
+| P1-5 | F015 `/api/ai/explain`；F016/F017 后端已实现 | ✅ / ⚠️ 前端占位 |
+
+**P1-5 AI（2026-06-25）**：
+- ✅ `POST /api/ai/explain`（F015）：DeepSeek 解释 + `meta.degraded`
+- ✅ `POST /api/ai/review`（F016）、`POST /api/ai/analyze-exception`（F017）：后端已实现
+- 契约：[api-contract-p1-5.md](../../docs/api-contract/api-contract-p1-5.md)
+
+**快速启动**：
+
+```bash
+python -m scripts.init_demo_data   # 重建演示数据
+uvicorn main:app --reload --port 8000
+```
+
+登录：`dispatcher` / `123456`。演示订单导入见根目录 `orderdata.xlsx`。
+
+---
+
+<details>
+<summary>历史更新记录（P1-1～P1-3 详情）</summary>
 
 **P1-3 最新更新** (2026-06-25)：
 - ✅ **L1→L2 包裹动态生成**：初始 F021 仅生成 L0→L1 包裹，L1→L2 包裹在 `confirm-arrival` 后由 `_trigger_repacking` 动态创建
@@ -47,6 +76,8 @@
 - ✅ **P1-07 过滤参数**：`GET /api/schedule/batches/{code}` 新增 `vehicle_code`、`level_phase` 过滤参数
 - ✅ **P1-07 新增端点**：`GET /batches/{batch_code}/dispatches`、`GET /{schedule_code}/dispatches`、`GET /dispatches/{dispatch_code}`
 - ✅ **API 契约文档**：更新 `docs/api-contract/api-contract-p1-1.md` 记录所有变更
+
+</details>
 
 **阶段4最新更新** (2026-06-17)：
 - **阶段4实现范围**：仅完整实现 `demo_mode=true`，`demo_mode=false` 完整流程推迟到阶段6

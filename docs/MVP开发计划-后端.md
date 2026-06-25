@@ -3,10 +3,11 @@
 | 字段 | 值 |
 | --- | --- |
 | **角色** | 后端开发（同学 A） |
+| **状态** | **MVP 已完成**（2026-06-25）；P1 见 [P1开发计划-后端.md](./P1开发计划-后端.md) |
 | **技术栈** | Python 3.11 · FastAPI · SQLAlchemy 2.0 · Alembic · SQLite |
 | **总计划** | [MVP开发计划.md](./MVP开发计划.md) |
-| **架构文档** | [系统架构设计说明书](./architecture/系统架构设计说明书.md) |
-| **需求文档** | [PRD V2.7](./prds/03产品需求文档(PRD)-V2.7.md) |
+| **架构文档** | [架构 V1.0](./architecture/系统架构设计说明书.md) · [V1.1 交付版](./architecture/系统架构设计说明书-V1.1-P1交付版.md) |
+| **需求文档** | [PRD V2.7](./prds/03产品需求文档(PRD)-V2.7.md) · [V2.8 交付版](./prds/04产品需求文档(PRD)-V2.8-P1交付版.md) |
 | **Git 协作** | [Git协作规范.md](./Git协作规范.md) |
 | **开发规范** | [开发规范.md](./开发规范.md) · [环境配置说明.md](./环境配置说明.md) |
 
@@ -315,7 +316,7 @@ F007 最小可行 → 写 global_schedules → F021 → 写 packages → POST �
 | POST /api/ai/parse | 解析 → 调调度编排 |
 | 降级 | 失败时 meta.degraded=true + 默认 traditional 参数 |
 | log_events | login、global_schedule、node_dispatch、replan、deepseek_call |
-| P1 占位 | explain/review/compare 返回 501 |
+| P1 占位 | explain/review/compare | **P1-5 已交付**：explain 已实现（见 [api-contract-p1-5.md](./api-contract/api-contract-p1-5.md)） |
 | 回归 | 完整跑一遍主链路 + 重规划 |
 
 **自测**：
@@ -381,3 +382,4 @@ F007 最小可行 → 写 global_schedules → F021 → 写 packages → POST �
 | 版本 | 日期 | 说明 |
 | --- | --- | --- |
 | V1.0 | 2026-06-09 | 后端分角色 MVP 开发计划 |
+| V1.1 | 2026-06-25 | MVP 完成标记；P1 AI 占位说明更新 |
