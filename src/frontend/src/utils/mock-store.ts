@@ -67,6 +67,7 @@ let packagesData: PackageItem[] | null = null
 let driversData: Driver[] | null = null
 let schedulesData: GlobalScheduleSummary[] | null = null
 let scheduleDetailsData: Record<string, GlobalScheduleDetail> | null = null
+let draftScheduleDetailsData: Record<string, GlobalScheduleDetail> | null = null
 let batchesData: DispatchBatchSummary[] | null = null
 let batchDetailsData: Record<string, DispatchBatchDetail> | null = null
 
@@ -127,18 +128,25 @@ async function ensureMockSchedules(): Promise<void> {
     if (!res.ok) throw new Error('加载 Mock 数据失败: /mock/schedule-details.json')
     scheduleDetailsData = (await res.json()) as Record<string, GlobalScheduleDetail>
   }
+  if (!draftScheduleDetailsData) {
+    draftScheduleDetailsData = {}
+  }
 }
 
 export async function getMockSchedules(): Promise<GlobalScheduleSummary[]> {
   await ensureMockSchedules()
-  return schedulesData!
+  return schedulesData!.filter((s) => s.status !== 'draft')
 }
 
 export async function getMockScheduleDetail(
   scheduleCode: string,
 ): Promise<GlobalScheduleDetail | null> {
   await ensureMockSchedules()
-  return scheduleDetailsData![scheduleCode] ?? null
+  return (
+    draftScheduleDetailsData![scheduleCode] ??
+    scheduleDetailsData![scheduleCode] ??
+    null
+  )
 }
 
 /** 将真实 API 返回的方案写入 Mock 缓存，供节点间调度 Mock 使用 */
@@ -156,6 +164,7 @@ export async function registerMockScheduleDetail(
     package_count: detail.package_count,
     version: detail.version,
     is_replan: detail.is_replan,
+    status: detail.status ?? 'active',
     created_at: detail.created_at,
   }
   if (!schedulesData!.some((s) => s.schedule_code === detail.schedule_code)) {
@@ -167,7 +176,64 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export async function createMockGlobalSchedule(): Promise<GlobalScheduleSummary> {
+function allMockScheduleCodes(): string[] {
+  const active = schedulesData?.map((s) => s.schedule_code) ?? []
+  const draft = Object.keys(draftScheduleDetailsData ?? {})
+  return [...active, ...draft]
+}
+
+async function buildGoodsSchedulesForOrders(orderCodes: string[]) {
+  const goods = await getMockGoods()
+  return goods
+    .filter(
+      (g) =>
+        orderCodes.includes(g.order_code) && g.status === 'pending_pack',
+    )
+    .map((g) => ({
+      goods_code: g.goods_code,
+      order_code: g.order_code,
+      goods_name: g.goods_name,
+      path: [g.node_code, 'SO101', 'SO001'],
+      path_labels: [
+        MOCK_NODE_NAMES[g.node_code] ?? g.node_code,
+        '一级分拣中心东湖',
+        '零级分拣站珞喻路',
+      ],
+    }))
+}
+
+function buildMockPackagesFromGoods(
+  goodsSchedules: GlobalScheduleDetail['goods_schedules'],
+  scheduleCode: string,
+): GlobalScheduleDetail['packages'] {
+  return goodsSchedules.map((g, idx) => ({
+    package_code: `PKG${scheduleCode.slice(2)}${String(idx + 1).padStart(2, '0')}`,
+    weight: 5 + idx,
+    volume: 0.1 + idx * 0.05,
+    status: 'packed',
+    from_node_code: g.path[0],
+    to_node_code: g.path[1],
+    from_node_name: g.path_labels?.[0],
+    to_node_name: g.path_labels?.[1],
+    goods_items: [{ goods_code: g.goods_code, order_code: g.order_code }],
+  }))
+}
+
+async function resolvePreviewOrderCodes(orderCodes?: string[]): Promise<string[]> {
+  const orders = await getMockOrders()
+  if (orderCodes?.length) {
+    return orderCodes.filter((code) =>
+      orders.some((o) => o.order_code === code && o.status === 'pending'),
+    )
+  }
+  return orders.filter((o) => o.status === 'pending').map((o) => o.order_code)
+}
+
+export async function previewMockSchedule(
+  orderCodes?: string[],
+  _algorithm = 'traditional',
+  options?: { isReplan?: boolean; baseDetail?: GlobalScheduleDetail },
+): Promise<GlobalScheduleSummary> {
   await ensureMockSchedules()
   if (useMockScheduleFail()) {
     throw new Error('无法完成全局调度，请增加1级分拣中心容量或减少订单')
@@ -175,45 +241,115 @@ export async function createMockGlobalSchedule(): Promise<GlobalScheduleSummary>
 
   await delay(1200)
 
-  const code = nextCode(
-    'GS',
-    schedulesData!.map((s) => s.schedule_code),
-  )
+  for (const key of Object.keys(draftScheduleDetailsData!)) {
+    delete draftScheduleDetailsData![key]
+  }
+
+  const resolvedOrders = await resolvePreviewOrderCodes(orderCodes)
+  if (!resolvedOrders.length && !options?.baseDetail) {
+    throw new Error('没有可预览的 pending 订单')
+  }
+
+  const code = nextCode('GS', allMockScheduleCodes())
   const now = new Date().toISOString().slice(0, 19)
+
+  const base = options?.baseDetail
+  const goodsSchedules =
+    base?.goods_schedules ?? (await buildGoodsSchedulesForOrders(resolvedOrders))
+  const orderCodesFinal =
+    base?.order_codes ?? [...new Set(goodsSchedules.map((g) => g.order_code))]
 
   const summary: GlobalScheduleSummary = {
     schedule_code: code,
-    total_distance: 102.4,
-    total_time: 195,
-    total_goods: 6,
-    score: 82.1,
-    package_count: 4,
-    version: 1,
-    is_replan: false,
+    total_distance: base?.total_distance ?? 102.4,
+    total_time: base?.total_time ?? 195,
+    total_goods: goodsSchedules.length || base?.total_goods || 0,
+    score: base?.score ?? 82.1,
+    package_count: 0,
+    version: options?.isReplan ? (base?.version ?? 1) + 1 : 1,
+    is_replan: options?.isReplan ?? false,
+    status: 'draft',
     created_at: now,
   }
 
   const detail: GlobalScheduleDetail = {
     ...summary,
-    algorithm_type: 'traditional',
-    order_codes: ['O004'],
-    goods_schedules: [
-      {
-        goods_code: 'GO004_1',
-        order_code: 'O004',
-        path: ['SC004', 'L1001', 'L2020'],
-      },
-      {
-        goods_code: 'GO004_2',
-        order_code: 'O004',
-        path: ['SC004', 'L1002', 'L2021'],
-      },
-    ],
+    algorithm_type: base?.algorithm_type ?? 'traditional',
+    order_codes: orderCodesFinal,
+    goods_schedules: goodsSchedules,
+    packages: [],
   }
 
-  schedulesData = [summary, ...schedulesData!]
-  scheduleDetailsData![code] = detail
+  draftScheduleDetailsData![code] = detail
   return summary
+}
+
+export async function confirmMockSchedule(
+  scheduleCode: string,
+): Promise<GlobalScheduleSummary> {
+  await ensureMockSchedules()
+  const draft = draftScheduleDetailsData![scheduleCode]
+  if (!draft) {
+    throw new Error('draft 方案不存在或已确认')
+  }
+
+  await delay(800)
+
+  const packages = buildMockPackagesFromGoods(
+    draft.goods_schedules,
+    scheduleCode,
+  ) ?? []
+  const activeDetail: GlobalScheduleDetail = {
+    ...draft,
+    status: 'active',
+    package_count: packages.length,
+    packages,
+  }
+
+  delete draftScheduleDetailsData![scheduleCode]
+  scheduleDetailsData![scheduleCode] = activeDetail
+
+  const summary: GlobalScheduleSummary = {
+    schedule_code: activeDetail.schedule_code,
+    total_distance: activeDetail.total_distance,
+    total_time: activeDetail.total_time,
+    total_goods: activeDetail.total_goods,
+    score: activeDetail.score,
+    package_count: activeDetail.package_count,
+    version: activeDetail.version,
+    is_replan: activeDetail.is_replan,
+    status: 'active',
+    created_at: activeDetail.created_at,
+  }
+
+  if (!schedulesData!.some((s) => s.schedule_code === scheduleCode)) {
+    schedulesData = [summary, ...schedulesData!]
+  }
+
+  const orders = await getMockOrders()
+  for (const orderCode of activeDetail.order_codes ?? []) {
+    const order = orders.find((o) => o.order_code === orderCode)
+    if (order) order.status = 'delivering'
+  }
+
+  return summary
+}
+
+export async function discardMockSchedule(
+  scheduleCode: string,
+): Promise<{ schedule_code: string; status: 'discarded' }> {
+  await ensureMockSchedules()
+  if (!draftScheduleDetailsData![scheduleCode]) {
+    throw new Error('draft 方案不存在或已确认')
+  }
+  delete draftScheduleDetailsData![scheduleCode]
+  return { schedule_code: scheduleCode, status: 'discarded' }
+}
+
+/** @deprecated 仅保留类型兼容；请使用 previewMockSchedule / confirmMockSchedule */
+export async function createMockGlobalSchedule(): Promise<GlobalScheduleSummary> {
+  const draft = await previewMockSchedule()
+  return confirmMockSchedule(draft.schedule_code)
 }
 
 
@@ -627,6 +763,7 @@ export function resetMockStore(): void {
   driversData = null
   schedulesData = null
   scheduleDetailsData = null
+  draftScheduleDetailsData = null
   batchesData = null
   batchDetailsData = null
 }

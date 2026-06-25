@@ -1,5 +1,7 @@
 import type { PackageGoodsItem } from '@/types/package'
 
+export type ScheduleStatus = 'draft' | 'active' | 'discarded'
+
 export interface ScoreBreakdown {
   distance_component: number
   time_component: number
@@ -18,6 +20,7 @@ export interface GlobalScheduleSummary {
   package_count?: number
   version?: number
   is_replan?: boolean
+  status?: ScheduleStatus
   created_at?: string
 }
 
@@ -50,6 +53,12 @@ export interface GlobalScheduleDetail extends GlobalScheduleSummary {
 
 export interface GlobalScheduleCreatePayload {
   order_codes?: string[]
-  algorithm?: string
+  algorithm: string
+  preview?: boolean
   simulate_failure?: boolean
+}
+
+export interface DiscardDraftResult {
+  schedule_code: string
+  status: 'discarded'
 }

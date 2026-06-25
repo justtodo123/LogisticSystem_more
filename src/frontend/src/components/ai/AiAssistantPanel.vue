@@ -9,7 +9,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  executed: [scheduleCode?: string]
+  'draft-created': [scheduleCode: string]
 }>()
 
 const {
@@ -28,12 +28,19 @@ const {
 } = useAiParse({
   selectedScheduleCode: () => props.selectedScheduleCode,
   scheduleCodes: () => props.schedules.map((s) => s.schedule_code),
-  onExecuted: async (code) => {
-    emit('executed', code)
+  onDraftCreated: async (code) => {
+    emit('draft-created', code)
   },
 })
 
 const scheduleOptions = computed(() => props.schedules)
+
+const resultStatusLabel = computed(() => {
+  if (!lastResult.value) return '—'
+  if (lastResult.value.status === 'draft') return 'draft 预览'
+  if (!lastResult.value.schedule_code) return 'dry-run'
+  return '—'
+})
 
 function scheduleLabel(item: GlobalScheduleSummary): string {
   const parts = [item.schedule_code]
@@ -43,11 +50,10 @@ function scheduleLabel(item: GlobalScheduleSummary): string {
 }
 
 function onWeightChange(
-  section: 'global_schedule' | 'node_dispatch',
   key: 'distance' | 'time' | 'package_count',
   value: number,
 ): void {
-  const block = weights[section]
+  const block = weights.global_schedule
   if (!block) return
   if (!block.weights) block.weights = {}
   block.weights[key] = value
@@ -64,7 +70,7 @@ function onWeightChange(
     </template>
 
     <p class="ai-hint">
-      描述调度偏好后发送；将自动完成全局调度、节点间调度与路径规划（demo_mode）。
+      描述调度偏好后发送，将生成 draft 预览方案；确认采用后才会打包落库。
       消息含「降级测试」可模拟 DeepSeek 降级。
     </p>
 
@@ -105,10 +111,13 @@ function onWeightChange(
             :value="item.schedule_code"
           />
         </el-select>
+        <p v-if="targetMode === 'multi'" class="multi-hint">
+          后端 AI 接口仅对首个选中方案生成 draft 预览
+        </p>
       </el-form-item>
 
       <el-collapse>
-        <el-collapse-item title="手动权重（可选）" name="weights">
+        <el-collapse-item title="手动权重（可选，P1-2 仅全局调度 F007 生效）" name="weights">
           <div class="weights-toolbar">
             <el-switch v-model="weightsEnabled" active-text="启用手动权重" />
             <el-button link type="primary" @click="resetWeights">恢复默认</el-button>
@@ -123,7 +132,7 @@ function onWeightChange(
                 :max="1"
                 :step="0.05"
                 :disabled="loading"
-                @update:model-value="onWeightChange('global_schedule', 'distance', $event)"
+                @update:model-value="onWeightChange('distance', $event)"
               />
             </div>
             <div class="weight-row">
@@ -134,7 +143,7 @@ function onWeightChange(
                 :max="1"
                 :step="0.05"
                 :disabled="loading"
-                @update:model-value="onWeightChange('global_schedule', 'time', $event)"
+                @update:model-value="onWeightChange('time', $event)"
               />
             </div>
             <div class="weight-row">
@@ -145,51 +154,9 @@ function onWeightChange(
                 :max="1"
                 :step="0.05"
                 :disabled="loading"
-                @update:model-value="onWeightChange('global_schedule', 'package_count', $event)"
+                @update:model-value="onWeightChange('package_count', $event)"
               />
             </div>
-            <p class="weights-section-title">节点调度 F005</p>
-            <div class="weight-row">
-              <span>距离</span>
-              <el-slider
-                :model-value="weights.node_dispatch?.weights?.distance ?? 0.5"
-                :min="0"
-                :max="1"
-                :step="0.05"
-                :disabled="loading"
-                @update:model-value="onWeightChange('node_dispatch', 'distance', $event)"
-              />
-            </div>
-            <div class="weight-row">
-              <span>时效</span>
-              <el-slider
-                :model-value="weights.node_dispatch?.weights?.time ?? 0.3"
-                :min="0"
-                :max="1"
-                :step="0.05"
-                :disabled="loading"
-                @update:model-value="onWeightChange('node_dispatch', 'time', $event)"
-              />
-            </div>
-            <div class="weight-row">
-              <span>包裹数</span>
-              <el-slider
-                :model-value="weights.node_dispatch?.weights?.package_count ?? 0.2"
-                :min="0"
-                :max="1"
-                :step="0.05"
-                :disabled="loading"
-                @update:model-value="onWeightChange('node_dispatch', 'package_count', $event)"
-              />
-            </div>
-            <p class="weights-section-title">路径规划 F006</p>
-            <el-input-number
-              v-model="weights.route_planning!.max_iterations"
-              :min="100"
-              :max="5000"
-              :step="100"
-              :disabled="loading"
-            />
           </template>
         </el-collapse-item>
       </el-collapse>
@@ -199,11 +166,11 @@ function onWeightChange(
           type="primary"
           :loading="loading"
           :disabled="loading"
-          @click="submit(true)"
+          @click="submit('draft')"
         >
-          发送并执行
+          发送并生成预览
         </el-button>
-        <el-button :loading="loading" :disabled="loading" @click="submit(false)">
+        <el-button :loading="loading" :disabled="loading" @click="submit('dry-run')">
           仅预览参数
         </el-button>
       </div>
@@ -223,13 +190,13 @@ function onWeightChange(
         <el-descriptions-item label="参数来源">
           {{ lastResult.mode }}
         </el-descriptions-item>
-        <el-descriptions-item label="已执行">
-          {{ lastResult.executed ? '是' : '否（dry-run）' }}
+        <el-descriptions-item label="方案状态">
+          {{ resultStatusLabel }}
         </el-descriptions-item>
         <el-descriptions-item v-if="lastResult.schedule_code" label="方案编号">
           {{ lastResult.schedule_code }}
         </el-descriptions-item>
-        <el-descriptions-item label="重规划">
+        <el-descriptions-item v-if="lastResult.is_replan != null" label="重规划">
           {{ lastResult.is_replan ? '是' : '否' }}
         </el-descriptions-item>
       </el-descriptions>
@@ -290,6 +257,12 @@ function onWeightChange(
   font-size: 13px;
   color: #909399;
   line-height: 1.5;
+}
+
+.multi-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #909399;
 }
 
 .ai-form {

@@ -5,6 +5,7 @@ import type { GlobalScheduleSummary } from '@/types/schedule'
 const props = defineProps<{
   summary: GlobalScheduleSummary | null
   loading?: boolean
+  isDraft?: boolean
 }>()
 
 const usesDisplayScore = computed(
@@ -57,6 +58,9 @@ const tooltipContent = computed(() => {
         版本 v{{ summary.version }}
       </span>
       <el-tag v-if="summary.is_replan" type="warning" size="small">重规划</el-tag>
+      <el-tag v-if="isDraft || summary.status === 'draft'" type="warning" size="small">
+        预览
+      </el-tag>
     </div>
     <el-row :gutter="16" class="summary-row">
     <el-col :xs="12" :sm="6">

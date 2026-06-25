@@ -1,6 +1,7 @@
 import request from './request'
 import type { ApiListParams, PaginatedResult } from '@/types/common'
 import type {
+  DiscardDraftResult,
   GlobalScheduleCreatePayload,
   GlobalScheduleDetail,
   GlobalScheduleSummary,
@@ -23,12 +24,14 @@ import {
   normalizeGlobalScheduleSummary,
 } from '@/utils/schedule-normalize'
 import {
-  createMockGlobalSchedule,
+  confirmMockSchedule,
   createMockNodeDispatch,
+  discardMockSchedule,
   getMockBatchDetail,
   getMockBatches,
   getMockScheduleDetail,
   getMockSchedules,
+  previewMockSchedule,
   registerMockScheduleDetail,
 } from '@/utils/mock-store'
 
@@ -46,40 +49,72 @@ async function ensureScheduleCachedForMockDispatch(
   await registerMockScheduleDetail(normalized)
 }
 
-export async function createGlobalSchedule(
-  payload: GlobalScheduleCreatePayload = {},
+export async function previewGlobalSchedule(
+  payload: GlobalScheduleCreatePayload,
 ): Promise<GlobalScheduleSummary> {
   if (useMockSchedule()) {
     if (payload.simulate_failure) {
       throw new Error('无法完成全局调度，请增加1级分拣中心容量或减少订单')
     }
-    return createMockGlobalSchedule()
+    return previewMockSchedule(payload.order_codes, payload.algorithm)
   }
 
   const { data } = await request.post<GlobalScheduleSummary>(
     '/schedule/global',
     {
-      algorithm: payload.algorithm ?? 'traditional',
+      algorithm: payload.algorithm,
+      preview: true,
       ...(payload.order_codes?.length
         ? { order_codes: payload.order_codes }
         : {}),
     },
     { timeout: 30000 },
   )
+  return normalizeGlobalScheduleSummary(data)
+}
+
+export async function confirmGlobalSchedule(
+  scheduleCode: string,
+): Promise<GlobalScheduleSummary> {
+  if (useMockSchedule()) {
+    const confirmed = await confirmMockSchedule(scheduleCode)
+    if (useMockNodeDispatch()) {
+      const detail = await getMockScheduleDetail(scheduleCode)
+      if (detail) {
+        await registerMockScheduleDetail(detail)
+      }
+    }
+    return confirmed
+  }
+
+  const { data } = await request.post<GlobalScheduleSummary>(
+    `/schedule/confirm/${scheduleCode}`,
+    undefined,
+    { timeout: 30000 },
+  )
+  const normalized = normalizeGlobalScheduleSummary(data)
   if (useMockNodeDispatch()) {
     try {
-      await ensureScheduleCachedForMockDispatch(data.schedule_code)
+      await ensureScheduleCachedForMockDispatch(scheduleCode)
     } catch {
-      await registerMockScheduleDetail(
-        normalizeGlobalScheduleDetail({
-          ...data,
-          goods_schedules: [],
-          algorithm_type: 'traditional',
-        }),
-      )
+      const detail = await getGlobalSchedule(scheduleCode)
+      await registerMockScheduleDetail(detail)
     }
   }
-  return normalizeGlobalScheduleSummary(data)
+  return normalized
+}
+
+export async function discardDraftSchedule(
+  scheduleCode: string,
+): Promise<DiscardDraftResult> {
+  if (useMockSchedule()) {
+    return discardMockSchedule(scheduleCode)
+  }
+
+  const { data } = await request.delete<DiscardDraftResult>(
+    `/schedule/draft/${scheduleCode}`,
+  )
+  return data
 }
 
 export async function listGlobalSchedules(

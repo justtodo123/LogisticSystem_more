@@ -8,6 +8,7 @@ import { formatNodeWithName } from '@/utils/schedule-format'
 const props = defineProps<{
   packages?: SchedulePackageItem[]
   loading?: boolean
+  isDraft?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -112,7 +113,16 @@ const filteredPackages = computed(() => {
           description="无匹配的包裹"
           :image-size="64"
         />
-        <el-empty v-else class="detail-empty" description="暂无包裹数据" :image-size="64" />
+        <el-empty
+          v-else
+          class="detail-empty"
+          :description="
+            isDraft
+              ? '预览方案尚未落库，确认采用后生成包裹'
+              : '暂无包裹数据'
+          "
+          :image-size="64"
+        />
       </div>
     </el-collapse-item>
   </el-collapse>

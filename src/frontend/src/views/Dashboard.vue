@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import DispatchBatchPanel from '@/components/schedule/DispatchBatchPanel.vue'
 import GoodsPathTable from '@/components/schedule/GoodsPathTable.vue'
+import OrderSelectPanel from '@/components/schedule/OrderSelectPanel.vue'
 import ScheduleSummaryCards from '@/components/schedule/ScheduleSummaryCards.vue'
 import VehicleTaskTable from '@/components/schedule/VehicleTaskTable.vue'
 import VehicleRoutePicker from '@/components/schedule/VehicleRoutePicker.vue'
@@ -26,17 +27,23 @@ import type { GlobalScheduleSummary } from '@/types/schedule'
 
 const authStore = useAuthStore()
 const route = useRoute()
+const selectedOrderCodes = ref<string[]>([])
 
 const {
   schedules,
   selectedCode,
+  previewCode,
   summary,
   detail,
   listLoading,
   detailLoading,
   generating,
+  isDraft,
   loadSchedules,
-  generateSchedule,
+  previewSchedule,
+  confirmSchedule,
+  discardDraftWithConfirm,
+  applyAiDraftPreview,
 } = useGlobalSchedule()
 
 const {
@@ -124,6 +131,10 @@ function scheduleOptionLabel(item: GlobalScheduleSummary): string {
   return parts.join(' · ')
 }
 
+function onOrderSelectionChange(codes: string[]): void {
+  selectedOrderCodes.value = codes
+}
+
 onMounted(() => {
   const scheduleFromQuery = route.query.schedule
   const code =
@@ -131,9 +142,8 @@ onMounted(() => {
   void loadSchedules(code)
 })
 
-async function onAiExecuted(scheduleCode?: string): Promise<void> {
-  await loadSchedules(scheduleCode)
-  await refreshDispatch()
+async function onAiDraftCreated(scheduleCode: string): Promise<void> {
+  await applyAiDraftPreview(scheduleCode)
 }
 </script>
 
@@ -147,15 +157,38 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
         </p>
       </div>
       <div class="dashboard-toolbar">
-        <el-button
-          v-if="authStore.isDispatcher"
-          type="primary"
-          :loading="generating"
-          :disabled="generating"
-          @click="generateSchedule"
-        >
-          生成全局调度
-        </el-button>
+        <template v-if="authStore.isDispatcher">
+          <el-button
+            type="primary"
+            :loading="generating"
+            :disabled="generating"
+            @click="previewSchedule(selectedOrderCodes)"
+          >
+            生成预览
+          </el-button>
+          <el-button
+            v-if="isDraft"
+            type="success"
+            :loading="generating"
+            :disabled="generating"
+            @click="confirmSchedule"
+          >
+            确认采用
+          </el-button>
+          <el-button
+            v-if="isDraft"
+            type="danger"
+            plain
+            :loading="generating"
+            :disabled="generating"
+            @click="discardDraftWithConfirm"
+          >
+            丢弃预览
+          </el-button>
+          <el-tag v-if="isDraft && previewCode" type="warning">
+            当前预览：{{ previewCode }}
+          </el-tag>
+        </template>
         <el-tag v-else type="info">只读模式</el-tag>
         <el-select
           v-model="selectedCode"
@@ -164,7 +197,7 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
           filterable
           :loading="listLoading"
           style="width: 320px"
-          :disabled="!schedules.length"
+          :disabled="isDraft || !schedules.length"
         >
           <el-option
             v-for="item in schedules"
@@ -192,19 +225,35 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
       </div>
     </div>
 
+    <OrderSelectPanel
+      v-if="authStore.isDispatcher"
+      @selection-change="onOrderSelectionChange"
+    />
+
     <el-empty
-      v-if="!listLoading && !schedules.length"
-      description="暂无调度方案，请先生成全局调度"
+      v-if="!listLoading && !schedules.length && !isDraft"
+      description="选择订单并生成预览，或从历史方案中选择"
     />
 
     <template v-else>
+      <el-alert
+        v-if="isDraft"
+        type="warning"
+        title="预览方案，尚未落库；确认采用后订单状态才会更新"
+        show-icon
+        :closable="false"
+        class="draft-alert"
+      />
+
       <ScheduleSummaryCards
         :summary="summary"
         :loading="detailLoading && !summary"
+        :is-draft="isDraft"
       />
       <SchedulePackagesPanel
         :packages="detail?.packages"
         :loading="detailLoading"
+        :is-draft="isDraft"
         @open-goods="openGoods"
       />
       <div class="dashboard-body">
@@ -222,13 +271,13 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
         <el-tooltip content="课堂演示：跳过 L1 等待，一次看到 L0→L1 与 L1→L2 任务">
           <div class="demo-switch">
             <span>demo_mode</span>
-            <el-switch v-model="demoMode" />
+            <el-switch v-model="demoMode" :disabled="isDraft" />
           </div>
         </el-tooltip>
         <el-button
           type="success"
           :loading="dispatching"
-          :disabled="dispatching || !selectedCode"
+          :disabled="dispatching || !selectedCode || isDraft"
           @click="createDispatch"
         >
           生成节点间调度
@@ -263,7 +312,7 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
           type="primary"
           plain
           :loading="simulationDelivering"
-          :disabled="simulationDelivering || !canDeliver"
+          :disabled="simulationDelivering || !canDeliver || isDraft"
           @click="deliverAll"
         >
           全部送达
@@ -272,7 +321,7 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
           type="primary"
           plain
           :loading="simulationDelivering"
-          :disabled="simulationDelivering || !canDeliver || !selectedVehicleCode"
+          :disabled="simulationDelivering || !canDeliver || !selectedVehicleCode || isDraft"
           @click="deliverVehicle()"
         >
           当前车辆送达
@@ -289,7 +338,7 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
           type="warning"
           plain
           :loading="routePlanning"
-          :disabled="routePlanning || !batchDetail?.batch_code || !routeVehicles.length"
+          :disabled="routePlanning || !batchDetail?.batch_code || !routeVehicles.length || isDraft"
           @click="planRoutes"
         >
           路径规划
@@ -342,7 +391,7 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
             type="primary"
             plain
             :loading="simulationDelivering"
-            :disabled="simulationDelivering || !canDeliver"
+            :disabled="simulationDelivering || !canDeliver || isDraft"
             @click="deliverPackage(selectedPackage.package_code)"
           >
             模拟送达此包裹
@@ -387,7 +436,7 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
       v-if="authStore.isDispatcher"
       :schedules="schedules"
       :selected-schedule-code="selectedCode"
-      @executed="onAiExecuted"
+      @draft-created="onAiDraftCreated"
     />
   </div>
 </template>
@@ -424,6 +473,10 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+}
+
+.draft-alert {
+  margin-bottom: 16px;
 }
 
 .dashboard-body {

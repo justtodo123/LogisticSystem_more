@@ -1,5 +1,7 @@
 export type AiParseMode = 'ai' | 'manual' | 'hybrid' | 'default'
 
+export type AiExecuteMode = 'draft' | 'dry-run'
+
 export interface AlgorithmWeights {
   distance?: number
   time?: number
@@ -22,7 +24,7 @@ export interface AiParseRequest {
   message?: string
   weights?: AlgorithmParams
   schedule_codes?: string[]
-  execute?: boolean
+  execute?: AiExecuteMode
 }
 
 export interface AiReplanResultItem {
@@ -35,8 +37,8 @@ export interface AiParseData {
   replan_results?: AiReplanResultItem[] | null
   algorithm_params: AlgorithmParams
   mode: AiParseMode
-  is_replan: boolean
-  executed: boolean
+  is_replan?: boolean
+  status?: 'draft'
   reference_codes?: string[] | null
 }
 
