@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Lock, User } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import Owl from '@/components/login/Owl.vue'
+import { useFocus } from '@/composables/useFocus'
 import { useAuthStore } from '@/stores/auth'
+import loginBg from '@/assets/login-bg.png'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const { isFocus, handleBlur, handleFocus } = useFocus()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -42,73 +47,154 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="login-page">
-    <el-card class="login-card" shadow="hover">
-      <template #header>
-        <h2 class="login-title">智能物流调度平台</h2>
-      </template>
-
-      <el-form
-        ref="formRef"
-        :model="form"
-        :rules="rules"
-        label-width="72px"
-        @submit.prevent="handleSubmit"
-      >
-        <el-form-item label="用户名" prop="username">
-          <el-input
-            v-model="form.username"
-            placeholder="dispatcher / manager"
-            autocomplete="username"
-          />
-        </el-form-item>
-        <el-form-item label="密码" prop="password">
-          <el-input
-            v-model="form.password"
-            type="password"
-            placeholder="请输入密码"
-            show-password
-            autocomplete="current-password"
+  <div class="login-page" :style="{ backgroundImage: `url(${loginBg})` }">
+    <div class="login-overlay" />
+    <div class="login-container">
+      <Owl :close-eyes="isFocus" />
+      <div class="login-card">
+        <div class="login-title-block">
+          <h1 class="login-title">智能物流调度平台</h1>
+          <p class="login-subtitle">
+            面向调度员与管理员的全链路物流可视化与智能调度演示系统
+          </p>
+        </div>
+        <div class="login-content">
+          <el-form
+            ref="formRef"
+            :model="form"
+            :rules="rules"
+            @submit.prevent="handleSubmit"
             @keyup.enter="handleSubmit"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button
-            type="primary"
-            class="login-button"
-            :loading="loading"
-            @click="handleSubmit"
           >
-            登录
-          </el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+            <el-form-item prop="username">
+              <el-input
+                v-model="form.username"
+                placeholder="用户名"
+                type="text"
+                tabindex="1"
+                :prefix-icon="User"
+                size="large"
+                autocomplete="username"
+              />
+            </el-form-item>
+            <el-form-item prop="password">
+              <el-input
+                v-model="form.password"
+                type="password"
+                placeholder="密码"
+                tabindex="2"
+                :prefix-icon="Lock"
+                size="large"
+                show-password
+                autocomplete="current-password"
+                @blur="handleBlur"
+                @focus="handleFocus"
+                @keyup.enter="handleSubmit"
+              />
+            </el-form-item>
+            <el-button
+              type="primary"
+              size="large"
+              class="login-button"
+              :loading="loading"
+              @click.prevent="handleSubmit"
+            >
+              登 录
+            </el-button>
+          </el-form>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .login-page {
-  min-height: 100vh;
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #e8f4ff 0%, #f5f7fa 100%);
-  padding: 24px;
+  justify-content: flex-end;
+  min-height: 100vh;
+  padding: 24px 8vw 24px 24px;
+  background-color: #b8d4e8;
+  background-size: cover;
+  background-position: left center;
+  background-repeat: no-repeat;
+}
+
+.login-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.35) 55%,
+    rgba(255, 255, 255, 0.72) 100%
+  );
+  pointer-events: none;
+}
+
+.login-container {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 440px;
 }
 
 .login-card {
   width: 100%;
-  max-width: 420px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 12px 40px rgba(80, 120, 160, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+}
+
+.login-title-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 32px 8px;
+  text-align: center;
 }
 
 .login-title {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary, #303133);
+}
+
+.login-subtitle {
   margin: 0;
-  font-size: 20px;
-  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary, #909399);
+}
+
+.login-content {
+  padding: 20px 40px 40px;
 }
 
 .login-button {
   width: 100%;
+  margin-top: 10px;
+}
+
+@media (max-width: 768px) {
+  .login-page {
+    justify-content: center;
+    padding: 24px;
+    background-position: 35% center;
+  }
+
+  .login-overlay {
+    background: rgba(255, 255, 255, 0.45);
+  }
 }
 </style>

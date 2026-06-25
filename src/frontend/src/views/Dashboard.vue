@@ -442,12 +442,6 @@ async function onAiDraftCreated(scheduleCode: string): Promise<void> {
 </template>
 
 <style scoped>
-.page-card {
-  background: #fff;
-  border-radius: 4px;
-  padding: 20px;
-}
-
 .dashboard-header {
   display: flex;
   flex-wrap: wrap;

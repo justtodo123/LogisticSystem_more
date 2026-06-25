@@ -215,12 +215,6 @@ async function deliverPackage(row: PackageItem): Promise<void> {
 </template>
 
 <style scoped>
-.page-card {
-  background: #fff;
-  border-radius: 4px;
-  padding: 20px;
-}
-
 .goods-codes {
   font-size: 12px;
   color: #606266;

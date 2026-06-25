@@ -263,10 +263,6 @@ function goDashboard(): void {
   max-width: 1200px;
 }
 
-.page-card {
-  border-radius: 8px;
-}
-
 .page-header {
   display: flex;
   align-items: flex-start;
@@ -305,10 +301,6 @@ function goDashboard(): void {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-}
-
-.text-muted {
-  color: var(--el-text-color-secondary);
 }
 
 .submit-bar {

@@ -357,11 +357,3 @@ function statusTag(status: VehicleStatus): string {
     </EntityDetailDrawer>
   </div>
 </template>
-
-<style scoped>
-.page-card {
-  background: #fff;
-  border-radius: 4px;
-  padding: 20px;
-}
-</style>

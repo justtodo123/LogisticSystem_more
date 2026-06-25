@@ -26,8 +26,8 @@ async function handleCheck() {
 </script>
 
 <template>
-  <div class="health-check">
-    <h2>后端联通测试</h2>
+  <div class="page-card health-check">
+    <h2 class="health-title">后端联通测试</h2>
     <p class="health-desc">
       点击按钮请求 <code>GET /api/health</code>，验证 Vite 代理与后端服务是否正常。
     </p>
@@ -54,6 +54,13 @@ async function handleCheck() {
 <style scoped>
 .health-check {
   max-width: 640px;
+}
+
+.health-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary, #303133);
 }
 
 .health-desc {
