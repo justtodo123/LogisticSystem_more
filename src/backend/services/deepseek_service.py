@@ -203,7 +203,7 @@ class DeepSeekService:
             request_body = DeepSeekService._build_request_body(user_prompt)
             api_url = DeepSeekService._build_api_url()
 
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     api_url,
                     headers={
@@ -339,7 +339,35 @@ class DeepSeekService:
 3. 潜在风险应该实际、可预防
 4. 优化建议应该具体、可执行"""
 
-        # 2. 构建用户提示词
+        # 2. 构建用户提示词（压缩数据，避免 token 过多导致超时）
+        goods_schedules = schedule_data.get('goods_schedules', [])
+        packages = schedule_data.get('packages', [])
+
+        # 货物路径摘要：每条货物只保留 goods_code + path 节点序列
+        goods_summary = []
+        for gs in goods_schedules:
+            path = gs.get('path', [])
+            # path 可能是字符串列表 ["SC001","SO001"] 或对象列表 [{"node_code":"SC001",...}]
+            node_codes = []
+            for p in path:
+                if isinstance(p, dict):
+                    node_codes.append(p.get('node_code', '?'))
+                else:
+                    node_codes.append(str(p))
+            goods_summary.append(f"{gs.get('goods_code','?')}: {' → '.join(node_codes)}")
+        goods_text = "\n".join(goods_summary[:30])  # 最多展示 30 条
+        if len(goods_summary) > 30:
+            goods_text += f"\n...（共 {len(goods_summary)} 条，已截断）"
+
+        # 包裹摘要：只保留包裹编码 + 状态
+        pkg_summary = []
+        for p in packages:
+            goods_list = [g.get('goods_code','?') for g in p.get('goods_items',[])]
+            pkg_summary.append(f"{p.get('package_code','?')}[{p.get('status','?')}]: {', '.join(goods_list[:5])}")
+        packages_text = "\n".join(pkg_summary[:20])  # 最多展示 20 个包裹
+        if len(pkg_summary) > 20:
+            packages_text += f"\n...（共 {len(pkg_summary)} 个包裹，已截断）"
+
         user_prompt = f"""请解释以下调度方案：
 
 调度方案编码: {schedule_data.get('schedule_code', '?')}
@@ -350,21 +378,20 @@ class DeepSeekService:
 算法类型: {schedule_data.get('algorithm_type', '?')}
 创建时间: {schedule_data.get('created_at', '?')}
 
-货物调度路径:
-{json.dumps(schedule_data.get('goods_schedules', []), ensure_ascii=False, indent=2)}
+货物路径清单:
+{goods_text if goods_text else '（无数据）'}
 
-包裹信息:
-{json.dumps(schedule_data.get('packages', []), ensure_ascii=False, indent=2)}
+包裹清单:
+{packages_text if packages_text else '（无数据）'}
 
-请生成解释。
-"""
+请生成解释。"""
 
         # 3. 调用DeepSeek API
         try:
             request_body = DeepSeekService._build_request_body(user_prompt, system_prompt)
             api_url = DeepSeekService._build_api_url()
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     api_url,
                     headers={
@@ -466,7 +493,30 @@ class DeepSeekService:
 4. 优化建议应该可行、可操作（如更换车辆、调整路线）
 """
 
-        # 2. 构建用户提示词
+        # 2. 构建用户提示词（压缩数据，避免 token 过多导致超时）
+        dispatches = batch_data.get('dispatches', [])
+        routes = batch_data.get('routes', [])
+
+        # 车辆调度摘要
+        disp_summary = []
+        for d in dispatches[:15]:
+            tasks = d.get('tasks', [])
+            task_nodes = []
+            for t in tasks[:3]:
+                task_nodes.append(f"{t.get('from_node_code','?')}→{t.get('to_node_code','?')}")
+            disp_summary.append(f"{d.get('dispatch_code','?')} veh:{d.get('vehicle_code','?')} tasks:{'; '.join(task_nodes)}")
+        dispatches_text = "\n".join(disp_summary)
+        if len(dispatches) > 15:
+            dispatches_text += f"\n...（共 {len(dispatches)} 条调度，已截断）"
+
+        # 路线摘要
+        route_summary = []
+        for r in routes[:15]:
+            route_summary.append(f"{r.get('route_code','?')} veh:{r.get('vehicle_code','?')} dist:{r.get('total_distance','?')}km time:{r.get('total_time','?')}h")
+        routes_text = "\n".join(route_summary)
+        if len(routes) > 15:
+            routes_text += f"\n...（共 {len(routes)} 条路线，已截断）"
+
         user_prompt = f"""请审查以下调度方案和批次：
 
 调度方案编码: {schedule_data.get('schedule_code', '?')}
@@ -480,11 +530,11 @@ class DeepSeekService:
 L0→L1调度次数: {batch_data.get('l0_l1_dispatch_count', '?')}
 L1→L2调度次数: {batch_data.get('l1_l2_dispatch_count', '?')}
 
-车辆分配详情:
-{json.dumps(batch_data.get('dispatches', []), ensure_ascii=False, indent=2)}
+车辆调度清单:
+{dispatches_text if dispatches_text else '（无数据）'}
 
-路线规划结果:
-{json.dumps(batch_data.get('routes', []), ensure_ascii=False, indent=2)}
+路线清单:
+{routes_text if routes_text else '（无数据）'}
 
 请识别潜在风险。
 """
@@ -494,7 +544,7 @@ L1→L2调度次数: {batch_data.get('l1_l2_dispatch_count', '?')}
             request_body = DeepSeekService._build_request_body(user_prompt, system_prompt)
             api_url = DeepSeekService._build_api_url()
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     api_url,
                     headers={
@@ -570,9 +620,26 @@ L1→L2调度次数: {batch_data.get('l1_l2_dispatch_count', '?')}
 - 节点异常："建议将L1分拣中心从SC001更换为SC002，因为SC001容量不足"
 """
 
-        # 2. 构建用户提示词
-        schedule_json = json.dumps(schedule_data, ensure_ascii=False, indent=2) if schedule_data else "无关联调度方案"
-        
+        # 2. 构建用户提示词（压缩数据，避免 token 过多导致超时）
+        if schedule_data:
+            gs_list = schedule_data.get('goods_schedules', [])
+            schedule_summary = f"方案{schedule_data.get('schedule_code','?')}: 距离{schedule_data.get('total_distance','?')}km 时间{schedule_data.get('total_time','?')}h 货物{len(gs_list)}件 评分{schedule_data.get('score','?')}"
+            if gs_list:
+                paths = []
+                for gs in gs_list[:10]:
+                    node_codes = []
+                    for p in gs.get('path', []):
+                        if isinstance(p, dict):
+                            node_codes.append(p.get('node_code', '?'))
+                        else:
+                            node_codes.append(str(p))
+                    paths.append(f"{gs.get('goods_code','?')}: {' → '.join(node_codes)}")
+                schedule_summary += "\n货物路径:\n" + "\n".join(paths)
+                if len(gs_list) > 10:
+                    schedule_summary += f"\n...（共 {len(gs_list)} 条，已截断）"
+        else:
+            schedule_summary = "无关联调度方案"
+
         user_prompt = f"""请分析以下异常事件，并给出处理建议：
 
 ## 异常事件详情
@@ -585,8 +652,8 @@ L1→L2调度次数: {batch_data.get('l1_l2_dispatch_count', '?')}
 - 推荐操作: {exception_data.get('recommended_action', '?')} (redispatch/reroute)
 - 创建时间: {exception_data.get('created_at', '?')}
 
-## 关联调度方案（如果有）
-{schedule_json}
+## 关联调度方案
+{schedule_summary}
 
 ## 当前状态
 - 异常事件状态: {exception_data.get('status', '?')}
@@ -599,7 +666,7 @@ L1→L2调度次数: {batch_data.get('l1_l2_dispatch_count', '?')}
             request_body = DeepSeekService._build_request_body(user_prompt, system_prompt)
             api_url = DeepSeekService._build_api_url()
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     api_url,
                     headers={

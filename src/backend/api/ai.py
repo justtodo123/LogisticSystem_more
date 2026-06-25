@@ -3,9 +3,9 @@ AI 助手路由模块
 
 功能：
 1. POST /api/ai/parse - 自然语言解析 + 自动执行调度（P0，F014）
-2. POST /api/ai/explain - 方案解释（P1，F015，占位 501）
-3. POST /api/ai/review - 方案审查（P1，F016，占位 501）
-4. POST /api/ai/analyze-exception - 异常分析（P1，F017，占位 501）
+2. POST /api/ai/explain - 方案解释（F015，已实现 — 含 DeepSeek 降级策略）
+3. POST /api/ai/review - 方案审查（F016，已实现 — 含 DeepSeek 降级策略）
+4. POST /api/ai/analyze-exception - 异常分析（F017，已实现 — 含 DeepSeek 降级策略）
 """
 import logging
 from fastapi import APIRouter, Depends, HTTPException
