@@ -1,10 +1,28 @@
 import type {
   DispatchBatchDetail,
   DispatchBatchSummary,
+  DispatchTask,
   NodeDispatchItem,
   NodeDispatchPhase,
   NodeDispatchResult,
 } from '@/types/dispatch'
+
+function normalizeDispatchTask(task: DispatchTask): DispatchTask {
+  return {
+    ...task,
+    package_codes:
+      task.package_codes ??
+      task.package_details?.map((p) => p.package_code) ??
+      [],
+  }
+}
+
+function normalizeDispatchItem(item: NodeDispatchItem): NodeDispatchItem {
+  return {
+    ...item,
+    tasks: item.tasks.map(normalizeDispatchTask),
+  }
+}
 
 function isMockPhase(
   item: NodeDispatchPhase | NodeDispatchItem,
@@ -18,17 +36,19 @@ export function flattenDispatches(
 ): NodeDispatchItem[] {
   if (!dispatches.length) return []
   if (!isMockPhase(dispatches[0])) {
-    return dispatches as NodeDispatchItem[]
+    return (dispatches as NodeDispatchItem[]).map(normalizeDispatchItem)
   }
   return (dispatches as NodeDispatchPhase[]).flatMap((phase) =>
-    phase.vehicle_tasks.map((vt) => ({
-      dispatch_code: phase.dispatch_code,
-      vehicle_code: vt.vehicle_code,
-      driver_code: vt.driver_code,
-      level_phase: phase.level_phase,
-      tasks: vt.tasks,
-      total_distance: vt.distance,
-    })),
+    phase.vehicle_tasks.map((vt) =>
+      normalizeDispatchItem({
+        dispatch_code: phase.dispatch_code,
+        vehicle_code: vt.vehicle_code,
+        driver_code: vt.driver_code,
+        level_phase: phase.level_phase,
+        tasks: vt.tasks,
+        total_distance: vt.distance,
+      }),
+    ),
   )
 }
 

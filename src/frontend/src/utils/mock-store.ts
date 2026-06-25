@@ -11,13 +11,53 @@ import type { Vehicle } from '@/types/vehicle'
 import type {
   DispatchBatchDetail,
   DispatchBatchSummary,
+  DispatchTask,
   NodeDispatchCreatePayload,
+  NodeDispatchItem,
   NodeDispatchPhase,
   NodeDispatchResult,
 } from '@/types/dispatch'
 import { useMockScheduleFail } from '@/utils/env'
 import { normalizeBatchDetail } from '@/utils/dispatch-normalize'
 import { nextCode } from '@/utils/mock'
+
+/** Mock 调度任务节点 code → 名称（与 nodes.json / schedule-details 对齐） */
+const MOCK_NODE_NAMES: Record<string, string> = {
+  SC001: '华中仓储中心A',
+  SC002: '华中仓储中心B',
+  SC003: '华中仓储中心C',
+  SC004: '华中仓储中心D',
+  SC005: '华中仓储中心E',
+  SO101: '一级分拣中心东湖',
+  SO102: '一级分拣中心汉阳',
+  SO001: '零级分拣站珞喻路',
+  SO002: '零级分拣站街道口',
+  SO003: '零级分拣站光谷',
+  SO004: '零级分拣站江汉路',
+  SO005: '零级分拣站武昌站',
+  L1001: '一级分拣中心东湖',
+  L1002: '一级分拣中心汉阳',
+  L2001: '零级分拣站珞喻路',
+  L2005: '零级分拣站武昌站',
+}
+
+function enrichDispatchTasksWithNodeNames(
+  dispatches: NodeDispatchItem[],
+): NodeDispatchItem[] {
+  return dispatches.map((d) => ({
+    ...d,
+    tasks: d.tasks.map((t) => enrichTaskNodeNames(t)),
+  }))
+}
+
+function enrichTaskNodeNames(task: DispatchTask): DispatchTask {
+  return {
+    ...task,
+    from_node_name:
+      task.from_node_name ?? MOCK_NODE_NAMES[task.from_node_code],
+    to_node_name: task.to_node_name ?? MOCK_NODE_NAMES[task.to_node_code],
+  }
+}
 
 let nodesData: NodeItem[] | null = null
 let ordersData: Order[] | null = null
@@ -347,7 +387,7 @@ function buildMockDispatchDetail(
     status = 'l0_l1_done'
   }
 
-  return normalizeBatchDetail({
+  const detail = normalizeBatchDetail({
     batch_code: batchCode,
     schedule_code: scheduleCode,
     status,
@@ -359,6 +399,10 @@ function buildMockDispatchDetail(
     created_at: now,
     dispatches,
   })
+  return {
+    ...detail,
+    dispatches: enrichDispatchTasksWithNodeNames(detail.dispatches),
+  }
 }
 
 async function markPackagesInTransit(

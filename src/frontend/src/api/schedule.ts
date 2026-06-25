@@ -19,6 +19,10 @@ import {
   normalizeNodeDispatchResult,
 } from '@/utils/dispatch-normalize'
 import {
+  normalizeGlobalScheduleDetail,
+  normalizeGlobalScheduleSummary,
+} from '@/utils/schedule-normalize'
+import {
   createMockGlobalSchedule,
   createMockNodeDispatch,
   getMockBatchDetail,
@@ -38,7 +42,8 @@ async function ensureScheduleCachedForMockDispatch(
   const { data } = await request.get<GlobalScheduleDetail>(
     `/schedule/global/${scheduleCode}`,
   )
-  await registerMockScheduleDetail(data)
+  const normalized = normalizeGlobalScheduleDetail(data)
+  await registerMockScheduleDetail(normalized)
 }
 
 export async function createGlobalSchedule(
@@ -65,14 +70,16 @@ export async function createGlobalSchedule(
     try {
       await ensureScheduleCachedForMockDispatch(data.schedule_code)
     } catch {
-      await registerMockScheduleDetail({
-        ...data,
-        goods_schedules: [],
-        algorithm_type: 'traditional',
-      })
+      await registerMockScheduleDetail(
+        normalizeGlobalScheduleDetail({
+          ...data,
+          goods_schedules: [],
+          algorithm_type: 'traditional',
+        }),
+      )
     }
   }
-  return data
+  return normalizeGlobalScheduleSummary(data)
 }
 
 export async function listGlobalSchedules(
@@ -87,7 +94,10 @@ export async function listGlobalSchedules(
     '/schedule/global',
     { params },
   )
-  return data
+  return {
+    ...data,
+    items: data.items.map(normalizeGlobalScheduleSummary),
+  }
 }
 
 export async function getGlobalSchedule(
@@ -104,7 +114,7 @@ export async function getGlobalSchedule(
   const { data } = await request.get<GlobalScheduleDetail>(
     `/schedule/global/${scheduleCode}`,
   )
-  return data
+  return normalizeGlobalScheduleDetail(data)
 }
 
 export async function createNodeDispatch(

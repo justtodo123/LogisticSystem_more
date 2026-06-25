@@ -12,10 +12,16 @@ import RouteDetailMeta from '@/components/schedule/RouteDetailMeta.vue'
 import SchedulePackagesPanel from '@/components/schedule/SchedulePackagesPanel.vue'
 import UnallocatedAlert from '@/components/schedule/UnallocatedAlert.vue'
 import AiAssistantPanel from '@/components/ai/AiAssistantPanel.vue'
+import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
+import GoodsDetailBody from '@/components/detail/GoodsDetailBody.vue'
+import OrderDetailBody from '@/components/detail/OrderDetailBody.vue'
+import PackageDetailBody from '@/components/detail/PackageDetailBody.vue'
+import DispatchDetailBody from '@/components/schedule/DispatchDetailBody.vue'
 import { useGlobalSchedule } from '@/composables/useGlobalSchedule'
 import { useNodeDispatch } from '@/composables/useNodeDispatch'
 import { useRouteVisualization } from '@/composables/useRouteVisualization'
 import { useSimulationDelivery } from '@/composables/useSimulationDelivery'
+import { useDashboardDetail } from '@/composables/useDashboardDetail'
 import type { GlobalScheduleSummary } from '@/types/schedule'
 
 const authStore = useAuthStore()
@@ -70,6 +76,39 @@ const {
   selectedVehicleCode,
   onSuccess: refreshDispatch,
 })
+
+const {
+  goodsDetail,
+  orderDetail,
+  packageDetail,
+  dispatchVisible,
+  dispatchData,
+  openGoods,
+  openOrder,
+  openDispatch,
+  closeDispatch,
+} = useDashboardDetail()
+
+const {
+  visible: goodsDrawerVisible,
+  loading: goodsDrawerLoading,
+  data: goodsDrawerData,
+  title: goodsDrawerTitle,
+} = goodsDetail
+
+const {
+  visible: orderDrawerVisible,
+  loading: orderDrawerLoading,
+  data: orderDrawerData,
+  title: orderDrawerTitle,
+} = orderDetail
+
+const {
+  visible: packageDrawerVisibleEntity,
+  loading: packageDrawerLoading,
+  data: packageDrawerData,
+  title: packageDrawerTitle,
+} = packageDetail
 
 function scheduleOptionLabel(item: GlobalScheduleSummary): string {
   const parts: string[] = [item.schedule_code]
@@ -166,11 +205,14 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
       <SchedulePackagesPanel
         :packages="detail?.packages"
         :loading="detailLoading"
+        @open-goods="openGoods"
       />
       <div class="dashboard-body">
         <GoodsPathTable
           :items="detail?.goods_schedules ?? []"
           :loading="detailLoading"
+          @open-goods="openGoods"
+          @open-order="openOrder"
         />
       </div>
 
@@ -202,6 +244,7 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
       <VehicleTaskTable
         :detail="batchDetail"
         :loading="batchDetailLoading"
+        @open-dispatch="openDispatch"
       />
 
       <UnallocatedAlert :codes="batchDetail?.unallocated_packages" />
@@ -306,6 +349,38 @@ async function onAiExecuted(scheduleCode?: string): Promise<void> {
           </el-button>
         </div>
       </el-drawer>
+
+      <EntityDetailDrawer
+        v-model="goodsDrawerVisible"
+        :title="goodsDrawerTitle"
+        :loading="goodsDrawerLoading"
+      >
+        <GoodsDetailBody v-if="goodsDrawerData" :data="goodsDrawerData" />
+      </EntityDetailDrawer>
+
+      <EntityDetailDrawer
+        v-model="orderDrawerVisible"
+        :title="orderDrawerTitle"
+        :loading="orderDrawerLoading"
+      >
+        <OrderDetailBody v-if="orderDrawerData" :data="orderDrawerData" />
+      </EntityDetailDrawer>
+
+      <EntityDetailDrawer
+        v-model="packageDrawerVisibleEntity"
+        :title="packageDrawerTitle"
+        :loading="packageDrawerLoading"
+      >
+        <PackageDetailBody v-if="packageDrawerData" :data="packageDrawerData" />
+      </EntityDetailDrawer>
+
+      <EntityDetailDrawer
+        v-model="dispatchVisible"
+        :title="dispatchData ? `调度 · ${dispatchData.dispatch_code}` : '调度详情'"
+        @update:model-value="(v) => !v && closeDispatch()"
+      >
+        <DispatchDetailBody v-if="dispatchData" :data="dispatchData" />
+      </EntityDetailDrawer>
     </template>
 
     <AiAssistantPanel

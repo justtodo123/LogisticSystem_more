@@ -5,27 +5,130 @@
     "total_time": 240,
     "total_goods": 12,
     "score": 89.3,
+    "score_display": 89.3,
+    "score_breakdown": {
+      "distance_component": 38.5,
+      "time_component": 28.4,
+      "goods_component": 22.4,
+      "formula": "distance×0.3 + time×0.3 + goods×0.4"
+    },
     "package_count": 8,
     "version": 1,
     "is_replan": false,
     "algorithm_type": "traditional",
-    "order_codes": ["O001", "O002"],
+    "order_codes": ["O20260612001", "O20260612002"],
     "created_at": "2026-06-13T10:00:00",
     "goods_schedules": [
       {
-        "goods_code": "GO001_1",
-        "order_code": "O001",
-        "path": ["SC001", "L1001", "L2001"]
+        "goods_code": "G20260612001",
+        "order_code": "O20260612001",
+        "goods_name": "笔记本电脑",
+        "path": ["SC001", "SO101", "SO001"],
+        "path_labels": ["华中仓储中心A", "一级分拣中心东湖", "零级分拣站珞喻路"]
       },
       {
-        "goods_code": "GO001_2",
-        "order_code": "O001",
-        "path": ["SC001", "L1001", "L2001"]
+        "goods_code": "G20260612002",
+        "order_code": "O20260612001",
+        "goods_name": "办公椅",
+        "path": ["SC001", "SO101", "SO001"],
+        "path_labels": ["华中仓储中心A", "一级分拣中心东湖", "零级分拣站珞喻路"]
       },
       {
-        "goods_code": "GO002_1",
-        "order_code": "O002",
-        "path": ["SC002", "L1002", "L2005"]
+        "goods_code": "G20260612003",
+        "order_code": "O20260612002",
+        "goods_name": "运动鞋",
+        "path": ["SC002", "SO102", "SO005"],
+        "path_labels": ["华中仓储中心B", "一级分拣中心汉阳", "零级分拣站武昌站"]
+      }
+    ],
+    "packages": [
+      {
+        "package_code": "PKG20260613001",
+        "weight": 12.5,
+        "volume": 0.45,
+        "status": "packed",
+        "from_node_code": "SC001",
+        "to_node_code": "SO101",
+        "from_node_name": "华中仓储中心A",
+        "to_node_name": "一级分拣中心东湖",
+        "goods_items": [{ "goods_code": "G20260612001", "order_code": "O20260612001" }]
+      },
+      {
+        "package_code": "PKG20260613002",
+        "weight": 8.2,
+        "volume": 0.32,
+        "status": "packed",
+        "from_node_code": "SC001",
+        "to_node_code": "SO101",
+        "from_node_name": "华中仓储中心A",
+        "to_node_name": "一级分拣中心东湖",
+        "goods_items": [{ "goods_code": "G20260612002", "order_code": "O20260612001" }]
+      },
+      {
+        "package_code": "PKG20260613003",
+        "weight": 5.0,
+        "volume": 0.18,
+        "status": "pending_pack",
+        "from_node_code": "SO101",
+        "to_node_code": "SO001",
+        "from_node_name": "一级分拣中心东湖",
+        "to_node_name": "零级分拣站珞喻路",
+        "goods_items": [{ "goods_code": "G20260612001", "order_code": "O20260612001" }]
+      },
+      {
+        "package_code": "PKG20260613004",
+        "weight": 6.8,
+        "volume": 0.22,
+        "status": "pending_pack",
+        "from_node_code": "SO101",
+        "to_node_code": "SO001",
+        "from_node_name": "一级分拣中心东湖",
+        "to_node_name": "零级分拣站珞喻路",
+        "goods_items": [{ "goods_code": "G20260612002", "order_code": "O20260612001" }]
+      },
+      {
+        "package_code": "PKG20260613005",
+        "weight": 15.0,
+        "volume": 0.55,
+        "status": "packed",
+        "from_node_code": "SC002",
+        "to_node_code": "SO102",
+        "from_node_name": "华中仓储中心B",
+        "to_node_name": "一级分拣中心汉阳",
+        "goods_items": [{ "goods_code": "G20260612003", "order_code": "O20260612002" }]
+      },
+      {
+        "package_code": "PKG20260613006",
+        "weight": 4.2,
+        "volume": 0.12,
+        "status": "pending_pack",
+        "from_node_code": "SO102",
+        "to_node_code": "SO005",
+        "from_node_name": "一级分拣中心汉阳",
+        "to_node_name": "零级分拣站武昌站",
+        "goods_items": [{ "goods_code": "G20260612003", "order_code": "O20260612002" }]
+      },
+      {
+        "package_code": "PKG20260613007",
+        "weight": 3.1,
+        "volume": 0.08,
+        "status": "pending_pack",
+        "from_node_code": "SO102",
+        "to_node_code": "SO005",
+        "from_node_name": "一级分拣中心汉阳",
+        "to_node_name": "零级分拣站武昌站",
+        "goods_items": [{ "goods_code": "G20260612003", "order_code": "O20260612002" }]
+      },
+      {
+        "package_code": "PKG20260613008",
+        "weight": 2.0,
+        "volume": 0.05,
+        "status": "pending_pack",
+        "from_node_code": "SO102",
+        "to_node_code": "SO005",
+        "from_node_name": "一级分拣中心汉阳",
+        "to_node_name": "零级分拣站武昌站",
+        "goods_items": [{ "goods_code": "G20260612003", "order_code": "O20260612002" }]
       }
     ]
   },
@@ -34,23 +137,91 @@
     "total_distance": 95.2,
     "total_time": 180,
     "total_goods": 8,
-    "score": 76.5,
+    "score": 12847.5,
+    "score_display": 85.3,
+    "score_breakdown": {
+      "distance_component": 3856.2,
+      "time_component": 4520.8,
+      "goods_component": 4470.5,
+      "formula": "distance×0.3 + time×0.3 + goods×0.4（原始分 12847.5，展示分 85.3）"
+    },
     "package_count": 5,
     "version": 1,
     "is_replan": false,
     "algorithm_type": "traditional",
-    "order_codes": ["O003"],
+    "order_codes": ["O20260612003"],
     "created_at": "2026-06-12T15:30:00",
     "goods_schedules": [
       {
-        "goods_code": "GO003_1",
-        "order_code": "O003",
-        "path": ["SC003", "L1001", "L2010"]
+        "goods_code": "G20260612004",
+        "order_code": "O20260612003",
+        "goods_name": "生鲜D",
+        "path": ["SC003", "SO101", "SO003"],
+        "path_labels": ["华中仓储中心C", "一级分拣中心东湖", "零级分拣站光谷"]
       },
       {
-        "goods_code": "GO003_2",
-        "order_code": "O003",
-        "path": ["SC003", "L1002", "L2012"]
+        "goods_code": "G20260612005",
+        "order_code": "O20260612003",
+        "goods_name": "生鲜E",
+        "path": ["SC003", "SO102", "SO004"],
+        "path_labels": ["华中仓储中心C", "一级分拣中心汉阳", "零级分拣站江汉路"]
+      }
+    ],
+    "packages": [
+      {
+        "package_code": "PKG20260612001",
+        "weight": 18.5,
+        "volume": 0.82,
+        "status": "packed",
+        "from_node_code": "SC003",
+        "to_node_code": "SO101",
+        "from_node_name": "华中仓储中心C",
+        "to_node_name": "一级分拣中心东湖",
+        "goods_items": [{ "goods_code": "G20260612004", "order_code": "O20260612003" }]
+      },
+      {
+        "package_code": "PKG20260612002",
+        "weight": 9.0,
+        "volume": 0.35,
+        "status": "pending_pack",
+        "from_node_code": "SO101",
+        "to_node_code": "SO003",
+        "from_node_name": "一级分拣中心东湖",
+        "to_node_name": "零级分拣站光谷",
+        "goods_items": [{ "goods_code": "G20260612004", "order_code": "O20260612003" }]
+      },
+      {
+        "package_code": "PKG20260612003",
+        "weight": 11.0,
+        "volume": 0.28,
+        "status": "packed",
+        "from_node_code": "SC003",
+        "to_node_code": "SO102",
+        "from_node_name": "华中仓储中心C",
+        "to_node_name": "一级分拣中心汉阳",
+        "goods_items": [{ "goods_code": "G20260612005", "order_code": "O20260612003" }]
+      },
+      {
+        "package_code": "PKG20260612004",
+        "weight": 7.5,
+        "volume": 0.2,
+        "status": "pending_pack",
+        "from_node_code": "SO102",
+        "to_node_code": "SO004",
+        "from_node_name": "一级分拣中心汉阳",
+        "to_node_name": "零级分拣站江汉路",
+        "goods_items": [{ "goods_code": "G20260612005", "order_code": "O20260612003" }]
+      },
+      {
+        "package_code": "PKG20260612005",
+        "weight": 5.5,
+        "volume": 0.15,
+        "status": "pending_pack",
+        "from_node_code": "SO102",
+        "to_node_code": "SO004",
+        "from_node_name": "一级分拣中心汉阳",
+        "to_node_name": "零级分拣站江汉路",
+        "goods_items": [{ "goods_code": "G20260612005", "order_code": "O20260612003" }]
       }
     ]
   }
