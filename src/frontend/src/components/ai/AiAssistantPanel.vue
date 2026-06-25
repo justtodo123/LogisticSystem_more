@@ -2,6 +2,9 @@
 import { computed } from 'vue'
 import type { GlobalScheduleSummary } from '@/types/schedule'
 import { useAiParse } from '@/composables/useAiParse'
+import { useAiExplain } from '@/composables/useAiExplain'
+import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
+import ExplainResultBody from '@/components/ai/ExplainResultBody.vue'
 
 const props = defineProps<{
   schedules: GlobalScheduleSummary[]
@@ -33,7 +36,24 @@ const {
   },
 })
 
+const {
+  loading: explainLoading,
+  drawerVisible: explainDrawerVisible,
+  result: explainResult,
+  meta: explainMeta,
+  pendingMessage: explainPendingMessage,
+  activeScheduleCode,
+  explain,
+  closeDrawer: closeExplainDrawer,
+  clearPending: clearExplainPending,
+} = useAiExplain()
+
 const scheduleOptions = computed(() => props.schedules)
+
+const explainDrawerTitle = computed(() => {
+  const code = explainResult.value?.schedule_code ?? activeScheduleCode.value
+  return code ? `AI 方案解释 · ${code}` : 'AI 方案解释'
+})
 
 const resultStatusLabel = computed(() => {
   if (!lastResult.value) return '—'
@@ -58,6 +78,10 @@ function onWeightChange(
   if (!block.weights) block.weights = {}
   block.weights[key] = value
 }
+
+function handleExplainClick(): void {
+  explain(props.selectedScheduleCode)
+}
 </script>
 
 <template>
@@ -71,7 +95,7 @@ function onWeightChange(
 
     <p class="ai-hint">
       描述调度偏好后发送，将生成 draft 预览方案；确认采用后才会打包落库。
-      消息含「降级测试」可模拟 DeepSeek 降级。
+      消息含「降级测试」可模拟 DeepSeek 降级。重规划方案 Mock 解释可演示降级提示。
     </p>
 
     <el-form label-position="top" class="ai-form">
@@ -214,15 +238,26 @@ function onWeightChange(
     </div>
 
     <el-divider content-position="left">P1 功能</el-divider>
+
+    <el-alert
+      v-if="explainPendingMessage"
+      type="info"
+      :title="explainPendingMessage"
+      show-icon
+      :closable="true"
+      class="ai-alert"
+      @close="clearExplainPending"
+    />
+
     <div class="p1-actions">
-      <el-tooltip content="即将推出（P1）；联调时可点击验证 501 占位">
-        <el-button
-          size="small"
-          @click="tryP1('explain', selectedScheduleCode)"
-        >
-          方案解释
-        </el-button>
-      </el-tooltip>
+      <el-button
+        size="small"
+        :loading="explainLoading"
+        :disabled="explainLoading"
+        @click="handleExplainClick"
+      >
+        方案解释
+      </el-button>
       <el-tooltip content="即将推出（P1）">
         <el-button
           size="small"
@@ -237,6 +272,19 @@ function onWeightChange(
         </el-button>
       </el-tooltip>
     </div>
+
+    <EntityDetailDrawer
+      v-model="explainDrawerVisible"
+      :title="explainDrawerTitle"
+      :loading="explainLoading"
+      @update:model-value="(v) => !v && closeExplainDrawer()"
+    >
+      <ExplainResultBody
+        v-if="explainResult"
+        :data="explainResult"
+        :meta="explainMeta"
+      />
+    </EntityDetailDrawer>
   </el-card>
 </template>
 

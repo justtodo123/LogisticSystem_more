@@ -59,6 +59,34 @@ export interface AiExplainRequest {
   detail_level?: 'brief' | 'detailed'
 }
 
+export interface AiExplainSections {
+  reasoning?: string
+  key_decisions?: string[]
+  risks?: string[]
+  suggestions?: string[]
+}
+
+/** 后端 POST /ai/explain 原始响应 data 字段 */
+export interface AiExplainRawData {
+  explanation: string
+  key_decisions?: string[]
+  potential_risks?: string[]
+  suggestions?: string[]
+}
+
+export interface AiExplainData {
+  schedule_code: string
+  explanation: string
+  sections?: AiExplainSections
+}
+
+export interface AiExplainResult {
+  data: AiExplainData | null
+  meta: AiResponseMeta
+  pending?: boolean
+  message?: string
+}
+
 export interface AiReviewRequest {
   schedule_code: string
   check_items?: string[]

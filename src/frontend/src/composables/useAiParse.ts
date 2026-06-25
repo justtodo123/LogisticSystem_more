@@ -2,7 +2,6 @@ import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   analyzeException,
-  explainSchedule,
   parseAi,
   reviewSchedule,
 } from '@/api/ai'
@@ -149,18 +148,12 @@ export function useAiParse(options: {
   }
 
   async function tryP1(
-    action: 'explain' | 'review' | 'analyze',
+    action: 'review' | 'analyze',
     scheduleCode?: string,
     exceptionCode?: string,
   ): Promise<void> {
     try {
-      if (action === 'explain') {
-        if (!scheduleCode) {
-          ElMessage.warning('请先选择方案')
-          return
-        }
-        await explainSchedule({ schedule_code: scheduleCode })
-      } else if (action === 'review') {
+      if (action === 'review') {
         if (!scheduleCode) {
           ElMessage.warning('请先选择方案')
           return

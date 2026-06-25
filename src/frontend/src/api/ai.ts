@@ -1,9 +1,12 @@
-import request, { postWithMeta } from './request'
+import request, { postWithBusinessCode, postWithMeta } from './request'
 import { useMockAi } from '@/utils/env'
-import { mockParseAi, mockP1NotImplemented } from '@/utils/mock-ai-store'
+import { mockExplainSchedule, mockParseAi, mockP1NotImplemented } from '@/utils/mock-ai-store'
 import type {
   AiAnalyzeExceptionRequest,
+  AiExplainData,
+  AiExplainRawData,
   AiExplainRequest,
+  AiExplainResult,
   AiParseData,
   AiParseRequest,
   AiParseResult,
@@ -21,16 +24,35 @@ export async function parseAi(payload: AiParseRequest): Promise<AiParseResult> {
   return { data, meta }
 }
 
-export async function explainSchedule(payload: AiExplainRequest): Promise<void> {
+function normalizeExplainData(raw: AiExplainRawData, scheduleCode: string): AiExplainData {
+  return {
+    schedule_code: scheduleCode,
+    explanation: raw.explanation,
+    sections: {
+      key_decisions: raw.key_decisions?.length ? raw.key_decisions : undefined,
+      risks: raw.potential_risks?.length ? raw.potential_risks : undefined,
+      suggestions: raw.suggestions?.length ? raw.suggestions : undefined,
+    },
+  }
+}
+
+export async function explainSchedule(payload: AiExplainRequest): Promise<AiExplainResult> {
   if (useMockAi()) {
-    await mockP1NotImplemented('F015 方案解释')
-    return
+    return mockExplainSchedule(payload)
   }
 
-  try {
-    await request.post('/ai/explain', payload)
-  } catch (err) {
-    throw normalizeP1Error(err)
+  const result = await postWithBusinessCode<AiExplainRawData>(
+    '/ai/explain',
+    { schedule_code: payload.schedule_code },
+    { timeout: 70000 },
+  )
+  return {
+    data: result.data
+      ? normalizeExplainData(result.data, payload.schedule_code)
+      : null,
+    meta: result.meta,
+    pending: result.pending,
+    message: result.message,
   }
 }
 
