@@ -59,6 +59,25 @@ export interface AiExplainRequest {
   detail_level?: 'brief' | 'detailed'
 }
 
+export interface AiExplainSections {
+  reasoning?: string
+  risks?: string[]
+  suggestions?: string[]
+}
+
+export interface AiExplainData {
+  schedule_code: string
+  explanation: string
+  sections?: AiExplainSections
+}
+
+export interface AiExplainResult {
+  data: AiExplainData | null
+  meta: AiResponseMeta
+  pending?: boolean
+  message?: string
+}
+
 export interface AiReviewRequest {
   schedule_code: string
   check_items?: string[]

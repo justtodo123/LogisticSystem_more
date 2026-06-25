@@ -114,6 +114,50 @@ rawRequest.interceptors.response.use(
   },
 )
 
+export interface BusinessCodeResult<T> {
+  data: T | null
+  meta: { degraded: boolean; degraded_reason: string | null }
+  pending?: boolean
+  message?: string
+}
+
+/** 保留 meta；50100 等业务占位码不 throw（用于 /ai/explain 等 P1 端点） */
+export async function postWithBusinessCode<T>(
+  url: string,
+  body?: unknown,
+  config?: { timeout?: number; pendingCodes?: number[] },
+): Promise<BusinessCodeResult<T>> {
+  const pendingCodes = config?.pendingCodes ?? [50100]
+  const response = await rawRequest.post<ApiBodyWithMeta>(url, body, config)
+  const apiBody = response.data
+
+  if (apiBody.code === 40100 || apiBody.code === 40101) {
+    handleApiError(apiBody, response.config)
+  }
+
+  const meta = {
+    degraded: apiBody.meta?.degraded ?? false,
+    degraded_reason: apiBody.meta?.degraded_reason ?? null,
+  }
+
+  if (apiBody.code != null && pendingCodes.includes(apiBody.code)) {
+    return {
+      data: null,
+      meta,
+      pending: true,
+      message: apiBody.message,
+    }
+  }
+
+  handleApiError(apiBody, response.config)
+
+  return {
+    data: apiBody.data as T,
+    meta,
+    message: apiBody.message,
+  }
+}
+
 /** 保留 meta 字段（用于 /ai/parse 等需展示降级的接口） */
 export async function postWithMeta<T>(
   url: string,

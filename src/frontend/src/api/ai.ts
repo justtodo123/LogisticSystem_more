@@ -1,9 +1,11 @@
-import request, { postWithMeta } from './request'
+import request, { postWithBusinessCode, postWithMeta } from './request'
 import { useMockAi } from '@/utils/env'
-import { mockParseAi, mockP1NotImplemented } from '@/utils/mock-ai-store'
+import { mockExplainSchedule, mockParseAi, mockP1NotImplemented } from '@/utils/mock-ai-store'
 import type {
   AiAnalyzeExceptionRequest,
+  AiExplainData,
   AiExplainRequest,
+  AiExplainResult,
   AiParseData,
   AiParseRequest,
   AiParseResult,
@@ -21,16 +23,19 @@ export async function parseAi(payload: AiParseRequest): Promise<AiParseResult> {
   return { data, meta }
 }
 
-export async function explainSchedule(payload: AiExplainRequest): Promise<void> {
+export async function explainSchedule(payload: AiExplainRequest): Promise<AiExplainResult> {
   if (useMockAi()) {
-    await mockP1NotImplemented('F015 方案解释')
-    return
+    return mockExplainSchedule(payload)
   }
 
-  try {
-    await request.post('/ai/explain', payload)
-  } catch (err) {
-    throw normalizeP1Error(err)
+  const result = await postWithBusinessCode<AiExplainData>('/ai/explain', payload, {
+    timeout: 60000,
+  })
+  return {
+    data: result.data,
+    meta: result.meta,
+    pending: result.pending,
+    message: result.message,
   }
 }
 
