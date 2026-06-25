@@ -403,6 +403,25 @@ export async function updateMockBatchSummary(
   }
 }
 
+export async function registerMockBatch(detail: DispatchBatchDetail): Promise<void> {
+  await ensureMockBatches()
+  batchDetailsData![detail.batch_code] = detail
+  const summary: DispatchBatchSummary = {
+    batch_code: detail.batch_code,
+    schedule_code: detail.schedule_code,
+    status: detail.status,
+    vehicle_count: detail.vehicle_count,
+    l0_l1_dispatch_count: detail.l0_l1_dispatch_count,
+    l1_l2_dispatch_count: detail.l1_l2_dispatch_count,
+    demo_mode: detail.demo_mode,
+    created_at: detail.created_at,
+  }
+  batchesData = [
+    summary,
+    ...batchesData!.filter((b) => b.batch_code !== detail.batch_code),
+  ]
+}
+
 function buildL0Phase(batchCode: string): NodeDispatchPhase {
   return {
     level_phase: 0,
@@ -450,7 +469,56 @@ function buildL0Phase(batchCode: string): NodeDispatchPhase {
   }
 }
 
-function buildL1Phase(batchCode: string): NodeDispatchPhase {
+const ARRIVAL_DEMO_SCHEDULE_CODE = 'GS20260613001'
+
+function buildL1Phase(batchCode: string, scheduleCode?: string): NodeDispatchPhase {
+  if (scheduleCode === ARRIVAL_DEMO_SCHEDULE_CODE) {
+    return {
+      level_phase: 1,
+      dispatch_code: `ND${batchCode.slice(2)}L1`,
+      vehicle_tasks: [
+        {
+          vehicle_code: '鄂A12347',
+          driver_code: 'D20260601003',
+          distance: 22.1,
+          tasks: [
+            {
+              from_node_code: 'SO101',
+              to_node_code: 'SO001',
+              package_codes: ['PKG20260613003'],
+              is_return: false,
+            },
+            {
+              from_node_code: 'SO001',
+              to_node_code: 'SO101',
+              package_codes: [],
+              is_return: true,
+            },
+          ],
+        },
+        {
+          vehicle_code: '鄂A12348',
+          driver_code: 'D20260601004',
+          distance: 15.8,
+          tasks: [
+            {
+              from_node_code: 'SO101',
+              to_node_code: 'SO001',
+              package_codes: ['PKG20260613004'],
+              is_return: false,
+            },
+            {
+              from_node_code: 'SO001',
+              to_node_code: 'SO101',
+              package_codes: [],
+              is_return: true,
+            },
+          ],
+        },
+      ],
+    }
+  }
+
   return {
     level_phase: 1,
     dispatch_code: `ND${batchCode.slice(2)}L1`,
@@ -505,7 +573,7 @@ function buildMockDispatchDetail(
   const l0Phase = buildL0Phase(batchCode)
   const phases: NodeDispatchPhase[] = [l0Phase]
   if (options.includeL1) {
-    phases.push(buildL1Phase(batchCode))
+    phases.push(buildL1Phase(batchCode, scheduleCode))
   }
 
   const dispatches = phases
@@ -514,7 +582,9 @@ function buildMockDispatchDetail(
   ).size
   const now = new Date().toISOString().slice(0, 19)
   const l0Count = l0Phase.vehicle_tasks.length
-  const l1Count = options.includeL1 ? buildL1Phase(batchCode).vehicle_tasks.length : 0
+  const l1Count = options.includeL1
+    ? buildL1Phase(batchCode, scheduleCode).vehicle_tasks.length
+    : 0
 
   let status: DispatchBatchDetail['status'] = 'pending'
   if (options.demoMode && options.includeL1) {
@@ -553,11 +623,11 @@ async function markPackagesInTransit(
 
   for (const code of packageCodes) {
     const pkg = packages.find((p) => p.package_code === code)
-    if (!pkg) continue
+    if (!pkg || pkg.status === 'exception') continue
     pkg.status = 'in_transit'
     for (const item of pkg.goods_items) {
       const g = goods.find((x) => x.goods_code === item.goods_code)
-      if (g) g.status = 'in_transit'
+      if (g && g.status !== 'exception') g.status = 'in_transit'
     }
   }
 
@@ -613,16 +683,20 @@ async function repackAndMarkL1Transit(detail: DispatchBatchDetail): Promise<void
 
   for (const code of codes) {
     const pkg = packages.find((p) => p.package_code === code)
-    if (!pkg) continue
+    if (!pkg || pkg.status === 'exception') continue
     pkg.status = 'in_transit'
     for (const item of pkg.goods_items) {
       const g = goods.find((x) => x.goods_code === item.goods_code)
-      if (g) g.status = 'in_transit'
+      if (g && g.status !== 'exception') g.status = 'in_transit'
     }
   }
 
+  const transitCodes = codes.filter((code) => {
+    const pkg = packages.find((p) => p.package_code === code)
+    return pkg && pkg.status === 'in_transit'
+  })
   const { vehicles, drivers } = vehicleAndDriverCodes(detail, 1)
-  await markPackagesInTransit(codes, vehicles, drivers)
+  await markPackagesInTransit(transitCodes, vehicles, drivers)
 }
 
 function collectPhasePackageCodes(
@@ -643,7 +717,7 @@ function collectPhasePackageCodes(
 }
 
 function appendL1ToBatch(existing: DispatchBatchDetail): DispatchBatchDetail {
-  const l1Phase = buildL1Phase(existing.batch_code)
+  const l1Phase = buildL1Phase(existing.batch_code, existing.schedule_code)
   const flatL1 = normalizeBatchDetail({
     ...existing,
     dispatches: [l1Phase],

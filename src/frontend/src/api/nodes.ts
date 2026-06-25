@@ -165,6 +165,24 @@ export async function listLevel0SortingCenters(): Promise<NodeItem[]> {
   return result.items.filter(isLevel0SortingCenter)
 }
 
+function isLevel1SortingCenter(node: NodeItem): boolean {
+  if (node.level === 1) return true
+  if (node.level === 0) return false
+  if (node.node_code.startsWith('L1')) return true
+  if (node.node_code.startsWith('L2')) return false
+  if (node.node_code.startsWith('SO10')) return true
+  return node.level === 1
+}
+
+export async function listLevel1SortingCenters(): Promise<NodeItem[]> {
+  const result = await listNodes({
+    node_type: 'sorting_center',
+    page: 1,
+    page_size: 200,
+  })
+  return result.items.filter(isLevel1SortingCenter)
+}
+
 export function nodeTypeLabel(type: NodeType): string {
   return type === 'storage_center' ? '存储中心' : '分拣中心'
 }

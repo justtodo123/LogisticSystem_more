@@ -79,6 +79,12 @@ const router = createRouter({
           meta: { title: '异常管理' },
         },
         {
+          path: 'arrival-confirm',
+          name: 'ArrivalConfirm',
+          component: () => import('@/views/arrival/ArrivalConfirm.vue'),
+          meta: { title: '节点到货确认' },
+        },
+        {
           path: 'health',
           name: 'HealthCheck',
           component: () => import('@/views/HealthCheck.vue'),

@@ -1,10 +1,18 @@
 import request from './request'
 import type {
+  ConfirmArrivalPayload,
+  ConfirmArrivalResult,
+  GetArrivalPackagesParams,
+  GetArrivalPackagesResult,
   SimulationDeliverPayload,
   SimulationDeliverResponse,
   SimulationDeliverResult,
 } from '@/types/simulation'
 import { useMockSimulation } from '@/utils/env'
+import {
+  confirmArrivalMock,
+  getArrivalPackagesMock,
+} from '@/utils/mock-arrival-store'
 import { simulateDeliverMock } from '@/utils/mock-simulation'
 
 function compactPayload(
@@ -39,4 +47,30 @@ export async function simulateDeliver(
     compactPayload(payload),
   )
   return toResult(data)
+}
+
+export async function getArrivalPackages(
+  params: GetArrivalPackagesParams,
+): Promise<GetArrivalPackagesResult> {
+  if (useMockSimulation()) {
+    return getArrivalPackagesMock(params)
+  }
+  const { data } = await request.get<GetArrivalPackagesResult>(
+    '/simulation/arrival-packages',
+    { params },
+  )
+  return data
+}
+
+export async function confirmArrival(
+  payload: ConfirmArrivalPayload,
+): Promise<ConfirmArrivalResult> {
+  if (useMockSimulation()) {
+    return confirmArrivalMock(payload)
+  }
+  const { data } = await request.post<ConfirmArrivalResult>(
+    '/simulation/confirm-arrival',
+    payload,
+  )
+  return data
 }
