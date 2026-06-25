@@ -7,7 +7,7 @@ AI 助手 Pydantic 模型
 3. P1 预留：AiExplainRequest / AiReviewRequest / AiAnalyzeExceptionRequest
 """
 from pydantic import BaseModel
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Literal
 
 
 # ==================== P0：自然语言解析 ====================
@@ -87,10 +87,10 @@ class AiParseRequest(BaseModel):
     ⑥ dry-run（仅查看解析参数，不执行调度、不写库）
     {
       "message": "优先缩短距离，多用电车",
-      "execute": false
+      "execute": "dry-run"
     }
 
-    ⑦ AI 新建调度（无 schedule_codes → 对全部 pending 订单创建新方案）
+    ⑦ AI 新建 draft（无 schedule_codes → 对全部 pending 订单创建 draft 方案）
     {
       "message": "优先缩短距离，多用电车"
     }
@@ -104,13 +104,13 @@ class AiParseRequest(BaseModel):
           }
         }
       },
-      "execute": false
+      "execute": "dry-run"
     }
     """
     message: Optional[str] = None           # 自然语言指令（空=跳过 DeepSeek）
     weights: Optional[Dict[str, Any]] = None  # 手动权重（结构与 algorithm_config.json 一致）
     schedule_codes: Optional[List[str]] = None  # 目标方案列表（非空=重规划，空=新建）
-    execute: bool = True                    # 是否执行完整调度链路（false=仅返回解析参数，不写库）
+    execute: Literal["dry-run", "draft"] = "draft"  # "draft"=生成 draft 方案 / "dry-run"=仅返回参数不落库
 
 
 class AiParseResponse(BaseModel):
@@ -121,6 +121,7 @@ class AiParseResponse(BaseModel):
     mode: str = "default"                            # "ai" / "manual" / "hybrid" / "default"
     is_replan: bool = False                          # 是否重规划
     reference_codes: Optional[List[str]] = None      # 参考的方案编码列表
+    status: Optional[str] = None                     # draft 模式返回 "draft"；dry-run 返回 None
     degraded: bool = False                           # DeepSeek 是否降级
     degraded_reason: Optional[str] = None            # 降级原因
 

@@ -45,11 +45,12 @@
 │   message? + weights? → ai / manual / hybrid / default        │
 ├──────────────────────────────────────────────────────────────┤
 │ Step 2: 确定执行目标                                           │
-│   schedule_codes 非空 → 版本化重规划                           │
-│   schedule_codes 为空 → 新建调度（全部 pending 订单）           │
+│   schedule_codes 非空 → 版本化重规划 draft                      │
+│   schedule_codes 为空 → 新建 draft（全部 pending 订单）         │
 ├──────────────────────────────────────────────────────────────┤
-│ Step 3: execute=false? → dry-run（仅返回参数）                  │
-│         execute=true  → F007 → F021 → F005 → F006 完整链路    │
+│ Step 3: execute="dry-run" → 仅返回参数（不写库）                │
+│         execute="draft"    → F007 生成 draft 方案              │
+│         （需手动调用 confirm 接口执行 F021/F005/F006）           │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -61,8 +62,10 @@
 |------|------|------|------|------|
 | `message` | string | 否 | `null` | 自然语言指令（非空 → DeepSeek 解析） |
 | `weights` | object | 否 | `null` | 手动权重覆盖（结构与 `algorithm_config.json` 一致） |
-| `schedule_codes` | string[] | 否 | `null` | 目标方案编号列表（非空 → 版本化重规划） |
-| `execute` | boolean | 否 | `true` | `false` = dry-run 仅返回参数不写库 |
+| `schedule_codes` | string[] | 否 | `null` | 目标方案编号列表（非空 → 版本化重规划 draft） |
+| `execute` | string | 否 | `"draft"` | `"draft"`=生成 draft 方案 / `"dry-run"`=仅返回参数不落库 |
+
+> **P1-2 变更**：`execute` 从 `boolean` 改为字符串枚举。`"draft"` 模式仅执行 F007（预览），不执行 F021/F005/F006。用户需手动调用 `POST /api/schedule/confirm/{code}` 完成打包和执行。
 
 **工作逻辑矩阵**：
 
@@ -77,7 +80,7 @@
 | ❌ | ❌ | `default` | ❌ | 默认新建 |
 | ❌ | ❌ | `default` | ✅ | 默认重规划 |
 
-> 任意组合 × `execute` = 8 种执行模式 + 8 种 dry-run 模式，共计 16 种场景。
+> 任意组合 × `execute` = 8 种 draft 模式 + 8 种 dry-run 模式，共计 16 种场景。
 
 ### 3.3 请求示例
 
@@ -144,7 +147,7 @@
 ```json
 {
   "message": "优先缩短距离，多用电车",
-  "execute": false
+  "execute": "dry-run"
 }
 ```
 
@@ -172,7 +175,7 @@
       }
     }
   },
-  "execute": false
+  "execute": "dry-run"
 }
 ```
 
@@ -209,7 +212,7 @@
     },
     "mode": "ai",
     "is_replan": false,
-    "executed": false,
+    "status": null,
     "reference_codes": null
   },
   "meta": {
@@ -257,7 +260,7 @@
     },
     "mode": "ai",
     "is_replan": true,
-    "executed": true,
+    "status": "draft",
     "reference_codes": ["GS20260623008"]
   },
   "meta": {
@@ -288,7 +291,7 @@
     },
     "mode": "ai",
     "is_replan": false,
-    "executed": true,
+    "status": "draft",
     "reference_codes": null
   },
   "meta": {
@@ -318,7 +321,7 @@
     },
     "mode": "ai",
     "is_replan": false,
-    "executed": true,
+    "status": "draft",
     "reference_codes": null
   },
   "meta": {
@@ -337,7 +340,7 @@
 | `algorithm_params` | object | 最终使用的算法参数（含 `global_schedule`、`node_dispatch`、`route_planning`） |
 | `mode` | string | 参数来源模式：`ai` / `manual` / `hybrid` / `default` |
 | `is_replan` | boolean | 是否为重规划（新建=false） |
-| `executed` | boolean | 是否实际执行了调度链路（dry-run=false） |
+| `status` | string\|null | 执行状态：`"draft"`=已生成 draft 方案 / `null`=dry-run 未落库 |
 | `reference_codes` | array\|null | 参考的方案编号列表（即入参 `schedule_codes`） |
 
 ### 3.6 错误码
@@ -411,10 +414,12 @@
 | 对比维度 | 新建调度 (`schedule_codes=null`) | 重规划 (`schedule_codes` 非空) |
 |---------|-------------------------------|------------------------------|
 | 订单范围 | 全部 `pending` 状态订单 | 原方案关联的订单 |
-| 调度链路 | F007→F021→F005→F006（demo_mode=true） | 走 `ReplanService.redispatch()` |
+| 调度链路 | F007 preview（仅 draft） | `ReplanService.redispatch(draft_only=True)` |
 | 版本链 | version=1，新记录 | version+1，`parent_id` 指向前版 |
 | `is_replan` | `false` | `true` |
-| 原方案处理 | 不涉及 | 原包裹→exception，原批次→failed |
+| 后续确认 | 手动调用 `POST /api/schedule/confirm/{code}` | 手动调用 `POST /api/schedule/confirm/{code}` |
+
+> **P1-2 变更**：AI parse 统一生成 draft 方案，不执行 F021/F005/F006，需手动确认。dry-run 模式除外。
 
 ### 5.2 AI 重规划 vs 异常驱动重规划
 
@@ -422,18 +427,23 @@
 |---------|---------------------------|----------------------------------------------|
 | 触发方式 | 自然语言 + `schedule_codes` | 异常事件 + `action` |
 | 参数来源 | DeepSeek 解析 / 手动 / 默认 | 默认参数（`algorithm_config.json`） |
-| 货物状态处理 | 自动回退 → `pending_pack`（重新打包） | 仅调度 `exception` 状态订单 |
-| demo_mode | `true`（自动完成 L0→L2 全链路） | `false`（生成方案，需手动送达） |
+| 执行模式 | draft only（仅 F007），需手动 confirm | 完整链路 F007→F021→F005→F006 |
+| 货物状态处理 | 不修改原方案状态 | 原包裹→exception，原批次→failed |
 | 排除参数 | 不支持 | `excluded_nodes` / `excluded_vehicles` |
+
+> **P1-2 变更**：AI 重规划改为 draft 模式，不执行全链路。异常驱动重规划保持完整链路（需立即响应）。
 
 ### 5.3 性能参考
 
 | 场景 | 模式 | 典型耗时 |
 |------|------|---------|
 | dry-run | ai | ~7s（DeepSeek API 调用） |
-| AI 重规划 | ai+replan | ~28s（DeepSeek + F007→F006 全链路） |
-| 手动权重重规划 | manual+replan | ~2s（仅调度链路，无 API 调用） |
-| 默认参数重规划 | default+replan | ~2s（仅调度链路） |
+| AI 重规划 draft | ai+replan | ~8s（DeepSeek + F007 preview） |
+| AI 新建 draft | ai | ~8s（DeepSeek + F007 preview） |
+| 手动权重重规划 | manual+replan | ~1s（仅 F007 preview） |
+| 默认参数重规划 | default+replan | ~1s（仅 F007 preview） |
+
+> **P1-2 性能优化**：draft 模式大幅缩短响应时间（避免 F021/F005/F006 链式执行）。用户确认方案后，F021/F005/F006 在 `confirm` 接口中执行。
 
 ---
 
@@ -547,6 +557,7 @@ async function handleAiParse() {
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | V1.0 | 2026-06-23 | 初始版本：`POST /api/ai/parse` 完整契约 + P1 占位端点 |
+| V1.1 | 2026-06-25 | `execute` 改为 `"draft"`/`"dry-run"` 枚举；新建/重规划均生成 draft，需手动 confirm |
 
 ---
 

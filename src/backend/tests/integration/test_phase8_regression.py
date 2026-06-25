@@ -271,11 +271,11 @@ async def test_ai_parse_response_format(async_client, test_users):
 @pytest.mark.asyncio
 async def test_ai_parse_dry_run(async_client, test_users):
     """
-    测试 AI 解析接口 dry-run 模式（execute=false）
+    测试 AI 解析接口 dry-run 模式（execute="dry-run"）
 
     验证：
     1. 不调用调度链路 mock（证明未执行）
-    2. 返回 executed=false
+    2. 返回 status=None
     3. 返回解析出的 algorithm_params 和 mode
     """
     # Mock DeepSeek API 响应
@@ -312,14 +312,14 @@ async def test_ai_parse_dry_run(async_client, test_users):
             headers=headers,
             json={
                 "message": "优先缩短距离",
-                "execute": False
+                "execute": "dry-run"
             }
         )
 
         result = ai_resp.json()
         assert result["code"] == 0
         assert "dry-run" in result["message"]
-        assert result["data"]["executed"] == False
+        assert result["data"]["status"] is None
         assert result["data"]["mode"] == "ai"
         assert "algorithm_params" in result["data"]
         assert result["data"]["algorithm_params"]["global_schedule"]["weights"]["distance"] == 0.7

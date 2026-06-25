@@ -84,7 +84,7 @@ def main():
     # Test 1: dry-run (快速验证 AI 解析)
     test("T1: AI dry-run", "/ai/parse", {
         "message": "优先缩短距离，多用电车",
-        "execute": False
+        "execute": "dry-run"
     }, timeout=30)
     
     # Test 2: AI 重规划 GS20260623001 (原 O006 方案)
