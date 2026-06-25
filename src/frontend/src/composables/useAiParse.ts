@@ -1,5 +1,4 @@
 import { computed, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   analyzeException,
@@ -8,6 +7,7 @@ import {
   reviewSchedule,
 } from '@/api/ai'
 import type {
+  AiExecuteMode,
   AiParseData,
   AiParseRequest,
   AiParseResult,
@@ -34,9 +34,8 @@ const DEFAULT_WEIGHTS: AlgorithmParams = {
 export function useAiParse(options: {
   selectedScheduleCode: () => string | undefined
   scheduleCodes: () => string[]
-  onExecuted?: (scheduleCode?: string) => void | Promise<void>
+  onDraftCreated?: (scheduleCode: string) => void | Promise<void>
 }) {
-  const router = useRouter()
   const message = ref('')
   const targetMode = ref<AiTargetMode>('new')
   const multiScheduleCodes = ref<string[]>([])
@@ -60,10 +59,8 @@ export function useAiParse(options: {
     return multiScheduleCodes.value.length ? [...multiScheduleCodes.value] : undefined
   }
 
-  function buildPayload(execute: boolean): AiParseRequest {
-    const payload: AiParseRequest = {
-      execute,
-    }
+  function buildPayload(execute: AiExecuteMode): AiParseRequest {
+    const payload: AiParseRequest = { execute }
     const trimmed = message.value.trim()
     if (trimmed) {
       payload.message = trimmed
@@ -72,13 +69,15 @@ export function useAiParse(options: {
     if (codes?.length) {
       payload.schedule_codes = codes
     }
-    if (weightsEnabled.value) {
-      payload.weights = structuredClone(weights)
+    if (weightsEnabled.value && weights.global_schedule) {
+      payload.weights = {
+        global_schedule: structuredClone(weights.global_schedule),
+      }
     }
     return payload
   }
 
-  function validateBeforeSend(execute: boolean): boolean {
+  function validateBeforeSend(execute: AiExecuteMode): boolean {
     if (targetMode.value === 'current' && !options.selectedScheduleCode()) {
       ElMessage.warning('请先在上方选择要重规划的方案')
       return false
@@ -88,7 +87,7 @@ export function useAiParse(options: {
       return false
     }
     if (
-      execute &&
+      execute === 'draft' &&
       !message.value.trim() &&
       !weightsEnabled.value &&
       targetMode.value === 'new'
@@ -99,34 +98,35 @@ export function useAiParse(options: {
     return true
   }
 
-  async function handleResult(result: AiParseResult, execute: boolean): Promise<void> {
+  async function handleResult(
+    result: AiParseResult,
+    execute: AiExecuteMode,
+  ): Promise<void> {
     lastResult.value = result.data
     lastMeta.value = result.meta
 
     if (result.meta.degraded) {
       ElMessage.warning(
-        result.meta.degraded_reason || 'DeepSeek 已降级，使用默认算法参数完成调度',
+        result.meta.degraded_reason || 'DeepSeek 已降级，使用默认算法参数',
       )
-    } else if (execute && result.data.executed) {
-      ElMessage.success(
-        result.data.is_replan
-          ? `AI 重规划完成：${result.data.schedule_code}`
-          : `AI 新建调度完成：${result.data.schedule_code}`,
-      )
-    } else if (!execute) {
-      ElMessage.success('参数预览完成（未写入数据库）')
     }
 
-    if (execute && result.data.executed && result.data.schedule_code) {
-      await options.onExecuted?.(result.data.schedule_code)
-      await router.push({
-        path: '/dashboard',
-        query: { schedule: result.data.schedule_code },
-      })
+    if (execute === 'dry-run') {
+      ElMessage.success('参数预览完成（未写入数据库）')
+      return
+    }
+
+    if (result.data.status === 'draft' && result.data.schedule_code) {
+      ElMessage.success(
+        result.data.is_replan
+          ? `AI 重规划预览已生成：${result.data.schedule_code}，请在上方确认采用`
+          : `AI 预览方案已生成：${result.data.schedule_code}，请在上方确认采用`,
+      )
+      await options.onDraftCreated?.(result.data.schedule_code)
     }
   }
 
-  async function submit(execute: boolean): Promise<void> {
+  async function submit(execute: AiExecuteMode): Promise<void> {
     if (loading.value) return
     if (!validateBeforeSend(execute)) return
 

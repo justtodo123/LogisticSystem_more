@@ -28,6 +28,8 @@ export async function listOrders(
     const orders = await getMockOrders()
     const result = filterAndPaginate(orders, params, (item, p) => {
       if (p.status && item.status !== p.status) return false
+      const dest = p.destination_node_code as string | undefined
+      if (dest && item.destination_node_code !== dest) return false
       return true
     })
     const items = await Promise.all(result.items.map(enrichOrder))
