@@ -151,7 +151,7 @@
 }
 ```
 
-**⑦ 批量重规划**：
+**⑦ 批量重规划**（⚠️ 只处理第一个方案）：
 
 ```json
 {
@@ -163,6 +163,8 @@
   ]
 }
 ```
+
+> **注意**：AI 接口只生成一个 draft 方案，无论 `schedule_codes` 传入几个，只处理第一个方案。如需对多个方案重规划，需多次调用。
 
 **⑧ 手动权重 dry-run**：
 
@@ -196,24 +198,9 @@
           "time": 0.1,
           "package_count": 0.2
         }
-      },
-      "node_dispatch": {
-        "algorithm": "traditional",
-        "weights": {
-          "distance": 0.7,
-          "time": 0.1,
-          "package_count": 0.2
-        }
-      },
-      "route_planning": {
-        "algorithm": "traditional",
-        "max_iterations": 1000
       }
     },
-    "mode": "ai",
-    "is_replan": false,
-    "status": null,
-    "reference_codes": null
+    "mode": "ai"
   },
   "meta": {
     "degraded": false,
@@ -221,6 +208,8 @@
   }
 }
 ```
+
+> **dry-run 响应简化**：只返回 `algorithm_params` + `mode`，不含 `status`/`reference_codes`/`is_replan` 等字段。
 
 #### AI 重规划成功响应
 
@@ -230,12 +219,6 @@
   "message": "success",
   "data": {
     "schedule_code": "GS20260623010",
-    "replan_results": [
-      {
-        "original_schedule_code": "GS20260623008",
-        "new_schedule_code": "GS20260623010"
-      }
-    ],
     "algorithm_params": {
       "global_schedule": {
         "algorithm": "traditional",
@@ -244,18 +227,6 @@
           "time": 0.2,
           "package_count": 0.2
         }
-      },
-      "node_dispatch": {
-        "algorithm": "traditional",
-        "weights": {
-          "distance": 0.6,
-          "time": 0.2,
-          "package_count": 0.2
-        }
-      },
-      "route_planning": {
-        "algorithm": "traditional",
-        "max_iterations": 2000
       }
     },
     "mode": "ai",
@@ -270,6 +241,8 @@
 }
 ```
 
+> **重规划响应简化**：移除 `replan_results` 字段，重规划与新建响应结构完全一致。只处理 `schedule_codes` 第一个方案（AI 接口只生成一个 draft 方案）。
+
 #### AI 新建调度成功响应
 
 ```json
@@ -278,7 +251,6 @@
   "message": "success",
   "data": {
     "schedule_code": "GS20260623012",
-    "replan_results": null,
     "algorithm_params": {
       "global_schedule": {
         "algorithm": "traditional",
@@ -335,13 +307,14 @@
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `schedule_code` | string | 生成的新调度方案编号（新建模式为结果，重规划模式为首个新方案） |
-| `replan_results` | array\|null | 重规划模式下返回 `[{original_schedule_code, new_schedule_code}]` |
-| `algorithm_params` | object | 最终使用的算法参数（含 `global_schedule`、`node_dispatch`、`route_planning`） |
+| `schedule_code` | string | 生成的新调度方案编号（新建/重规划均返回此字段） |
+| `algorithm_params` | object | 最终使用的算法参数（只含 `global_schedule`） |
 | `mode` | string | 参数来源模式：`ai` / `manual` / `hybrid` / `default` |
-| `is_replan` | boolean | 是否为重规划（新建=false） |
-| `status` | string\|null | 执行状态：`"draft"`=已生成 draft 方案 / `null`=dry-run 未落库 |
+| `is_replan` | boolean | 是否为重规划（新建=false，重规划=true） |
+| `status` | string | 执行状态：`"draft"`=已生成 draft 方案（dry-run 响应不含此字段） |
 | `reference_codes` | array\|null | 参考的方案编号列表（即入参 `schedule_codes`） |
+
+> **响应结构对齐**：新建和重规划模式响应结构完全一致，仅 `is_replan` 字段区分。dry-run 响应只含 `algorithm_params` + `mode`。
 
 ### 3.6 错误码
 
@@ -558,6 +531,7 @@ async function handleAiParse() {
 |------|------|------|
 | V1.0 | 2026-06-23 | 初始版本：`POST /api/ai/parse` 完整契约 + P1 占位端点 |
 | V1.1 | 2026-06-25 | `execute` 改为 `"draft"`/`"dry-run"` 枚举；新建/重规划均生成 draft，需手动 confirm |
+| V1.2 | 2026-06-25 | AI 解析只返回 `global_schedule` 权重；响应移除 `replan_results`；dry-run 响应简化 |
 
 ---
 

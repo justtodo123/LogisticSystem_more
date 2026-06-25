@@ -706,11 +706,10 @@ src/backend/
   "code": 0, "message": "success",
   "data": {
     "schedule_code": "GS20260623010",
-    "replan_results": [{"original_schedule_code": "GS20260623008", "new_schedule_code": "GS20260623010"}],
     "algorithm_params": {...},
     "mode": "ai",
     "is_replan": true,
-    "executed": true,
+    "status": "draft",
     "reference_codes": ["GS20260623008"]
   },
   "meta": {"degraded": false, "degraded_reason": null}

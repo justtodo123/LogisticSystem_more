@@ -64,39 +64,29 @@ async def parse_natural_language(
                 "data": {
                     "algorithm_params": algorithm_params,
                     "mode": mode,
-                    "is_replan": bool(request.schedule_codes),
-                    "status": None,
-                    "reference_codes": reference_codes,
                 },
                 "meta": {"degraded": degraded, "degraded_reason": degraded_reason},
             }
 
         is_replan = bool(request.schedule_codes)
         if is_replan:
-            # 重规划模式：逐条对指定方案生成 draft 版本化重规划
-            replan_results = []
-            first_code = None
-            for code in request.schedule_codes:
-                replan_reason = f"AI驱动重规划: {request.message}" if has_message else "手动权重重规划"
-                result = await _execute_replan(
-                    db=db, original_code=code,
-                    replan_reason=replan_reason,
-                    algorithm_params=algorithm_params,
-                )
-                if result["code"] != 0:
-                    return result
-                replan_results.append({
-                    "original_schedule_code": code,
-                    "new_schedule_code": result["data"]["schedule_code"],
-                })
-                if first_code is None:
-                    first_code = result["data"]["schedule_code"]
+            # 重规划模式：对第一个指定方案生成 draft 版本化重规划
+            # （AI 接口只生成一个 draft 方案，无论 schedule_codes 传入几个）
+            target_code = request.schedule_codes[0]
+            replan_reason = f"AI驱动重规划: {request.message}" if has_message else "手动权重重规划"
+            result = await _execute_replan(
+                db=db, original_code=target_code,
+                replan_reason=replan_reason,
+                algorithm_params=algorithm_params,
+            )
+            if result["code"] != 0:
+                return result
+            new_code = result["data"]["schedule_code"]
 
             return {
                 "code": 0, "message": "success",
                 "data": {
-                    "schedule_code": first_code,
-                    "replan_results": replan_results,
+                    "schedule_code": new_code,
                     "algorithm_params": algorithm_params,
                     "mode": mode,
                     "is_replan": True,
@@ -179,6 +169,12 @@ async def _resolve_params(
         # default 模式：无 message 无 weights → 默认参数
         mode = "default"
         algorithm_params = DeepSeekService._load_default_params()
+
+    # 输出标准化：无论哪种模式，只保留 global_schedule
+    # （DeepSeek 提示词已裁剪为只返回 global_schedule，
+    #   此处兜底处理手动模式可能传入的多模块 weights）
+    raw = algorithm_params
+    algorithm_params = {"global_schedule": raw.get("global_schedule", {})}
 
     return algorithm_params, mode, degraded, degraded_reason
 

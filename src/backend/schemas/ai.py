@@ -114,16 +114,19 @@ class AiParseRequest(BaseModel):
 
 
 class AiParseResponse(BaseModel):
-    """AI 解析响应模型（F014）"""
-    schedule_code: Optional[str] = None             # 新建模式返回的新方案编号
-    replan_results: Optional[List[Dict[str, Any]]] = None  # 重规划模式返回 [{original, new}] 列表
-    algorithm_params: Dict[str, Any]                 # 最终使用的算法参数
-    mode: str = "default"                            # "ai" / "manual" / "hybrid" / "default"
-    is_replan: bool = False                          # 是否重规划
-    reference_codes: Optional[List[str]] = None      # 参考的方案编码列表
-    status: Optional[str] = None                     # draft 模式返回 "draft"；dry-run 返回 None
-    degraded: bool = False                           # DeepSeek 是否降级
-    degraded_reason: Optional[str] = None            # 降级原因
+    """
+    AI 解析响应模型（F014）
+    
+    新建和重规划模式响应结构完全一致，仅 is_replan 字段区分。
+    """
+    schedule_code: Optional[str] = None             # 新建/重规划返回的新方案编号
+    algorithm_params: Dict[str, Any]                # 最终使用的算法参数（只含 global_schedule）
+    mode: str = "default"                           # "ai" / "manual" / "hybrid" / "default"
+    is_replan: bool = False                         # 是否重规划
+    reference_codes: Optional[List[str]] = None     # 参考的方案编码列表（schedule_codes 原样回传）
+    status: Optional[str] = None                    # draft 模式返回 "draft"；dry-run 不返回此字段
+    degraded: bool = False                          # DeepSeek 是否降级
+    degraded_reason: Optional[str] = None           # 降级原因
 
 
 # ==================== P1：方案解释（预留） ====================

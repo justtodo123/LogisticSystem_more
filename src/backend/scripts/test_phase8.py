@@ -37,15 +37,12 @@ def test(name, path, body, timeout=120):
         
         if d.get("data"):
             dd = d["data"]
-            print(f"  mode={dd.get('mode')}  is_replan={dd.get('is_replan')}  executed={dd.get('executed')}")
+            print(f"  mode={dd.get('mode')}  is_replan={dd.get('is_replan')}")
             print(f"  schedule_code={dd.get('schedule_code')}")
             if dd.get("algorithm_params"):
                 ap = dd["algorithm_params"]
                 for section in ap:
                     print(f"    {section}: {ap[section]}")
-            if dd.get("replan_results"):
-                for rr in dd["replan_results"]:
-                    print(f"    replan: {rr['original_schedule_code']} -> {rr['new_schedule_code']}")
         
         return d
     except requests.Timeout:
