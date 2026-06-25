@@ -61,7 +61,16 @@ export interface AiExplainRequest {
 
 export interface AiExplainSections {
   reasoning?: string
+  key_decisions?: string[]
   risks?: string[]
+  suggestions?: string[]
+}
+
+/** 后端 POST /ai/explain 原始响应 data 字段 */
+export interface AiExplainRawData {
+  explanation: string
+  key_decisions?: string[]
+  potential_risks?: string[]
   suggestions?: string[]
 }
 

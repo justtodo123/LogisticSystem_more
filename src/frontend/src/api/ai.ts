@@ -4,6 +4,7 @@ import { mockExplainSchedule, mockParseAi, mockP1NotImplemented } from '@/utils/
 import type {
   AiAnalyzeExceptionRequest,
   AiExplainData,
+  AiExplainRawData,
   AiExplainRequest,
   AiExplainResult,
   AiParseData,
@@ -23,16 +24,32 @@ export async function parseAi(payload: AiParseRequest): Promise<AiParseResult> {
   return { data, meta }
 }
 
+function normalizeExplainData(raw: AiExplainRawData, scheduleCode: string): AiExplainData {
+  return {
+    schedule_code: scheduleCode,
+    explanation: raw.explanation,
+    sections: {
+      key_decisions: raw.key_decisions?.length ? raw.key_decisions : undefined,
+      risks: raw.potential_risks?.length ? raw.potential_risks : undefined,
+      suggestions: raw.suggestions?.length ? raw.suggestions : undefined,
+    },
+  }
+}
+
 export async function explainSchedule(payload: AiExplainRequest): Promise<AiExplainResult> {
   if (useMockAi()) {
     return mockExplainSchedule(payload)
   }
 
-  const result = await postWithBusinessCode<AiExplainData>('/ai/explain', payload, {
-    timeout: 60000,
-  })
+  const result = await postWithBusinessCode<AiExplainRawData>(
+    '/ai/explain',
+    { schedule_code: payload.schedule_code },
+    { timeout: 70000 },
+  )
   return {
-    data: result.data,
+    data: result.data
+      ? normalizeExplainData(result.data, payload.schedule_code)
+      : null,
     meta: result.meta,
     pending: result.pending,
     message: result.message,

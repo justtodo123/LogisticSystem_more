@@ -6,7 +6,20 @@
 | **功能编号** | P1-01 / F015 |
 | **文档版本** | V1.0 |
 | **创建日期** | 2026-06-25 |
-| **参考文档** | [api-contract-phase8.md](./api-contract-phase8.md) · [P1功能概览.md](../P1功能概览.md) |
+| **参考文档** | [api-contract-phase8.md](./api-contract-phase8.md) · [P1功能概览.md](../P1功能概览.md) · [api-contract-p1-5.md](./api-contract-p1-5.md) |
+
+---
+
+## 联调对齐说明（integration/p1-5-explain）
+
+> **正式 API 字段以后端契约 [api-contract-p1-5.md](./api-contract-p1-5.md) 为准。** 本文档保留前端 UI 视角说明；联调时前端通过 adapter 映射。
+
+| 项 | 后端（权威） | 前端 adapter（[`ai.ts`](../src/frontend/src/api/ai.ts)） |
+| --- | --- | --- |
+| 请求 | `{ schedule_code?, batch_code? }` 至少一个 | v1 UI 仅传 `{ schedule_code }`；不传 `detail_level` / `batch_code` |
+| 响应 | `explanation`, `key_decisions`, `potential_risks`, `suggestions` | 映射为 `AiExplainData.sections.{key_decisions,risks,suggestions}`；`schedule_code` 由请求回填 |
+| 501 | 已实现，返回 `code=0` | `postWithBusinessCode` 保留 501 兼容，联调不走此路径 |
+| degraded | `meta.degraded` + `meta.degraded_reason` | 直传，[`ExplainResultBody.vue`](../src/frontend/src/components/ai/ExplainResultBody.vue) 展示 |
 
 ---
 
@@ -16,7 +29,7 @@ F015 **方案解释**：对指定**全局调度方案**（`schedule_code`）生�
 
 - v1 范围：仅全局方案（与 Dashboard 方案下拉一致）
 - 节点间调度解释（`dispatch_code`）留后续扩展
-- 当前后端占位：`code=50100`；本契约定义正式实现形状
+- 后端实现见 [`api-contract-p1-5.md`](./api-contract-p1-5.md)（`origin/backend/phase-p1-5`）
 
 ---
 

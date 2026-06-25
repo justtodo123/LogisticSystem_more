@@ -23,6 +23,15 @@ defineProps<{
       <p class="explain-text">{{ data.explanation }}</p>
     </section>
 
+    <section v-if="data.sections?.key_decisions?.length" class="explain-section">
+      <h3 class="explain-section-title">关键决策</h3>
+      <ul class="explain-list">
+        <li v-for="(item, index) in data.sections.key_decisions" :key="`decision-${index}`">
+          <el-tag type="info" size="small" effect="plain">{{ item }}</el-tag>
+        </li>
+      </ul>
+    </section>
+
     <section v-if="data.sections?.reasoning" class="explain-section">
       <h3 class="explain-section-title">调度原因</h3>
       <p class="explain-text">{{ data.sections.reasoning }}</p>
