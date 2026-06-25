@@ -14,6 +14,7 @@ const menuItems = [
   { index: '/drivers', label: '司机管理' },
   { index: '/nodes/storage', label: '存储中心' },
   { index: '/nodes/sorting', label: '分拣中心' },
+  { index: '/arrival-confirm', label: '节点到货确认' },
   { index: '/exceptions', label: '异常管理' },
 ]
 
