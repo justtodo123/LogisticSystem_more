@@ -1,9 +1,20 @@
 :root {
   /* 页面与卡片 */
   --page-bg: #f5f7fa;
-  --card-radius: 6px;
+  --card-radius: 8px;
+  --card-shadow: var(--el-box-shadow-lighter);
   --radius-sm: 4px;
   --radius-md: 6px;
+
+  /* 布局（v3 LeftMode 风格） */
+  --layout-sidebar-width: 220px;
+  --layout-sidebar-collapsed-width: 58px;
+  --layout-sidebar-bg: #001428;
+  --layout-sidebar-text: #cfd3dc;
+  --layout-sidebar-active-text: #ffffff;
+  --layout-sidebar-hover-bg: #409eff10;
+  --layout-header-height: 50px;
+  --layout-header-bg: var(--el-bg-color);
 
   /* 间距 */
   --section-gap: 12px;

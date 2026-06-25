@@ -22,13 +22,13 @@ defineProps<{
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: var(--block-margin-y, 16px);
 }
 
 .page-toolbar-title {
   font-size: 18px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary, #303133);
   margin-right: auto;
 }
 

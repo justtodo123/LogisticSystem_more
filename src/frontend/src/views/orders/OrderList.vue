@@ -376,16 +376,6 @@ function statusTag(status: OrderStatus): string {
 </template>
 
 <style scoped>
-.page-card {
-  background: #fff;
-  border-radius: 4px;
-  padding: 20px;
-}
-
-.text-muted {
-  color: #c0c4cc;
-}
-
 .goods-row {
   display: flex;
   flex-wrap: wrap;

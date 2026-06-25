@@ -1,0 +1,20 @@
+/* 全站页面容器（仅 div，避免与 el-card.page-card 冲突） */
+div.page-card {
+  background: #fff;
+  border-radius: var(--card-radius);
+  padding: 20px;
+  box-shadow: var(--card-shadow);
+}
+
+.text-muted {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.data-table-wrap {
+  min-height: 200px;
+}
+
+.el-empty {
+  padding: 32px 0;
+}

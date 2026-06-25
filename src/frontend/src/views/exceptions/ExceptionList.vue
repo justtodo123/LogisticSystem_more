@@ -533,11 +533,6 @@ function statusInfo(status: ExceptionStatus) {
 </template>
 
 <style scoped>
-.text-muted {
-  color: #909399;
-  font-size: 13px;
-}
-
 .form-hint {
   margin: 6px 0 0;
   font-size: 12px;
