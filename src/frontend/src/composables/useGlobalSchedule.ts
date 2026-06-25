@@ -22,10 +22,22 @@ export function useGlobalSchedule() {
   const detailLoading = ref(false)
   const generating = ref(false)
 
-  const isDraft = computed(() => summary.value?.status === 'draft')
-  const viewingCode = computed(() =>
-    isDraft.value ? previewCode.value ?? '' : selectedCode.value,
+  const isDraft = computed(
+    () => summary.value?.status === 'draft' || Boolean(previewCode.value),
   )
+  const viewingCode = computed(
+    () => previewCode.value || selectedCode.value,
+  )
+
+  function applyDraftStatusIfNeeded(
+    code: string,
+    data: GlobalScheduleDetail,
+  ): GlobalScheduleDetail {
+    if (code === previewCode.value && data.status !== 'draft') {
+      return { ...data, status: 'draft' }
+    }
+    return data
+  }
 
   async function loadSchedules(selectCode?: string): Promise<void> {
     listLoading.value = true
@@ -54,7 +66,7 @@ export function useGlobalSchedule() {
 
   async function loadDetail(code: string): Promise<void> {
     if (!code) {
-      if (!isDraft.value) {
+      if (!previewCode.value) {
         summary.value = null
         detail.value = null
       }
@@ -63,7 +75,7 @@ export function useGlobalSchedule() {
 
     detailLoading.value = true
     try {
-      const data = await getGlobalSchedule(code)
+      const data = applyDraftStatusIfNeeded(code, await getGlobalSchedule(code))
       detail.value = data
       summary.value = data
     } catch (err) {
@@ -114,7 +126,14 @@ export function useGlobalSchedule() {
         ...(orderCodes?.length ? { order_codes: orderCodes } : {}),
       })
       previewCode.value = created.schedule_code
+      summary.value = { ...created, status: created.status ?? 'draft' }
       await loadDetail(created.schedule_code)
+      if (previewCode.value && summary.value && summary.value.status !== 'draft') {
+        summary.value = { ...summary.value, status: 'draft' }
+        if (detail.value) {
+          detail.value = { ...detail.value, status: 'draft' }
+        }
+      }
       ElMessage.success('预览方案已生成，请确认采用或丢弃')
     } catch (err) {
       ElMessage.error(err instanceof Error ? err.message : '生成预览失败')

@@ -231,7 +231,7 @@ async function onAiDraftCreated(scheduleCode: string): Promise<void> {
     />
 
     <el-empty
-      v-if="!listLoading && !schedules.length && !isDraft"
+      v-if="!listLoading && !schedules.length && !isDraft && !previewCode"
       description="选择订单并生成预览，或从历史方案中选择"
     />
 
