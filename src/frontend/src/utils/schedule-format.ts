@@ -1,6 +1,9 @@
-/** 路径节点（联调时后端可能返回此结构而非 path_labels） */
+/** 路径节点（联调时后端返回此结构） */
 export interface PathNode {
-  code: string
+  node_code: string
+  node_name?: string
+  /** @deprecated Mock 旧格式兼容 */
+  code?: string
   name?: string
 }
 
@@ -25,7 +28,9 @@ export function resolvePathLabels(
 ): string[] | undefined {
   if (pathLabels?.length) return pathLabels
   if (pathNodes?.length) {
-    const nameByCode = new Map(pathNodes.map((n) => [n.code, n.name]))
+    const nameByCode = new Map(
+      pathNodes.map((n) => [n.node_code ?? n.code ?? '', n.node_name ?? n.name]),
+    )
     return path.map((code) => nameByCode.get(code) ?? code)
   }
   return undefined

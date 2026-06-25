@@ -7,26 +7,42 @@ const props = defineProps<{
   loading?: boolean
 }>()
 
+const usesDisplayScore = computed(
+  () => props.summary?.score_display != null,
+)
+
+const scoreLabel = computed(() =>
+  usesDisplayScore.value ? '综合评分（越高越好）' : '评分（越低越好）',
+)
+
 const displayScore = computed(() => {
   if (!props.summary) return null
   const raw = props.summary.score_display ?? props.summary.score
-  return raw?.toFixed(1) ?? '—'
+  return typeof raw === 'number' ? raw.toFixed(1) : '—'
 })
 
 const tooltipContent = computed(() => {
   const s = props.summary
   if (!s) return ''
+  const lines: string[] = []
   const b = s.score_breakdown
-  if (!b) return '综合评分，越低越好'
-  const lines = [
-    `距离分项：${b.distance_component.toFixed(1)}`,
-    `时间分项：${b.time_component.toFixed(1)}`,
-    `货物分项：${b.goods_component.toFixed(1)}`,
-  ]
-  if (b.formula) lines.push(b.formula)
-  if (s.score_display != null && s.score !== s.score_display) {
-    lines.push(`原始分：${s.score.toFixed(1)}`)
+
+  if (s.score_display != null) {
+    lines.push(`归一化评分：${s.score_display}（越高越好）`)
+    lines.push(`原始加权分：${s.score.toFixed(1)}（越低越好）`)
+  } else {
+    lines.push('综合评分，越低越好')
   }
+
+  if (b) {
+    lines.push(
+      `距离分项：${b.distance_component.toFixed(1)}`,
+      `时间分项：${b.time_component.toFixed(1)}`,
+      `货物分项：${b.goods_component.toFixed(1)}`,
+    )
+    if (b.formula) lines.push(b.formula)
+  }
+
   return lines.join('\n')
 })
 </script>
@@ -67,7 +83,7 @@ const tooltipContent = computed(() => {
     </el-col>
     <el-col :xs="12" :sm="6">
       <el-card shadow="never" class="summary-card">
-        <div class="summary-label">评分（越低越好）</div>
+        <div class="summary-label">{{ scoreLabel }}</div>
         <el-tooltip
           v-if="summary"
           :content="tooltipContent"

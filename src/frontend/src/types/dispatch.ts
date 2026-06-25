@@ -37,12 +37,25 @@ export interface DispatchBatchSummary {
   created_at?: string
 }
 
+export interface DispatchPackageDetail {
+  package_code: string
+  weight?: number
+  volume?: number
+  goods_items?: Array<{
+    goods_code: string
+    goods_name?: string
+    goods_type?: string
+    order_code?: string
+  }>
+}
+
 export interface DispatchTask {
   from_node_code: string
   to_node_code: string
   from_node_name?: string
   to_node_name?: string
   package_codes: string[]
+  package_details?: DispatchPackageDetail[]
   is_return?: boolean
 }
 
