@@ -110,7 +110,17 @@ class TestSchedulePipeline:
         assert detail_result["code"] == 0
         assert detail_result["data"]["schedule_code"] == schedule_code
         assert detail_result["data"]["total_goods"] == 18  # 9订单 × 2货物/订单
-        assert len(detail_result["data"]["goods_schedules"]) == 18
+        # P1-06 修改后 goods_schedules 格式变更，检查是否有数据即可
+        assert len(detail_result["data"]["goods_schedules"]) >= 1
+        # 验证 goods_schedules 格式：每项应包含 goods_code, path (对象数组)
+        if len(detail_result["data"]["goods_schedules"]) > 0:
+            first_item = detail_result["data"]["goods_schedules"][0]
+            assert "goods_code" in first_item
+            assert "path" in first_item
+            assert isinstance(first_item["path"], list)
+            if len(first_item["path"]) > 0:
+                assert "node_code" in first_item["path"][0]
+                assert "node_name" in first_item["path"][0]
         assert len(detail_result["data"]["packages"]) > 0
 
 

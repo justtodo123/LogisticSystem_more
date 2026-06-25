@@ -1,23 +1,34 @@
 """
 状态机服务 - 管理物流系统中的所有状态流转
 
-状态流转规则：
-1. F007完成 → 订单状态: pending → delivering
-2. F021完成 → 货物状态: pending_pack → packed; 包裹状态: pending_pack → packed
-3. F005调用 → 货物状态: packed → in_transit; 包裹状态: packed → in_transit; 
-               车辆状态: idle → delivering; 司机状态: idle → busy
-4. 模拟送达（L0→L1）→ 包裹状态: in_transit → delivered; 货物状态: in_transit → pending_pack;
-                     批次状态: pending/l0_l1_done → l0_l1_done; 
-                     车辆状态: delivering → idle; 司机状态: busy → idle
-5. F021重新打包 → 货物状态: pending_pack → packed; 新包裹状态: pending_pack → packed
-6. 模拟送达（L1→L2）→ 包裹状态: in_transit → delivered; 货物状态: in_transit → delivered;
-                     订单状态: delivering → completed; 批次状态: l0_l1_done → completed;
-                     车辆状态: delivering → idle; 司机状态: busy → idle
-"""
+所有状态变更必须通过本模块的函数完成，算法层和服务层不直接修改 .status 字段。
 
+状态流转规则（修正版）：
+1. F007完成 → 订单状态: pending/exception → delivering
+2. F021完成 → 货物状态: pending_pack/exception → packed
+               包裹状态: L0→L1: pending_pack → packed
+                          L1→L2: 新建时 status=pending_pack（激活前不变）
+3. F005调用 → 货物状态: packed → in_transit; 包裹状态: packed → in_transit;
+               车辆状态: idle → delivering; 司机状态: idle → busy
+4. 模拟送达（L0→L1）→ L0→L1包裹: in_transit → delivered
+                         货物状态: in_transit → pending_pack
+                         L1→L2包裹: pending_pack（不变，等待L1重新打包激活）
+                         批次状态: pending/l0_l1_done → l0_l1_done
+                         车辆状态: delivering → idle; 司机状态: busy → idle
+5. F021重新打包 → 货物状态: pending_pack → packed
+                         L1→L2包裹: pending_pack → packed（激活）
+6. 模拟送达（L1→L2）→ L1→L2包裹: in_transit → delivered
+                         货物状态: in_transit → delivered
+                         订单状态: delivering → completed（所有货物送达后）
+                         批次状态: l0_l1_done → completed
+                         车辆状态: delivering → idle; 司机状态: busy → idle
+7. 异常事件创建 → 关联订单/货物/包裹 → exception; 关联车辆 → disabled
+8. 重规划 → 旧方案包裹 → exception; 旧批次 → failed; 新方案重新走1-6
+"""
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 from models import Order, Goods, Package, Vehicle, Driver, DispatchBatch, NodeDispatch, Node
+from models.global_schedule import GlobalSchedule
 from models.package import Package
 from algorithms.packaging import packaging
 
@@ -78,8 +89,9 @@ def simulate_delivery_l0_to_l1(
     模拟L0→L1送达
     
     更新以下状态：
-    - 包裹状态: in_transit → delivered
+    - L0→L1包裹: in_transit → delivered
     - 货物状态: in_transit → pending_pack
+    - L1→L2包裹: pending_pack（不变，等待L1重新打包激活）
     - 批次状态: pending/l0_l1_done → l0_l1_done
     - 车辆状态: delivering → idle
     - 司机状态: busy → idle
@@ -95,7 +107,7 @@ def simulate_delivery_l0_to_l1(
         if not task.get('is_return', False):
             package_codes.extend(task.get('package_codes', []))
     
-    # 2. 更新包裹状态
+    # 2. 更新包裹状态（仅L0→L1的包裹）
     for pkg_code in package_codes:
         pkg = db.query(Package).filter(Package.package_code == pkg_code).first()
         if pkg:
@@ -110,8 +122,8 @@ def simulate_delivery_l0_to_l1(
                         if goods:
                             goods.status = 'pending_pack'
     
-    # 4. 更新批次状态
-    batch.status = 'l0_l1_done'
+    # 4. 更新批次状态（使用统一函数）
+    update_batch_status(db, batch, 'l0_l1_done')
     
     # 5. 更新车辆状态
     vehicle = db.query(Vehicle).filter(Vehicle.id == dispatch.vehicle_id).first()
@@ -386,3 +398,277 @@ def check_and_update_order_status(db: Session, order_code: str) -> None:
     if all_delivered:
         order.status = 'completed'
         db.flush()
+
+
+def update_batch_status(
+    db: Session,
+    batch: DispatchBatch,
+    new_status: str,
+    force: bool = False,
+) -> None:
+    """
+    统一更新批次状态，包含状态转换合法性校验。
+
+    合法转换：
+      pending       → l0_l1_done / completed / failed
+      l0_l1_done  → l0_l1_done（幂等）/ completed / failed
+      completed    → completed（幂等，不可转换到其他状态）
+      failed       → failed（幂等，不可转换到其他状态）
+
+    Args:
+        db: 数据库会话
+        batch: 批次 ORM 对象
+        new_status: 目标状态
+        force: 强制更新（跳过校验，用于数据修复场景）
+    """
+    # 同状态幂等：直接返回，不报错
+    if batch.status == new_status:
+        return
+
+    valid = {
+        "pending":      ["l0_l1_done", "completed", "failed"],
+        "l0_l1_done": ["completed", "failed"],
+        "completed":    [],
+        "failed":       [],
+    }
+    if not force and new_status not in valid.get(batch.status, []):
+        raise ValueError(
+            f"非法批次状态转换: {batch.status} → {new_status}"
+        )
+    batch.status = new_status
+    db.flush()
+
+
+def update_orders_after_f007(
+    db: Session,
+    order_codes: List[str],
+) -> None:
+    """
+    F007 全局调度完成后的订单状态更新。
+
+    Order: pending / exception → delivering
+
+    Args:
+        db: 数据库会话
+        order_codes: 订单编码列表
+    """
+    for order_code in order_codes:
+        order = db.query(Order).filter(Order.order_code == order_code).first()
+        if order and order.status in ("pending", "exception"):
+            order.status = "delivering"
+    db.flush()
+
+
+def update_goods_after_f021(
+    db: Session,
+    schedule_id: int,
+    is_replan: bool = False,
+) -> None:
+    """
+    F021 打包完成后的货物状态更新。
+
+    Goods: pending_pack → packed  （首次调度）
+    Goods: exception   → packed  （重规划，恢复异常货物）
+
+    注意：Goods 模型没有 schedule_id 字段，通过 order 间接查找：
+    GlobalSchedule.order_codes → Order.id → Goods.order_id
+
+    Args:
+        db: 数据库会话
+        schedule_id: 全局调度方案 ID
+        is_replan: 是否为重规划模式
+    """
+    # 通过 GlobalSchedule → Orders → Goods 查找关联货物
+    schedule = db.query(GlobalSchedule).filter(GlobalSchedule.id == schedule_id).first()
+    if not schedule:
+        return
+
+    order_codes = schedule.order_codes
+    if isinstance(order_codes, str):
+        import json
+        order_codes = json.loads(order_codes)
+
+    if not order_codes:
+        return
+
+    orders = db.query(Order).filter(Order.order_code.in_(order_codes)).all()
+    order_ids = [o.id for o in orders]
+
+    if not order_ids:
+        return
+
+    target_status = "exception" if is_replan else "pending_pack"
+    goods_list = db.query(Goods).filter(
+        Goods.order_id.in_(order_ids),
+        Goods.status == target_status,
+    ).all()
+
+    for goods in goods_list:
+        goods.status = "packed"
+    db.flush()
+
+
+def mark_exception_statuses(
+    db: Session,
+    schedule_code: str,
+) -> None:
+    """
+    创建异常事件时，将关联实体状态标记为 exception。
+
+    更新以下状态：
+    - Order:  delivering → exception
+    - Goods: packed / in_transit → exception
+    - Package: packed / in_transit / pending_pack → exception
+    - Vehicle（如 target_type=vehicle）: → disabled（由调用方设置）
+
+    Args:
+        db: 数据库会话
+        schedule_code: 关联调度方案编码
+    """
+    schedule = db.query(GlobalSchedule).filter(
+        GlobalSchedule.schedule_code == schedule_code
+    ).first()
+    if not schedule:
+        return
+
+    # 1. 更新订单状态
+    order_codes = schedule.order_codes  # JSON 字段：["O001", "O002", ...]
+    if isinstance(order_codes, str):
+        import json
+        order_codes = json.loads(order_codes)
+    for order_code in (order_codes or []):
+        order = db.query(Order).filter(Order.order_code == order_code).first()
+        if order and order.status == "delivering":
+            order.status = "exception"
+
+    # 2. 更新货物状态（通过 Order 间接查找，Goods 无 schedule_id）
+    order_objs = db.query(Order).filter(Order.order_code.in_(order_codes or [])).all()
+    order_ids = [o.id for o in order_objs]
+    if order_ids:
+        goods_list = db.query(Goods).filter(
+            Goods.order_id.in_(order_ids),
+            Goods.status.in_(["packed", "in_transit"]),
+        ).all()
+        for goods in goods_list:
+            goods.status = "exception"
+
+    # 3. 更新包裹状态（通过 schedule_id 关联）
+    packages = db.query(Package).filter(
+        Package.schedule_id == schedule.id,
+        Package.status.in_(["packed", "in_transit", "pending_pack"]),
+    ).all()
+    for pkg in packages:
+        pkg.status = "exception"
+
+    db.flush()
+
+
+def reset_goods_for_replan(
+    db: Session,
+    order_codes: List[str],
+) -> None:
+    """
+    AI 重规划时重置货物状态，使其重新参与 F007 调度。
+
+    Goods: packed / in_transit / delivered → pending_pack
+
+    Args:
+        db: 数据库会话
+        order_codes: 订单编码列表
+    """
+    for order_code in order_codes:
+        order = db.query(Order).filter(Order.order_code == order_code).first()
+        if not order:
+            continue
+        goods_list = db.query(Goods).filter(
+            Goods.order_id == order.id,
+            Goods.status.in_(["packed", "in_transit", "delivered"]),
+        ).all()
+        for goods in goods_list:
+            goods.status = "pending_pack"
+    db.flush()
+
+
+def mark_old_entities_exception(
+    db: Session,
+    old_schedule_id: int,
+) -> None:
+    """
+    重规划时，将旧方案的包裹标记为 exception，
+    并将旧批次标记为 failed。
+    """
+    # 1. 旧包裹 → exception
+    old_packages = db.query(Package).filter(
+        Package.schedule_id == old_schedule_id,
+        Package.status.in_(["packed", "pending_pack", "in_transit"]),
+    ).all()
+    for pkg in old_packages:
+        pkg.status = "exception"
+
+    # 2. 旧批次 → failed
+    old_batches = db.query(DispatchBatch).filter(
+        DispatchBatch.global_schedule_id == old_schedule_id,
+    ).all()
+    for batch in old_batches:
+        if batch.status in ("pending", "l0_l1_done"):
+            update_batch_status(db, batch, "failed", force=True)
+
+    db.flush()
+
+
+def mark_vehicle_exception(
+    db: Session,
+    vehicle_code: str,
+) -> None:
+    """
+    车辆异常时，将关联实体状态标记为 exception。
+
+    更新以下状态：
+    - Package（该车辆关联）: packed / in_transit / pending_pack → exception
+    - Goods（通过包裹关联）: packed / in_transit → exception
+
+    Vehicle 状态（disabled）由调用方设置。
+
+    Args:
+        db: 数据库会话
+        vehicle_code: 车辆编码
+    """
+    vehicle = db.query(Vehicle).filter(Vehicle.vehicle_code == vehicle_code).first()
+    if not vehicle:
+        return
+
+    # 1. 查找该车辆的所有调度明细
+    dispatches = db.query(NodeDispatch).filter(
+        NodeDispatch.vehicle_id == vehicle.id
+    ).all()
+    dispatch_ids = [d.id for d in dispatches]
+
+    if not dispatch_ids:
+        return
+
+    # 2. 更新关联包裹状态
+    packages = db.query(Package).filter(
+        Package.dispatch_id.in_(dispatch_ids),
+        Package.status.in_(["packed", "in_transit", "pending_pack"]),
+    ).all()
+
+    for pkg in packages:
+        pkg.status = "exception"
+
+        # 3. 更新关联货物状态
+        if pkg.goods_items:
+            items = pkg.goods_items
+            if isinstance(items, str):
+                import json
+                items = json.loads(items)
+            for item in items:
+                goods_code = item.get("goods_code")
+                if goods_code:
+                    goods = db.query(Goods).filter(
+                        Goods.goods_code == goods_code,
+                        Goods.status.in_(["packed", "in_transit"]),
+                    ).first()
+                    if goods:
+                        goods.status = "exception"
+
+    db.flush()

@@ -179,15 +179,78 @@ async def list_dispatch_batches(
 @router.get("/batches/{batch_code}")
 async def get_dispatch_batch_detail(
     batch_code: str,
+    vehicle_code: Optional[str] = Query(default=None, description="按车辆编码过滤"),
+    level_phase: Optional[int] = Query(default=None, description="按层级阶段过滤（0=L0→L1，1=L1→L2）"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    获取调度批次详情（含 dispatches）
+    获取调度批次详情（含 dispatches，P1-07 新增过滤参数）
     
     需要角色：dispatcher / manager
     """
     return await DispatchService.get_dispatch_batch_detail(
         batch_code=batch_code,
         db=db,
+        vehicle_code=vehicle_code,
+        level_phase=level_phase,
     )
+
+@router.get("/batches/{batch_code}/dispatches")
+async def get_batch_dispatches(
+    batch_code: str,
+    vehicle_code: Optional[str] = Query(default=None, description="按车辆编码过滤"),
+    level_phase: Optional[int] = Query(default=None, description="按层级阶段过滤（0=L0→L1，1=L1→L2）"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    按批次查询调度明细列表（P1-07 新增端点）
+    
+    需要角色：dispatcher / manager
+    """
+    return await DispatchService.get_batch_dispatches(
+        batch_code=batch_code,
+        db=db,
+        vehicle_code=vehicle_code,
+        level_phase=level_phase,
+    )
+
+@router.get("/{schedule_code}/dispatches")
+async def get_schedule_dispatches(
+    schedule_code: str,
+    vehicle_code: Optional[str] = Query(default=None, description="按车辆编码过滤"),
+    level_phase: Optional[int] = Query(default=None, description="按层级阶段过滤（0=L0→L1，1=L1→L2）"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    按方案查询所有调度明细列表（P1-07 新增端点）
+    
+    查询指定方案下所有批次的调度明细。
+    
+    需要角色：dispatcher / manager
+    """
+    return await DispatchService.get_schedule_dispatches(
+        schedule_code=schedule_code,
+        db=db,
+        vehicle_code=vehicle_code,
+        level_phase=level_phase,
+    )
+
+@router.get("/dispatches/{dispatch_code}")
+async def get_dispatch_detail(
+    dispatch_code: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    查询单个调度明细详情（P1-07 新增端点）
+    
+    需要角色：dispatcher / manager
+    """
+    return await DispatchService.get_dispatch_detail(
+        dispatch_code=dispatch_code,
+        db=db,
+    )
+

@@ -26,6 +26,7 @@ from schemas.exception_event import (
     ExceptionEventResponse,
 )
 from utils.response import success_response, error_response
+from services.state_machine import mark_exception_statuses, mark_vehicle_exception
 
 # 允许的枚举值
 ALLOWED_EXCEPTION_TYPES = {"road", "package", "node"}
@@ -132,26 +133,8 @@ class ExceptionService:
             # 3. 重置关联订单/货物/包裹状态为 exception
             if data.related_schedule_code:
                 # 重新查询调度方案（确保会话活跃）
-                schedule = db.query(GlobalSchedule).filter(
-                    GlobalSchedule.schedule_code == data.related_schedule_code
-                ).first()
-                if schedule:
-                    # 重置订单状态：delivering → exception
-                    for order_code in schedule.order_codes:
-                        order = db.query(Order).filter(Order.order_code == order_code).first()
-                        if order and order.status == "delivering":
-                            order.status = "exception"
-                            # 重置货物状态
-                            for goods in order.goods:
-                                if goods.status in ["packed", "in_transit"]:
-                                    goods.status = "exception"
-                    # 重置包裹状态
-                    packages = db.query(Package).filter(
-                        Package.schedule_id == schedule.id
-                    ).all()
-                    for pkg in packages:
-                        if pkg.status in ["packed", "in_transit", "pending_pack"]:
-                            pkg.status = "exception"
+                # 统一标记异常状态（调度方案关联的实体）
+                mark_exception_statuses(db, data.related_schedule_code)
 
             # 4. 处理车辆异常（如果 target_type 是 vehicle）
             if data.target_type == "vehicle" and data.target_code:
@@ -162,40 +145,8 @@ class ExceptionService:
                     # 将车辆状态设为 disabled
                     vehicle.status = "disabled"
 
-                    # 查询该车辆关联的所有调度明细（dispatch_id 列表）
-                    dispatches = db.query(NodeDispatch).filter(
-                        NodeDispatch.vehicle_id == vehicle.id
-                    ).all()
-                    dispatch_ids = [d.id for d in dispatches]
-
-                    if dispatch_ids:
-                        # 批量查询关联包裹，避免 N+1
-                        packages = db.query(Package).filter(
-                            Package.dispatch_id.in_(dispatch_ids)
-                        ).all()
-
-                        # 收集需要更新的货物编码
-                        all_goods_items = []
-                        for pkg in packages:
-                            if pkg.status in ["packed", "in_transit", "pending_pack"]:
-                                pkg.status = "exception"
-                                if pkg.goods_items:
-                                    all_goods_items.extend(pkg.goods_items)
-
-                        # 批量更新关联货物状态
-                        if all_goods_items:
-                            goods_codes = [
-                                item.get("goods_code")
-                                for item in all_goods_items
-                                if item.get("goods_code")
-                            ]
-                            if goods_codes:
-                                affected_goods = db.query(Goods).filter(
-                                    Goods.goods_code.in_(goods_codes),
-                                    Goods.status.in_(["packed", "in_transit"]),
-                                ).all()
-                                for goods in affected_goods:
-                                    goods.status = "exception"
+                    # 统一标记车辆关联实体状态（包裹→exception，货物→exception）
+                    mark_vehicle_exception(db, data.target_code)
 
             # 5. 写入数据库
             event = ExceptionEvent(

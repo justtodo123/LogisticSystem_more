@@ -28,6 +28,7 @@ from models.driver import Driver
 from models.dispatch_batch import DispatchBatch
 from models.node_dispatch import NodeDispatch
 from models.global_schedule import GlobalSchedule
+from services.state_machine import update_batch_status
 from models.sorting_center import SortingCenter
 from models.storage_center import StorageCenter
 from models.goods import Goods
@@ -729,7 +730,7 @@ def _run_dispatch_both_levels(db: Session, schedule, config: dict, excluded_vehi
         simulate_delivery_l1_to_l2(db, batch, dispatch_obj, list(order_codes))
     
     # 9. 更新批次状态为 completed
-    batch.status = 'completed'
+    update_batch_status(db, batch, 'completed')
     batch.l1_l2_dispatch_count = len(l1_l2_dispatches)
     # 保存完整的 unallocated_packages
     all_unallocated = unallocated_l0_l1 + unallocated_l1_l2 if (unallocated_l0_l1 or unallocated_l1_l2) else []
@@ -797,7 +798,7 @@ def _run_dispatch_l0_to_l1(db: Session, schedule, config: dict, excluded_vehicle
     _write_dispatches(db, batch.id, l0_l1_dispatches, level_phase=0)
     
     # 4. 更新批次状态为 l0_l1_done（等待模拟送达）
-    batch.status = 'l0_l1_done'
+    update_batch_status(db, batch, 'l0_l1_done')
     db.flush()  # 刷新到数据库，确保后续查询能看到更新后的状态
     
     # 5. 返回结果（只包含 L0→L1 的调度明细）
@@ -845,7 +846,7 @@ def _run_dispatch_l1_to_l2(db: Session, schedule, existing_batch, config: dict, 
     _write_dispatches(db, existing_batch.id, l1_l2_dispatches, level_phase=1)
     
     # 3. 更新批次状态为 completed
-    existing_batch.status = 'completed'
+    update_batch_status(db, existing_batch, 'completed')
     existing_batch.l1_l2_dispatch_count = len(l1_l2_dispatches)
     existing_batch.unallocated_packages = json.dumps([pkg.package_code for pkg in unallocated_l1_l2], ensure_ascii=False) if unallocated_l1_l2 else None
     db.flush()  # 刷新到数据库，确保状态更新被正确保存
