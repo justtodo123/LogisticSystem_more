@@ -468,6 +468,10 @@ class ArrivalConfirmService:
                     status="packed",
                     from_node_id=from_node_id,
                     to_node_id=to_node_id,
+                    from_longitude=from_node.longitude,
+                    from_latitude=from_node.latitude,
+                    to_longitude=to_node.longitude,
+                    to_latitude=to_node.latitude,
                     schedule_id=schedule.id,
                     goods_items=goods_items
                 )

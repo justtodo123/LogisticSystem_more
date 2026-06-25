@@ -54,6 +54,10 @@ class PackageService:
                     "from_node_name": from_node.name if from_node else "",
                     "to_node_code": to_node.node_code if to_node else "",
                     "to_node_name": to_node.name if to_node else "",
+                    "from_longitude": float(pkg.from_longitude) if pkg.from_longitude else None,
+                    "from_latitude": float(pkg.from_latitude) if pkg.from_latitude else None,
+                    "to_longitude": float(pkg.to_longitude) if pkg.to_longitude else None,
+                    "to_latitude": float(pkg.to_latitude) if pkg.to_latitude else None,
                     "created_at": pkg.created_at.isoformat(),
                     "updated_at": pkg.updated_at.isoformat()
                 })
@@ -166,6 +170,8 @@ class PackageService:
                 total_weight += float(goods.weight)
                 total_volume += float(goods.volume)
             
+            from_node = db.query(Node).filter(Node.id == node_id).first()
+            to_node = db.query(Node).filter(Node.id == pkg.to_node_id).first()
             new_pkg = Package(
                 package_code=new_package_code,
                 weight=total_weight,
@@ -173,6 +179,10 @@ class PackageService:
                 status="pending_pack",
                 from_node_id=node_id,
                 to_node_id=pkg.to_node_id,  # 保持原目标节点
+                from_longitude=from_node.longitude if from_node else None,
+                from_latitude=from_node.latitude if from_node else None,
+                to_longitude=to_node.longitude if to_node else None,
+                to_latitude=to_node.latitude if to_node else None,
                 goods_items=json.dumps(goods_list, ensure_ascii=False)
             )
             db.add(new_pkg)
