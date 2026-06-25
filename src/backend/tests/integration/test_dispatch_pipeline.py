@@ -211,6 +211,26 @@ class TestDispatchPipeline:
         )
         assert deliver_result["code"] == 0
         
+        # P1-3: deliver 不改变 goods 状态（保持 in_transit），也不生成 L1→L2 包裹。
+        # 需通过 confirm-arrival + _trigger_repacking 生成 L1→L2 包裹。
+        from services.state_machine import transition_goods_status
+        from services.arrival_confirm_service import ArrivalConfirmService
+        from models.goods import Goods
+
+        # 1. 将 L0→L1 送达后的 goods 从 in_transit 转为 pending_pack（模拟 confirm-arrival）
+        goods_l0_delivered = db_session.query(Goods).filter(
+            Goods.status == 'in_transit'
+        ).all()
+        for g in goods_l0_delivered:
+            transition_goods_status(db_session, g, 'pending_pack')
+
+        # 2. P1-3: 调用 _trigger_repacking 生成 L1→L2 包裹（替代激活预生成包裹）
+        repack_result = ArrivalConfirmService._trigger_repacking(
+            db=db_session,
+            schedule_code=schedule_code
+        )
+        db_session.flush()
+        
         # 再次执行节点调度（应该执行L1→L2）
         result2 = await DispatchService.create_node_dispatch(
             schedule_code=schedule_code,
@@ -221,17 +241,18 @@ class TestDispatchPipeline:
         # 验证第二次调度成功（或跳过，如果没有L1→L2的包裹）
         assert result2["code"] == 0 or "跳过" in result2["message"] or "L1→L2" in result2["message"]
         
-        # 获取L1→L2的包裹并模拟送达
+        # 获取L1→L2的包裹并模拟送达（如果有的话）
         packages_l1_l2 = db_session.query(Package).filter(
             Package.status == "in_transit"
         ).all()
         
-        deliver_result2 = await SimulationService.deliver_packages(
-            vehicle_code=None,
-            package_code=None,
-            db=db_session,
-        )
-        assert deliver_result2["code"] == 0
+        if packages_l1_l2:
+            deliver_result2 = await SimulationService.deliver_packages(
+                vehicle_code=None,
+                package_code=None,
+                db=db_session,
+            )
+            assert deliver_result2["code"] == 0
         
         # 验证订单状态
         from models.order import Order

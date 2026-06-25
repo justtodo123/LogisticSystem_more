@@ -340,144 +340,163 @@ def dispatch_level(
             reverse=True
         )
         
+        # --- 查询候选车辆（一次性获取，所有 to_node 分组共享） ---
+        # 优先级: 本节点空闲 > 本节点返程 > 跨节点空闲
+        candidate_vehicles = _get_idle_vehicles_at_node(db, from_node.id)
+        if excluded_vehicles:
+            candidate_vehicles = [v for v in candidate_vehicles 
+                                    if v.vehicle_code not in excluded_vehicles]
+        
+        used_cross_node = False
+        
+        if not candidate_vehicles:
+            candidate_vehicles = _get_return_vehicles_at_node(db, from_node.id)
+            if excluded_vehicles:
+                candidate_vehicles = [v for v in candidate_vehicles 
+                                            if v.vehicle_code not in excluded_vehicles]
+        
+        # 跨节点后备：当本节点无可用车辆时，尝试同类型其他节点的空闲车辆
+        if not candidate_vehicles:
+            if level_phase == 0:
+                candidate_vehicles = _get_idle_vehicles_by_node_type(db, 'storage_center', from_node.id)
+            else:
+                candidate_vehicles = _get_idle_vehicles_at_l1_centers(db, from_node.id)
+            if excluded_vehicles:
+                candidate_vehicles = [v for v in candidate_vehicles 
+                                            if v.vehicle_code not in excluded_vehicles]
+            used_cross_node = True
+        
+        # 跨节点后备车辆（供 Phase 2 重试使用，当本节点车辆不够时）
+        cross_vehicles = None
+        if not used_cross_node:
+            if level_phase == 0:
+                cross_vehicles = _get_idle_vehicles_by_node_type(db, 'storage_center', from_node.id)
+            else:
+                cross_vehicles = _get_idle_vehicles_at_l1_centers(db, from_node.id)
+            if excluded_vehicles and cross_vehicles:
+                cross_vehicles = [v for v in cross_vehicles 
+                                    if v.vehicle_code not in excluded_vehicles]
+        
+        # 累积车辆状态：跨 to_node 迭代共享已分配重量，实现多车均衡
+        accumulated_vehicle_state = {}   # {vehicle_id: assigned_weight}
+        accumulated_cross_state = {}     # 跨节点车辆的累积状态
+        
+        # -- 车辆分配辅助函数 --
+        def _build_vehicle_slots(vehicles, from_n, to_n, cfg):
+            slots = []
+            for v in vehicles:
+                score = _calculate_vehicle_score(v, from_n, to_n, 1, cfg)
+                slots.append({
+                    "vehicle": v,
+                    "capacity": float(v.capacity),
+                    "score": score,
+                    "assigned_packages": [],
+                    "assigned_weight": 0.0,
+                })
+            slots.sort(key=lambda x: x["score"])
+            return slots
+        
+        def _greedy_allocate(packages, vehicle_slots):
+            """贪心分配包裹到车辆，返回 (已分配包裹, 未分配包裹)"""
+            sorted_pkgs = sorted(packages, key=lambda p: float(p.weight), reverse=True)
+            allocated = []
+            unallocated = []
+            for pkg in sorted_pkgs:
+                pkg_weight = float(pkg.weight)
+                best_slot = None
+                for v_slot in vehicle_slots:
+                    remaining = v_slot["capacity"] - v_slot["assigned_weight"]
+                    if remaining >= pkg_weight:
+                        if best_slot is None or v_slot["assigned_weight"] < best_slot["assigned_weight"]:
+                            best_slot = v_slot
+                if best_slot:
+                    best_slot["assigned_packages"].append(pkg)
+                    best_slot["assigned_weight"] += pkg_weight
+                    allocated.append(pkg)
+                else:
+                    unallocated.append(pkg)
+            return allocated, unallocated
+        
+        def _create_dispatches_from_slots(vehicle_slots, from_n_code, from_n, to_n):
+            """从车辆分配槽位创建调度明细"""
+            created = []
+            for v_slot in vehicle_slots:
+                assigned = v_slot["assigned_packages"]
+                if not assigned:
+                    continue
+                vehicle = v_slot["vehicle"]
+                driver = db.query(Driver).filter(
+                    Driver.node_id == vehicle.node_id,
+                    Driver.status == 'idle'
+                ).first()
+                pkg_codes = [p.package_code for p in assigned]
+                dist_one_way = _haversine(
+                    float(from_n.latitude), float(from_n.longitude),
+                    float(to_n.latitude), float(to_n.longitude)
+                )
+                dispatch = {
+                    "vehicle_code": vehicle.vehicle_code,
+                    "driver_code": driver.driver_code if driver else None,
+                    "tasks": [
+                        {"from_node_code": from_n_code, "to_node_code": to_n.node_code,
+                         "package_codes": pkg_codes, "is_return": False},
+                        {"from_node_code": to_n.node_code, "to_node_code": from_n_code,
+                         "package_codes": [], "is_return": True}
+                    ],
+                    "total_distance": dist_one_way * 2,
+                    "total_time": dist_one_way * 2 / 60.0,
+                    "vehicle_id": vehicle.id,
+                    "driver_id": driver.id if driver else None,
+                }
+                dispatch_list.append(dispatch)
+                for p in assigned:
+                    p.dispatch_id = 0
+                    updated_packages.append(p)
+                created.append(dispatch)
+            return created
+        
+        # --- 按目的节点逐组分配（共享 accumulated_vehicle_state） ---
         for to_node_code, to_packages in sorted_to_nodes:
             # 获取目的节点
             to_node = db.query(Node).filter(Node.node_code == to_node_code).first()
             if not to_node:
-                # 节点不存在，该分组所有包裹都未分配
                 unallocated_packages.extend(to_packages)
                 continue
             
-            # 计算总重量，判断是否需要拆分为多车次
-            total_weight = sum(float(pkg.weight) for pkg in to_packages)
-            
-            # 查询候选车辆：优先级 本节点空闲 > 本节点返程 > 跨节点空闲
-            candidate_vehicles = _get_idle_vehicles_at_node(db, from_node.id)
-            
-            # 新增：排除异常车辆
-            if excluded_vehicles:
-                candidate_vehicles = [v for v in candidate_vehicles 
-                                        if v.vehicle_code not in excluded_vehicles]
-            
-            used_cross_node = False
-            
             if not candidate_vehicles:
-                candidate_vehicles = _get_return_vehicles_at_node(db, from_node.id)
-                # 排除异常车辆
-                if excluded_vehicles:
-                    candidate_vehicles = [v for v in candidate_vehicles 
-                                                if v.vehicle_code not in excluded_vehicles]
-            
-            # 跨节点后备：当本节点无可用车辆时，尝试同类型其他节点的空闲车辆
-            if not candidate_vehicles:
-                if level_phase == 0:
-                    candidate_vehicles = _get_idle_vehicles_by_node_type(db, 'storage_center', from_node.id)
-                else:
-                    candidate_vehicles = _get_idle_vehicles_at_l1_centers(db, from_node.id)
-                # 排除异常车辆
-                if excluded_vehicles:
-                    candidate_vehicles = [v for v in candidate_vehicles 
-                                                if v.vehicle_code not in excluded_vehicles]
-                used_cross_node = True
-            
-            if not candidate_vehicles:
-                # 该节点没有任何可用车辆（包括跨节点）
                 unallocated_packages.extend(to_packages)
                 continue
             
-            # 获取可用车辆列表（含载重），按评分排序
-            def _build_vehicle_slots(vehicles, from_n, to_n, cfg):
-                slots = []
-                for v in vehicles:
-                    score = _calculate_vehicle_score(v, from_n, to_n, 1, cfg)
-                    slots.append({
-                        "vehicle": v,
-                        "capacity": float(v.capacity),
-                        "score": score,
-                        "assigned_packages": [],
-                        "assigned_weight": 0.0,
-                    })
-                slots.sort(key=lambda x: x["score"])
-                return slots
-            
-            def _greedy_allocate(packages, vehicle_slots):
-                """贪心分配包裹到车辆，返回 (已分配包裹, 未分配包裹)"""
-                sorted_pkgs = sorted(packages, key=lambda p: float(p.weight), reverse=True)
-                allocated = []
-                unallocated = []
-                for pkg in sorted_pkgs:
-                    pkg_weight = float(pkg.weight)
-                    best_slot = None
-                    for v_slot in vehicle_slots:
-                        remaining = v_slot["capacity"] - v_slot["assigned_weight"]
-                        if remaining >= pkg_weight:
-                            if best_slot is None or v_slot["assigned_weight"] < best_slot["assigned_weight"]:
-                                best_slot = v_slot
-                    if best_slot:
-                        best_slot["assigned_packages"].append(pkg)
-                        best_slot["assigned_weight"] += pkg_weight
-                        allocated.append(pkg)
-                    else:
-                        unallocated.append(pkg)
-                return allocated, unallocated
-            
-            def _create_dispatches_from_slots(vehicle_slots, from_n_code, from_n, to_n):
-                """从车辆分配槽位创建调度明细"""
-                created = []
-                for v_slot in vehicle_slots:
-                    assigned = v_slot["assigned_packages"]
-                    if not assigned:
-                        continue
-                    vehicle = v_slot["vehicle"]
-                    driver = db.query(Driver).filter(
-                        Driver.node_id == vehicle.node_id,
-                        Driver.status == 'idle'
-                    ).first()
-                    pkg_codes = [p.package_code for p in assigned]
-                    dist_one_way = _haversine(
-                        float(from_n.latitude), float(from_n.longitude),
-                        float(to_n.latitude), float(to_n.longitude)
-                    )
-                    dispatch = {
-                        "vehicle_code": vehicle.vehicle_code,
-                        "driver_code": driver.driver_code if driver else None,
-                        "tasks": [
-                            {"from_node_code": from_n_code, "to_node_code": to_node_code,
-                             "package_codes": pkg_codes, "is_return": False},
-                            {"from_node_code": to_node_code, "to_node_code": from_n_code,
-                             "package_codes": [], "is_return": True}
-                        ],
-                        "total_distance": dist_one_way * 2,
-                        "total_time": dist_one_way * 2 / 60.0,
-                        "vehicle_id": vehicle.id,
-                        "driver_id": driver.id if driver else None,
-                    }
-                    dispatch_list.append(dispatch)
-                    for p in assigned:
-                        p.dispatch_id = 0
-                        updated_packages.append(p)
-                    created.append(dispatch)
-                return created
-            
-            # Phase 1: 本节点车辆分配
+            # Phase 1: 本节点车辆分配（恢复跨迭代累积的已分配重量）
             vehicle_slots = _build_vehicle_slots(candidate_vehicles, from_node, to_node, config)
+            for v_slot in vehicle_slots:
+                vid = v_slot["vehicle"].id
+                if vid in accumulated_vehicle_state:
+                    v_slot["assigned_weight"] = accumulated_vehicle_state[vid]
+            
             allocated_pkgs, retry_packages = _greedy_allocate(to_packages, vehicle_slots)
+            
+            # 更新累积状态（同一 from_node 的所有 to_node 分组共享）
+            for v_slot in vehicle_slots:
+                accumulated_vehicle_state[v_slot["vehicle"].id] = v_slot["assigned_weight"]
+            
             _create_dispatches_from_slots(vehicle_slots, from_node_code, from_node, to_node)
             
-            # Phase 2: 跨节点车辆重试（仅当有未分配包裹且尚未使用跨节点车辆时）
-            if retry_packages and not used_cross_node:
-                if level_phase == 0:
-                    cross_vehicles = _get_idle_vehicles_by_node_type(db, 'storage_center', from_node.id)
-                else:
-                    cross_vehicles = _get_idle_vehicles_at_l1_centers(db, from_node.id)
+            # Phase 2: 跨节点车辆重试（也使用累积状态）
+            if retry_packages and cross_vehicles:
+                cross_slots = _build_vehicle_slots(cross_vehicles, from_node, to_node, config)
+                for v_slot in cross_slots:
+                    vid = v_slot["vehicle"].id
+                    if vid in accumulated_cross_state:
+                        v_slot["assigned_weight"] = accumulated_cross_state[vid]
                 
-                if cross_vehicles:
-                    cross_slots = _build_vehicle_slots(cross_vehicles, from_node, to_node, config)
-                    _, still_unallocated = _greedy_allocate(retry_packages, cross_slots)
-                    _create_dispatches_from_slots(cross_slots, from_node_code, from_node, to_node)
-                    unallocated_packages.extend(still_unallocated)
-                else:
-                    unallocated_packages.extend(retry_packages)
+                _, still_unallocated = _greedy_allocate(retry_packages, cross_slots)
+                
+                for v_slot in cross_slots:
+                    accumulated_cross_state[v_slot["vehicle"].id] = v_slot["assigned_weight"]
+                
+                _create_dispatches_from_slots(cross_slots, from_node_code, from_node, to_node)
+                unallocated_packages.extend(still_unallocated)
             elif retry_packages:
                 unallocated_packages.extend(retry_packages)
     

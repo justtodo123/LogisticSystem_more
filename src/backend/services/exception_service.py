@@ -26,7 +26,11 @@ from schemas.exception_event import (
     ExceptionEventResponse,
 )
 from utils.response import success_response, error_response
-from services.state_machine import mark_exception_statuses, mark_vehicle_exception
+from services.state_machine import (
+    mark_exception_statuses,
+    mark_vehicle_exception,
+    transition_vehicle_status,
+)
 
 # 允许的枚举值
 ALLOWED_EXCEPTION_TYPES = {"road", "package", "node"}
@@ -142,8 +146,8 @@ class ExceptionService:
                     Vehicle.vehicle_code == data.target_code
                 ).first()
                 if vehicle:
-                    # 将车辆状态设为 disabled
-                    vehicle.status = "disabled"
+                    # 将车辆状态设为 disabled（异常事件强制）
+                    transition_vehicle_status(db, vehicle, "disabled", force=True)
 
                     # 统一标记车辆关联实体状态（包裹→exception，货物→exception）
                     mark_vehicle_exception(db, data.target_code)

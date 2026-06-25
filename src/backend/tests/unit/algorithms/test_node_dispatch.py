@@ -60,11 +60,19 @@ class TestNodeDispatchNormal:
             db=db_session,
         )
         
-        # 将包裹添加到数据库会话，并更新状态为 'packed'
+        # 将包裹添加到数据库会话
         for pkg in packages:
-            pkg.status = 'packed'  # 节点调度需要 status='packed' 的包裹
             db_session.add(pkg)
         db_session.commit()
+        
+        # P1-3: 调用 update_goods_after_f021 将 goods 从 pending_pack 转为 packed
+        # 确保状态机链路完整：F021 → goods.packed → F005 → goods.in_transit
+        from services.state_machine import update_goods_after_f021
+        update_goods_after_f021(db_session, gs.id)
+        
+        # P1-3: 调用 update_orders_after_f007 将 orders 从 pending 转为 delivering
+        from services.state_machine import update_orders_after_f007
+        update_orders_after_f007(db_session, schedule_result["order_codes"])
         
         # 调用节点调度
         result = run_node_dispatch(
@@ -200,11 +208,15 @@ class TestNodeDispatchEdgeCases:
             db=db_session,
         )
         
-        # 将包裹添加到数据库会话，并更新状态为 'packed'
+        # 将包裹添加到数据库会话
         for pkg in packages:
-            pkg.status = 'packed'  # 节点调度需要 status='packed' 的包裹
             db_session.add(pkg)
         db_session.commit()
+        
+        # P1-3: 调用 update_goods_after_f021 将 goods 从 pending_pack 转为 packed
+        from services.state_machine import update_goods_after_f021, update_orders_after_f007
+        update_goods_after_f021(db_session, gs.id)
+        update_orders_after_f007(db_session, schedule_result["order_codes"])
         
         # 将所有车辆状态设置为 maintenance（不可用），以测试"没有可用车辆"的情况
         vehicles = db_session.query(Vehicle).all()
