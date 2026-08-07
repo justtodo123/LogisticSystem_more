@@ -55,3 +55,12 @@ def init_db():
     
     # 创建所有表
     Base.metadata.create_all(bind=engine)
+    
+    # 安全检查：JWT_SECRET 使用默认值时发出警告（仅限演示环境）
+    if settings.JWT_SECRET == "default-secret-key-change-in-env":
+        import warnings
+        warnings.warn(
+            "⚠️  JWT_SECRET 仍为默认值 'default-secret-key-change-in-env'，"
+            "请在生产部署前通过 .env 文件设置 JWT_SECRET 为随机字符串。",
+            RuntimeWarning,
+        )

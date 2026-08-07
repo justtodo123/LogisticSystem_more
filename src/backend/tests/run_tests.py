@@ -32,19 +32,23 @@ def main():
     # 构建pytest命令
     cmd = [sys.executable, "-m", "pytest"]
     
-    # 添加标记过滤
+    # 构建标记表达式（支持组合，如 --unit --fast）
+    markers = []
     if args.unit:
-        cmd.extend(["-m", "unit"])
+        markers.append("unit")
     elif args.integration:
-        cmd.extend(["-m", "integration"])
+        markers.append("integration")
     elif args.api:
-        cmd.extend(["-m", "api"])
+        markers.append("api")
     elif args.phase:
-        cmd.extend(["-m", args.phase])
+        markers.append(args.phase)
     
     # 快速运行：跳过慢速测试
     if args.fast:
-        cmd.extend(["-m", "not slow"])
+        markers.append("not slow")
+    
+    if markers:
+        cmd.extend(["-m", " and ".join(markers)])
     
     # 覆盖率报告
     if args.cov:

@@ -33,6 +33,8 @@
 
 ## 快速启动
 
+> **一键演示部署（推荐）**：双击 `scripts/start-demo.bat` 即可自动检查环境、安装依赖、初始化数据并启动前后端。如需手动控制，按下文分步操作。
+
 ### 1. 后端
 
 ```bash
@@ -62,6 +64,8 @@ npm run dev
 - Swagger：<http://localhost:8000/docs>
 
 ### 3. 演示账号
+
+> **安全提醒**：以下账号仅用于本地教学演示，切勿用于任何生产或公开环境。
 
 | 用户名 | 密码 | 角色 |
 | --- | --- | --- |
@@ -95,6 +99,9 @@ npm run dev
 
 ```text
 LogisticsSystem/
+├── scripts/
+│   ├── start-demo.bat              # 一键启动（双击即可）
+│   └── start-demo.ps1              # 启动 PowerShell 脚本
 ├── orderdata.xlsx                    # 演示用订单导入表格（xlsx）
 ├── README.md
 ├── docs/                             # 项目文档
@@ -216,6 +223,8 @@ LogisticsSystem/
 | [PRD V2.7（需求基线）](docs/prds/03产品需求文档(PRD)-V2.7.md) | 原始产品需求与澄清历史 |
 | [PRD V2.8（P1 交付版）](docs/prds/04产品需求文档(PRD)-V2.8-P1交付版.md) | **P1 完成后实际交付范围与验收** |
 | [API 契约](docs/api-contract/) | 各阶段接口契约 |
+| [面试总说明报告](My_doc/interview-report.md) | **架构亮点、技术边界、高频问答** |
+| [测试结果固化报告](My_doc/test-results.md) | **423 用例、覆盖率与失败分析** |
 
 ## 已知限制（答辩说明）
 
