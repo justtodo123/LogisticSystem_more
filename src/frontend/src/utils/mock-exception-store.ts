@@ -1,9 +1,12 @@
 import type { PaginatedResult } from '@/types/common'
 import type {
+  BatchReplanPayload,
+  BatchReplanResult,
   CreateExceptionPayload,
   ExceptionEvent,
   ExceptionListParams,
   RedispatchReplanResult,
+  ReplanStrategy,
   RerouteReplanResult,
 } from '@/types/exception'
 import type { GlobalScheduleDetail, GlobalScheduleSummary } from '@/types/schedule'
@@ -103,6 +106,7 @@ async function findBatchForSchedule(scheduleCode: string): Promise<string | null
 export async function mockRedispatchReplan(
   eventCode: string,
   reason: string,
+  strategy: ReplanStrategy = 'full',
 ): Promise<RedispatchReplanResult> {
   const event = await getMockException(eventCode)
   if (!event) throw new Error('异常事件不存在')
@@ -168,6 +172,13 @@ export async function mockRedispatchReplan(
     is_replan: true,
     replan_reason: reason,
     original_schedule_code: original.schedule_code,
+    strategy,
+    diff_summary: {
+      strategy,
+      affected_count: strategy === 'partial' ? 1 : (original.package_count ?? 0),
+      new_eta_delta: 0.0,
+      cost_delta: 0.0,
+    },
   }
 }
 
@@ -252,6 +263,64 @@ export async function resolveMockException(
     exceptionsData[idx] = updated
   }
   return updated
+}
+
+export async function mockBatchReplan(
+  payload: BatchReplanPayload,
+): Promise<BatchReplanResult> {
+  const { event_codes, reason, strategy = 'full' } = payload
+  await delay(400)
+
+  // 按关联调度方案分组（同一方案只重规划一次）
+  const scheduleToEvents = new Map<string, ExceptionEvent[]>()
+  const skipped: string[] = []
+  for (const code of event_codes) {
+    const ev = await getMockException(code)
+    if (!ev || ev.status === 'resolved' || !ev.related_schedule_code) {
+      skipped.push(code)
+      continue
+    }
+    const list = scheduleToEvents.get(ev.related_schedule_code) ?? []
+    list.push(ev)
+    scheduleToEvents.set(ev.related_schedule_code, list)
+  }
+
+  const replannedSchedules = []
+  for (const [scheduleCode, evts] of scheduleToEvents) {
+    const first = evts[0]
+    let newCode: string | null = null
+    let replanStrategy: ReplanStrategy = strategy
+    let diff = null
+    try {
+      const result = await mockRedispatchReplan(first.event_code, reason, strategy)
+      newCode = result.new_schedule_code
+      replanStrategy = result.strategy ?? strategy
+      diff = result.diff_summary ?? null
+      for (const ev of evts) {
+        ev.replan_batch_code = newCode
+        const idx = exceptionsData.findIndex((e) => e.event_code === ev.event_code)
+        if (idx >= 0) exceptionsData[idx] = { ...ev }
+      }
+    } catch {
+      newCode = null
+    }
+    replannedSchedules.push({
+      schedule_code: scheduleCode,
+      event_codes: evts.map((e) => e.event_code),
+      result_code: newCode ? 0 : 40001,
+      message: newCode ? 'success' : '重规划失败',
+      new_schedule_code: newCode,
+      strategy: replanStrategy,
+      diff_summary: diff,
+    })
+  }
+
+  return {
+    replanned_schedules: replannedSchedules,
+    skipped,
+    total_events: event_codes.length,
+    strategy,
+  }
 }
 
 export async function listMockRoutes(

@@ -11,6 +11,7 @@ from datetime import datetime
 ALLOWED_EXCEPTION_TYPES = {"road", "package", "node"}
 ALLOWED_TARGET_TYPES = {"node", "package", "route", "vehicle"}
 ALLOWED_ACTIONS = {"redispatch", "reroute"}
+ALLOWED_REPLAN_STRATEGIES = {"partial", "full", "hybrid"}
 
 
 class CreateExceptionEventRequest(BaseModel):
@@ -73,6 +74,23 @@ class TriggerReplanRequest(BaseModel):
     """触发重规划请求体"""
     action: str = Field(..., description="重规划类型：redispatch / reroute")
     reason: str = Field(..., description="重规划原因")
+    strategy: Optional[str] = Field(None, description="重规划策略：partial（仅重排受影响包裹）/ full（全部重排）/ hybrid（自动选择）")
+
+    @model_validator(mode='after')
+    def validate_strategy(self):
+        if self.strategy is not None and self.strategy not in ALLOWED_REPLAN_STRATEGIES:
+            raise ValueError(
+                f"无效的重规划策略: {self.strategy}，"
+                f"允许值: {', '.join(sorted(ALLOWED_REPLAN_STRATEGIES))}"
+            )
+        return self
+
+
+class BatchReplanRequest(BaseModel):
+    """批量异常重规划请求体（同一调度方案去重，只触发一次重规划）"""
+    event_codes: list[str] = Field(..., description="异常事件编码列表")
+    reason: str = Field(..., description="重规划原因")
+    strategy: Optional[str] = Field(None, description="重规划策略：partial / full / hybrid")
 
 
 class UpdateExceptionRequest(BaseModel):

@@ -6,7 +6,16 @@ export type ExceptionStatus = 'open' | 'resolved'
 
 export type RecommendedAction = 'redispatch' | 'reroute'
 
-export type TargetType = 'node' | 'route' | 'vehicle'
+export type TargetType = 'node' | 'route' | 'vehicle' | 'package'
+
+export type ReplanStrategy = 'partial' | 'full' | 'hybrid'
+
+export interface DiffSummary {
+  strategy: ReplanStrategy
+  affected_count: number
+  new_eta_delta: number
+  cost_delta: number
+}
 
 export type ExceptionSubtype =
   | 'congestion'
@@ -46,6 +55,30 @@ export interface CreateExceptionPayload {
 export interface TriggerReplanPayload {
   action: RecommendedAction
   reason: string
+  strategy?: ReplanStrategy
+}
+
+export interface BatchReplanPayload {
+  event_codes: string[]
+  reason: string
+  strategy?: ReplanStrategy
+}
+
+export interface BatchReplanScheduleResult {
+  schedule_code: string
+  event_codes: string[]
+  result_code: number
+  message: string
+  new_schedule_code: string | null
+  strategy: ReplanStrategy
+  diff_summary: DiffSummary | null
+}
+
+export interface BatchReplanResult {
+  replanned_schedules: BatchReplanScheduleResult[]
+  skipped: string[]
+  total_events: number
+  strategy: ReplanStrategy
 }
 
 export interface RedispatchReplanResult {
@@ -56,6 +89,8 @@ export interface RedispatchReplanResult {
   is_replan: boolean
   replan_reason: string
   original_schedule_code: string
+  strategy?: ReplanStrategy
+  diff_summary?: DiffSummary
 }
 
 export interface RerouteReplanResult {

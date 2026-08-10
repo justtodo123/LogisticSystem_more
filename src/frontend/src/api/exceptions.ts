@@ -1,6 +1,8 @@
 import request from './request'
 import type { PaginatedResult } from '@/types/common'
 import type {
+  BatchReplanPayload,
+  BatchReplanResult,
   CreateExceptionPayload,
   ExceptionEvent,
   ExceptionListParams,
@@ -12,6 +14,7 @@ import {
   createMockException,
   getMockException,
   listMockExceptions,
+  mockBatchReplan,
   mockRedispatchReplan,
   mockRerouteReplan,
   resolveMockException,
@@ -92,6 +95,21 @@ export async function resolveException(
 
   const { data } = await request.put<ExceptionEvent>(
     `/exceptions/${encodeURIComponent(eventCode)}/resolve`,
+  )
+  return data
+}
+
+export async function batchReplan(
+  payload: BatchReplanPayload,
+): Promise<BatchReplanResult> {
+  if (useMockExceptions()) {
+    return mockBatchReplan(payload)
+  }
+
+  const { data } = await request.post<BatchReplanResult>(
+    '/exceptions/replan/batch',
+    payload,
+    { timeout: 60000 },
   )
   return data
 }

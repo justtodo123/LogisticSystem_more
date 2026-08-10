@@ -760,3 +760,432 @@ class TestExceptionTriggerReplan:
 
         assert result["code"] == 0
         assert result["data"]["is_replan"] is True
+
+
+class TestReplanStrategy:
+    """T3-1 重规划策略测试（partial / full / hybrid）"""
+
+    @pytest.mark.unit
+    def test_decide_strategy_partial(self):
+        """partial 策略透传"""
+        assert (
+            ReplanService._decide_strategy("partial", ["O001"], ["O001", "O002", "O003"])
+            == "partial"
+        )
+
+    @pytest.mark.unit
+    def test_decide_strategy_full(self):
+        """full 策略透传"""
+        assert (
+            ReplanService._decide_strategy("full", ["O001"], ["O001", "O002", "O003"])
+            == "full"
+        )
+
+    @pytest.mark.unit
+    def test_decide_strategy_hybrid_partial(self):
+        """hybrid：受影响订单数 ≤ 一半 → partial"""
+        assert (
+            ReplanService._decide_strategy(
+                "hybrid", ["O001"], ["O001", "O002", "O003", "O004"]
+            )
+            == "partial"
+        )
+
+    @pytest.mark.unit
+    def test_decide_strategy_hybrid_full(self):
+        """hybrid：受影响订单数 > 一半 → full"""
+        assert (
+            ReplanService._decide_strategy(
+                "hybrid", ["O001", "O002", "O003"], ["O001", "O002", "O003", "O004"]
+            )
+            == "full"
+        )
+
+    @pytest.mark.unit
+    def test_decide_strategy_hybrid_no_affected(self):
+        """hybrid：无受影响订单 → full"""
+        assert (
+            ReplanService._decide_strategy("hybrid", [], ["O001", "O002", "O003"])
+            == "full"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_resolve_affected_order_codes_package(self, db_session, test_nodes):
+        """T3-1 package 异常 → 解析受影响订单"""
+        from models.package import Package
+
+        node_list = list(test_nodes.values())
+        pkg = Package(
+            package_code="PKG_T31_RES_001",
+            weight=10.0,
+            volume=0.5,
+            status="exception",
+            from_node_id=node_list[0].id,
+            to_node_id=node_list[1].id,
+            goods_items=[{"goods_code": "G001", "order_code": "O001"}],
+        )
+        db_session.add(pkg)
+        db_session.commit()
+
+        event = ExceptionEvent(
+            event_code="EX_T31_RES_001",
+            exception_type="package",
+            exception_subtype="damage",
+            target_type="package",
+            target_code="PKG_T31_RES_001",
+            recommended_action="redispatch",
+            status="open",
+        )
+        affected = ReplanService._resolve_affected_order_codes(db_session, event)
+        assert affected == ["O001"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_partial_captures_affected_orders(
+        self, db_session, test_nodes, test_orders, test_goods, test_vehicles, test_drivers
+    ):
+        """T3-1 partial 策略：仅将受影响订单传入重规划"""
+        from models.package import Package
+        from services.schedule_service import ScheduleService
+
+        node_list = list(test_nodes.values())
+        original = GlobalSchedule(
+            schedule_code="GS_T31_PARTIAL_001",
+            order_codes=list(test_orders.keys())[:3],
+            goods_schedules=[],
+            total_distance=300.0,
+            total_time=15.0,
+            total_goods=6,
+            score=0.5,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(original)
+        db_session.flush()
+
+        # 异常驱动重规划：订单/货物置为 exception
+        for order_code in original.order_codes:
+            order = test_orders.get(order_code)
+            if order:
+                order.status = "exception"
+                for g in order.goods:
+                    if g.status == "pending_pack":
+                        g.status = "exception"
+        db_session.commit()
+
+        # 受影响包裹（target=package → 解析出订单）
+        target_order = original.order_codes[0]
+        pkg = Package(
+            package_code="PKG_T31_P_001",
+            weight=10.0,
+            volume=0.5,
+            status="exception",
+            from_node_id=node_list[0].id,
+            to_node_id=node_list[1].id,
+            goods_items=[{"goods_code": "G001", "order_code": target_order}],
+        )
+        db_session.add(pkg)
+        db_session.commit()
+
+        event = ExceptionEvent(
+            event_code="EX_T31_P_001",
+            exception_type="package",
+            exception_subtype="damage",
+            target_type="package",
+            target_code="PKG_T31_P_001",
+            recommended_action="redispatch",
+            description="包裹损坏",
+            status="open",
+        )
+        db_session.add(event)
+        db_session.commit()
+
+        # 拦截 create_global_schedule，捕获传入的 order_codes（其余链路走真实实现）
+        real_create = ScheduleService.create_global_schedule
+        captured = {}
+
+        async def wrapper(order_codes, *args, **kwargs):
+            captured["order_codes"] = order_codes
+            return await real_create(order_codes, *args, **kwargs)
+
+        with patch.object(
+            ScheduleService, "create_global_schedule", new=wrapper
+        ):
+            result = await ReplanService.redispatch(
+                db=db_session,
+                original_schedule_code="GS_T31_PARTIAL_001",
+                replan_reason="包裹损坏部分重排",
+                event=event,
+                strategy="partial",
+            )
+
+        assert result["code"] == 0, result
+        assert result["data"]["strategy"] == "partial"
+        assert captured["order_codes"] == [target_order]  # 仅受影响订单
+
+        # diff_summary 存在且包含验收字段
+        assert "diff_summary" in result["data"]
+        ds = result["data"]["diff_summary"]
+        assert "affected_count" in ds
+        assert "new_eta_delta" in ds
+        assert "cost_delta" in ds
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_full_returns_diff_summary(
+        self, db_session, test_nodes, test_orders, test_goods, test_vehicles, test_drivers
+    ):
+        """T3-1 full 策略：全部重排 + 返回 diff_summary"""
+        original = GlobalSchedule(
+            schedule_code="GS_T31_FULL_001",
+            order_codes=list(test_orders.keys())[:3],
+            goods_schedules=[],
+            total_distance=300.0,
+            total_time=15.0,
+            total_goods=6,
+            score=0.5,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(original)
+        for order_code in original.order_codes:
+            order = test_orders.get(order_code)
+            if order:
+                order.status = "in_transit"
+        db_session.commit()
+
+        result = await ReplanService.redispatch(
+            db=db_session,
+            original_schedule_code="GS_T31_FULL_001",
+            replan_reason="节点容量异常全量重排",
+            strategy="full",
+        )
+
+        assert result["code"] == 0, result
+        assert result["data"]["strategy"] == "full"
+        assert "diff_summary" in result["data"]
+        ds = result["data"]["diff_summary"]
+        assert ds["strategy"] == "full"
+        assert ds["affected_count"] >= 0
+        assert "new_eta_delta" in ds
+        assert "cost_delta" in ds
+
+
+class TestReplanBatch:
+    """T3-1 批量异常重规划测试"""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_batch_no_events(self, db_session):
+        """批量重规划失败：未提供异常事件编码"""
+        result = await ReplanService.redispatch_batch(
+            db=db_session,
+            event_codes=[],
+            replan_reason="测试",
+        )
+        assert result["code"] == 40001
+        assert "未提供" in result["message"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_batch_events_not_found(self, db_session):
+        """批量重规划失败：异常事件不存在"""
+        result = await ReplanService.redispatch_batch(
+            db=db_session,
+            event_codes=["EX_NONE_001"],
+            replan_reason="测试",
+        )
+        assert result["code"] == 40401
+        assert "未找到" in result["message"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_batch_dedup_same_schedule(self, db_session, test_nodes):
+        """同一调度方案关联多个异常 → 只触发一次重规划（验收标准）"""
+        node_code = list(test_nodes.keys())[0]
+        gs = GlobalSchedule(
+            schedule_code="GS_BATCH_001",
+            order_codes=["O001"],
+            goods_schedules=[],
+            total_distance=100.0,
+            total_time=5.0,
+            total_goods=1,
+            score=0.5,
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(gs)
+        db_session.commit()
+
+        ev1 = ExceptionEvent(
+            event_code="EX_BATCH_1",
+            exception_type="node",
+            exception_subtype="capacity_limit",
+            target_type="node",
+            target_code=node_code,
+            recommended_action="redispatch",
+            related_schedule_code="GS_BATCH_001",
+            description="批量事件1",
+            status="open",
+        )
+        ev2 = ExceptionEvent(
+            event_code="EX_BATCH_2",
+            exception_type="node",
+            exception_subtype="capacity_limit",
+            target_type="node",
+            target_code=node_code,
+            recommended_action="redispatch",
+            related_schedule_code="GS_BATCH_001",
+            description="批量事件2",
+            status="open",
+        )
+        db_session.add_all([ev1, ev2])
+        db_session.commit()
+
+        with patch.object(
+            ReplanService,
+            "redispatch",
+            new=AsyncMock(return_value=success_response(data={
+                "schedule_code": "GS_BATCH_NEW_001",
+                "strategy": "full",
+            })),
+        ) as mock_rd:
+            result = await ReplanService.redispatch_batch(
+                db=db_session,
+                event_codes=["EX_BATCH_1", "EX_BATCH_2"],
+                replan_reason="批量重规划",
+            )
+
+        assert result["code"] == 0, result
+        assert mock_rd.call_count == 1  # 同一方案只重规划一次
+        data = result["data"]
+        assert len(data["replanned_schedules"]) == 1
+        assert data["replanned_schedules"][0]["schedule_code"] == "GS_BATCH_001"
+        assert data["replanned_schedules"][0]["event_codes"] == ["EX_BATCH_1", "EX_BATCH_2"]
+        assert data["replanned_schedules"][0]["new_schedule_code"] == "GS_BATCH_NEW_001"
+        assert data["skipped"] == []
+
+        # 两个事件都回写 replan_batch_code
+        db_session.expire_all()
+        ev1b = db_session.query(ExceptionEvent).filter(
+            ExceptionEvent.event_code == "EX_BATCH_1"
+        ).first()
+        ev2b = db_session.query(ExceptionEvent).filter(
+            ExceptionEvent.event_code == "EX_BATCH_2"
+        ).first()
+        assert ev1b.replan_batch_code == "GS_BATCH_NEW_001"
+        assert ev2b.replan_batch_code == "GS_BATCH_NEW_001"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_batch_skips_resolved(self, db_session, test_nodes):
+        """已解决的异常事件跳过重规划，不触发下游"""
+        node_code = list(test_nodes.keys())[0]
+        gs = GlobalSchedule(
+            schedule_code="GS_BATCH_002",
+            order_codes=["O001"],
+            goods_schedules=[],
+            total_distance=100.0,
+            total_time=5.0,
+            total_goods=1,
+            score=0.5,
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(gs)
+        db_session.commit()
+
+        ev_open = ExceptionEvent(
+            event_code="EX_BATCH_OPEN",
+            exception_type="node",
+            target_type="node",
+            target_code=node_code,
+            recommended_action="redispatch",
+            related_schedule_code="GS_BATCH_002",
+            description="未解决",
+            status="open",
+        )
+        ev_resolved = ExceptionEvent(
+            event_code="EX_BATCH_RESOLVED",
+            exception_type="node",
+            target_type="node",
+            target_code=node_code,
+            recommended_action="redispatch",
+            related_schedule_code="GS_BATCH_002",
+            description="已解决",
+            status="resolved",
+        )
+        db_session.add_all([ev_open, ev_resolved])
+        db_session.commit()
+
+        with patch.object(
+            ReplanService,
+            "redispatch",
+            new=AsyncMock(return_value=success_response(data={
+                "schedule_code": "GS_BATCH_NEW_002",
+                "strategy": "full",
+            })),
+        ) as mock_rd:
+            result = await ReplanService.redispatch_batch(
+                db=db_session,
+                event_codes=["EX_BATCH_OPEN", "EX_BATCH_RESOLVED"],
+                replan_reason="批量重规划",
+            )
+
+        assert result["code"] == 0, result
+        assert mock_rd.call_count == 1  # 仅 open 事件触发
+        data = result["data"]
+        assert data["replanned_schedules"][0]["event_codes"] == ["EX_BATCH_OPEN"]
+        assert "EX_BATCH_RESOLVED" in data["skipped"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_trigger_batch_replan_service(self, db_session, test_nodes):
+        """ExceptionService.trigger_batch_replan 透传 ReplanService"""
+        node_code = list(test_nodes.keys())[0]
+        gs = GlobalSchedule(
+            schedule_code="GS_BATCH_003",
+            order_codes=["O001"],
+            goods_schedules=[],
+            total_distance=100.0,
+            total_time=5.0,
+            total_goods=1,
+            score=0.5,
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(gs)
+        db_session.commit()
+        ev = ExceptionEvent(
+            event_code="EX_BATCH_SVC",
+            exception_type="node",
+            target_type="node",
+            target_code=node_code,
+            recommended_action="redispatch",
+            related_schedule_code="GS_BATCH_003",
+            description="服务透传",
+            status="open",
+        )
+        db_session.add(ev)
+        db_session.commit()
+
+        with patch.object(
+            ReplanService,
+            "redispatch",
+            new=AsyncMock(return_value=success_response(data={
+                "schedule_code": "GS_BATCH_NEW_003",
+                "strategy": "partial",
+            })),
+        ) as mock_rd:
+            result = await ExceptionService.trigger_batch_replan(
+                db=db_session,
+                event_codes=["EX_BATCH_SVC"],
+                replan_reason="服务透传测试",
+                strategy="partial",
+            )
+
+        assert result["code"] == 0, result
+        assert mock_rd.call_count == 1

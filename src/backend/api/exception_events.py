@@ -17,6 +17,7 @@ from typing import Optional
 from services.exception_service import ExceptionService
 from services.log_service import LogService, build_replan_event_data
 from schemas.exception_event import (
+    BatchReplanRequest,
     CreateExceptionEventRequest,
     TriggerReplanRequest,
     UpdateExceptionRequest,
@@ -111,6 +112,55 @@ async def get_exception_detail(
     )
 
 
+@router.post("/replan/batch")
+async def trigger_batch_replan(
+    body: BatchReplanRequest,
+    current_user: User = Depends(require_dispatcher),
+    db: Session = Depends(get_db),
+):
+    """
+    批量异常重规划（T3-1）
+
+    需要角色：dispatcher
+
+    同一调度方案关联的多个异常事件去重，只触发一次重规划，
+    避免重复创建重规划任务。
+
+    请求体：
+    {
+        "event_codes": ["EX1001", "EX1002"],
+        "reason": "分拣中心容量不足，批量重排",
+        "strategy": "partial"  // 可选：partial / full / hybrid
+    }
+    """
+    result = await ExceptionService.trigger_batch_replan(
+        db=db,
+        event_codes=body.event_codes,
+        replan_reason=body.reason,
+        strategy=body.strategy,
+    )
+
+    # 记录埋点
+    if result.get("code") == 0:  # 成功
+        data = result.get("data") or {}
+        LogService.log_event(
+            event_name="batch_replan",
+            user_id=current_user.id,
+            role=current_user.role,
+            event_data={
+                "event_codes": body.event_codes,
+                "reason": body.reason,
+                "strategy": data.get("strategy"),
+                "replanned_schedules": [
+                    r.get("new_schedule_code") for r in data.get("replanned_schedules", [])
+                ],
+            },
+            db=db,
+        )
+
+    return result
+
+
 @router.post("/{event_code}/replan")
 async def trigger_replan(
     event_code: str,
@@ -120,20 +170,26 @@ async def trigger_replan(
 ):
     """
     触发重规划（redispatch 或 reroute）
-    
+
     需要角色：dispatcher
-    
+
     根据请求体中的 action 选择重规划类型：
     - redispatch: 重新执行 F007→F021→F005→F006
     - reroute: 重新执行 F006 路径规划
+
+    strategy（T3-1，仅 redispatch 生效）：
+    - partial: 仅重排受影响订单
+    - full: 全部重排（默认）
+    - hybrid: 自动选择
     """
     result = await ExceptionService.trigger_replan(
         db=db,
         event_code=event_code,
         action=body.action,
         replan_reason=body.reason,
+        strategy=body.strategy,
     )
-    
+
     # 记录埋点
     if result.get("code") == 0:  # 成功
         LogService.log_event(
@@ -147,7 +203,7 @@ async def trigger_replan(
             ),
             db=db
         )
-    
+
     return result
 
 

@@ -319,6 +319,7 @@ class ExceptionService:
         event_code: str,
         action: str,
         replan_reason: str,
+        strategy: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         触发重规划
@@ -370,6 +371,7 @@ class ExceptionService:
                     original_schedule_code=event.related_schedule_code,
                     replan_reason=replan_reason,
                     event=event,  # 传递异常事件以提取排除参数
+                    strategy=strategy or "full",  # T3-1 重规划策略
                 )
 
             elif action == "reroute":
@@ -423,3 +425,25 @@ class ExceptionService:
         except Exception as e:
             db.rollback()
             return error_response(code=40001, message=f"重规划失败: {str(e)}")
+
+    @staticmethod
+    async def trigger_batch_replan(
+        db: Session,
+        event_codes: list,
+        replan_reason: str,
+        strategy: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        批量异常重规划（T3-1）
+
+        同一调度方案关联的多个异常事件去重，只触发一次重规划，
+        避免重复创建重规划任务。
+        """
+        from services.replan_service import ReplanService
+
+        return await ReplanService.redispatch_batch(
+            db=db,
+            event_codes=event_codes,
+            replan_reason=replan_reason,
+            strategy=strategy or "full",
+        )

@@ -80,7 +80,7 @@ const {
   exception_type: '',
 })
 
-const { replanningCode, runReplan } = useExceptionReplan(load)
+const { replanningCode, batchReplanning, runReplan, runBatchReplan } = useExceptionReplan(load)
 
 const {
   visible: detailVisible,
@@ -91,6 +91,7 @@ const {
 } = useEntityDetail<ExceptionEvent>((code) => getException(code))
 
 const resolvingCode = ref('')
+const selectedRows = ref<ExceptionEvent[]>([])
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
@@ -275,6 +276,15 @@ async function handleResolve(row: ExceptionEvent): Promise<void> {
   }
 }
 
+/** 已选中的待处理事件编码（批量重规划只对 open 事件生效） */
+const selectedOpenCodes = computed(() =>
+  selectedRows.value.filter((r) => r.status === 'open').map((r) => r.event_code),
+)
+
+async function handleBatchReplan(): Promise<void> {
+  await runBatchReplan(selectedOpenCodes.value)
+}
+
 function typeLabel(type: ExceptionType): string {
   return EXCEPTION_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type
 }
@@ -320,13 +330,29 @@ function statusInfo(status: ExceptionStatus) {
         </el-select>
       </template>
       <template #actions>
+        <el-button
+          v-if="authStore.isDispatcher"
+          type="warning"
+          :loading="batchReplanning"
+          :disabled="selectedOpenCodes.length === 0"
+          @click="handleBatchReplan"
+        >
+          批量重规划{{ selectedOpenCodes.length ? `（${selectedOpenCodes.length}）` : '' }}
+        </el-button>
         <el-button v-if="authStore.isDispatcher" type="primary" @click="openCreate">
           录入异常
         </el-button>
       </template>
     </PageToolbar>
 
-    <DataTable :data="items" :loading="loading" stripe border>
+    <DataTable
+      :data="items"
+      :loading="loading"
+      stripe
+      border
+      @selection-change="(rows: ExceptionEvent[]) => (selectedRows = rows)"
+    >
+      <el-table-column type="selection" width="42" />
       <el-table-column prop="event_code" label="事件编号" min-width="150" />
       <el-table-column prop="exception_type" label="类型" width="100">
         <template #default="{ row }">

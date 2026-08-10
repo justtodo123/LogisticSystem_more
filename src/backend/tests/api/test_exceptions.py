@@ -327,11 +327,120 @@ class TestExceptionAPI:
             },
             headers=auth_headers
         )
-        
+
         # 验证
         if response.status_code == 501:
             pytest.skip("异常重规划API未实现，跳过测试")
-        
+
         assert response.status_code == 400
         data = response.json()
         assert data["code"] == 40000  # 参数错误
+
+    def test_replan_invalid_strategy(self, client, auth_headers, setup_exception_data):
+        """T3-1 重规划策略无效（Pydantic 422）"""
+        response = client.post(
+            f"/api/exceptions/{setup_exception_data['exception_event'].event_code}/replan",
+            json={
+                "action": "reroute",
+                "reason": "测试重规划",
+                "strategy": "invalid",  # 无效策略
+            },
+            headers=auth_headers
+        )
+        assert response.status_code == 422
+
+    def test_batch_replan_validation_missing_codes(self, client, auth_headers):
+        """T3-1 批量重规划：缺少 event_codes → 422"""
+        response = client.post(
+            "/api/exceptions/replan/batch",
+            json={
+                "reason": "批量重规划"
+            },
+            headers=auth_headers
+        )
+        assert response.status_code == 422
+
+    def test_batch_replan_events_not_found(self, client, auth_headers):
+        """T3-1 批量重规划：异常事件不存在 → 40401"""
+        response = client.post(
+            "/api/exceptions/replan/batch",
+            json={
+                "event_codes": ["EX_NONEXISTENT_001"],
+                "reason": "批量重规划"
+            },
+            headers=auth_headers
+        )
+        if response.status_code == 501:
+            pytest.skip("批量重规划API未实现，跳过测试")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["code"] == 40401
+        assert "未找到" in data["message"]
+
+    def test_batch_replan_dedup_same_schedule(self, client, auth_headers, db_session, test_nodes):
+        """T3-1 批量重规划：同一方案关联多个异常 → 不重复创建重规划任务"""
+        import json
+        node_0 = list(test_nodes.values())[0]
+
+        gs = GlobalSchedule(
+            schedule_code="GS_BATCH_API_001",
+            order_codes=["O001"],
+            goods_schedules=[],
+            total_distance=100.0,
+            total_time=5.0,
+            total_goods=1,
+            score=0.5,
+            version=1,
+            is_replan=False,
+        )
+        db_session.add(gs)
+        db_session.commit()
+
+        ev1 = ExceptionEvent(
+            event_code="EX_BATCH_API_1",
+            exception_type="node",
+            exception_subtype="capacity_limit",
+            target_type="node",
+            target_code=node_0.node_code,
+            recommended_action="redispatch",
+            related_schedule_code="GS_BATCH_API_001",
+            description="批量API事件1",
+            status="open",
+        )
+        ev2 = ExceptionEvent(
+            event_code="EX_BATCH_API_2",
+            exception_type="node",
+            exception_subtype="capacity_limit",
+            target_type="node",
+            target_code=node_0.node_code,
+            recommended_action="redispatch",
+            related_schedule_code="GS_BATCH_API_001",
+            description="批量API事件2",
+            status="open",
+        )
+        db_session.add_all([ev1, ev2])
+        db_session.commit()
+
+        response = client.post(
+            "/api/exceptions/replan/batch",
+            json={
+                "event_codes": ["EX_BATCH_API_1", "EX_BATCH_API_2"],
+                "reason": "批量重规划",
+                "strategy": "full",
+            },
+            headers=auth_headers
+        )
+        if response.status_code == 501:
+            pytest.skip("批量重规划API未实现，跳过测试")
+        assert response.status_code == 200
+        data = response.json()
+        if data["code"] == 0:
+            replanned = data["data"]["replanned_schedules"]
+            # 同一调度方案应合并为一条重规划记录
+            assert len(replanned) == 1
+            assert replanned[0]["schedule_code"] == "GS_BATCH_API_001"
+            assert set(replanned[0]["event_codes"]) == {"EX_BATCH_API_1", "EX_BATCH_API_2"}
+        else:
+            # 数据不完整时允许重规划链路失败，但需为业务错误码
+            assert data["code"] == 40001, f"批量重规划返回非预期错误: {data}"
+

@@ -20,12 +20,91 @@ from models.route import Route
 from models.node_dispatch import NodeDispatch
 from models.dispatch_batch import DispatchBatch
 from models.vehicle import Vehicle
+from models.node import Node
 from utils.response import success_response, error_response
 from services.state_machine import reset_goods_for_replan, mark_old_entities_exception, update_batch_status
+from services.diff_service import build_diff_report
 
 
 class ReplanService:
     """重规划服务（方案A：不修改现有服务层）"""
+
+    # ── T3-1 辅助方法：解析异常事件影响的订单 ──
+    @staticmethod
+    def _resolve_affected_order_codes(db: Session, event: ExceptionEvent) -> List[str]:
+        """
+        根据异常事件的 target 解析受影响的订单编码列表。
+
+        - target_type="package" → 该包裹所属订单
+        - target_type="node"    → 起点/终点为该节点的包裹所属订单
+        - target_type="vehicle" → 该车辆调度明细内包裹所属订单
+        """
+        affected: List[str] = []
+
+        def _collect_orders(pkg) -> None:
+            if not pkg or not pkg.goods_items:
+                return
+            for gi in pkg.goods_items:
+                order_code = gi.get("order_code")
+                if order_code and order_code not in affected:
+                    affected.append(order_code)
+
+        if not event or not event.target_type or not event.target_code:
+            return affected
+
+        if event.target_type == "package":
+            pkg = db.query(Package).filter(
+                Package.package_code == event.target_code
+            ).first()
+            _collect_orders(pkg)
+
+        elif event.target_type == "node":
+            node = db.query(Node).filter(Node.node_code == event.target_code).first()
+            if node:
+                pkgs = db.query(Package).filter(
+                    (Package.from_node_id == node.id) | (Package.to_node_id == node.id)
+                ).all()
+                for pkg in pkgs:
+                    _collect_orders(pkg)
+
+        elif event.target_type == "vehicle":
+            vehicle = db.query(Vehicle).filter(
+                Vehicle.vehicle_code == event.target_code
+            ).first()
+            if vehicle:
+                dispatches = db.query(NodeDispatch).filter(
+                    NodeDispatch.vehicle_id == vehicle.id
+                ).all()
+                for d in dispatches:
+                    tasks = d.tasks
+                    if isinstance(tasks, str):
+                        import json
+                        tasks = json.loads(tasks)
+                    for task in tasks or []:
+                        for pkg_code in task.get("package_codes", []):
+                            pkg = db.query(Package).filter(
+                                Package.package_code == pkg_code
+                            ).first()
+                            _collect_orders(pkg)
+
+        return affected
+
+    @staticmethod
+    def _decide_strategy(
+        strategy: str,
+        affected_order_codes: List[str],
+        all_order_codes: List[str],
+    ) -> str:
+        """策略归一化：hybrid 自动选择 partial / full"""
+        strategy = (strategy or "full").lower()
+        if strategy == "hybrid":
+            if (
+                affected_order_codes
+                and len(affected_order_codes) <= max(1, len(all_order_codes) / 2)
+            ):
+                return "partial"
+            return "full"
+        return strategy if strategy in ("partial", "full") else "full"
 
     @staticmethod
     async def redispatch(
@@ -35,26 +114,28 @@ class ReplanService:
         event: Optional[ExceptionEvent] = None,
         custom_weights: Optional[Dict[str, Any]] = None,
         draft_only: bool = False,
+        strategy: str = "full",
     ) -> Dict[str, Any]:
         """
         重调度（F007→F021→F005→F006）
 
         流程：
         1. 读取原调度方案（GlobalSchedule）
-        2. 获取相关订单编号
+        2. 获取相关订单编号（partial 仅取受影响订单）
         3. 提取排除参数（excluded_nodes）
         4. 调用现有 ScheduleService.create_global_schedule()（不修改它）
         5. 更新新版调度方案的版本链字段
         6. 调用 DispatchService.create_node_dispatch() 执行节点调度
-        7. 返回新调度方案编码
+        7. 生成差异报告（diff_summary）
 
         Args:
             db: 数据库会话
             original_schedule_code: 原调度方案业务编号
             replan_reason: 重规划原因
-            event: 异常事件对象（可选，用于提取排除参数）
+            event: 异常事件对象（可选，用于提取排除参数与受影响订单）
             custom_weights: 自定义权重参数（可选，用于AI驱动的重规划）
             draft_only: 仅生成 draft 方案（跳过 confirm/F021/F005/F006）
+            strategy: 重规划策略（partial=仅重排受影响订单 / full=全部重排 / hybrid=自动选择）
 
         Returns:
             统一响应格式 dict
@@ -71,9 +152,26 @@ class ReplanService:
                     message=f"原调度方案不存在: {original_schedule_code}",
                 )
 
-            # 2. 获取相关订单编号
-            order_codes = original.order_codes
+            # 2. 获取相关订单编号（T3-1：按策略过滤受影响订单）
+            all_order_codes = original.order_codes
+            if isinstance(all_order_codes, str):
+                import json
+                all_order_codes = json.loads(all_order_codes)
             algorithm = original.algorithm_type or "traditional"
+
+            affected_order_codes = (
+                ReplanService._resolve_affected_order_codes(db, event)
+                if event is not None
+                else []
+            )
+            strategy = ReplanService._decide_strategy(
+                strategy, affected_order_codes, all_order_codes or []
+            )
+            order_codes = (
+                affected_order_codes
+                if strategy == "partial" and affected_order_codes
+                else all_order_codes
+            )
 
             # 3. 判断是否为异常驱动的重规划（vs AI 权重重规划）
             #    异常驱动：有 event 对象 → is_replan=True → 查找 exception 状态订单/包裹
@@ -139,6 +237,10 @@ class ReplanService:
                     new_schedule.replan_reason = replan_reason
                     new_schedule.is_replan = True
                     db.commit()
+                # T3-1：差异报告
+                diff_summary = build_diff_report(
+                    db, original, new_schedule, strategy=strategy
+                ) if new_schedule else None
                 return success_response(data={
                     "schedule_code": new_schedule_code,
                     "new_schedule_code": new_schedule_code,
@@ -147,6 +249,8 @@ class ReplanService:
                     "is_replan": True,
                     "replan_reason": replan_reason,
                     "original_schedule_code": original_schedule_code,
+                    "strategy": strategy,
+                    "diff_summary": diff_summary,
                 })
 
             # 5.5 确认方案（draft → active，执行 F021 打包）
@@ -208,6 +312,11 @@ class ReplanService:
             # 8. 旧批次状态已由 mark_old_entities_exception() 更新为 failed
             db.commit()
 
+            # T3-1：差异报告（新方案 vs 原方案）
+            diff_summary = build_diff_report(
+                db, original, new_schedule, strategy=strategy
+            ) if new_schedule else None
+
             return success_response(data={
                 "schedule_code": new_schedule_code,
                 "new_schedule_code": new_schedule_code,
@@ -216,11 +325,94 @@ class ReplanService:
                 "is_replan": True,
                 "replan_reason": replan_reason,
                 "original_schedule_code": original_schedule_code,
+                "strategy": strategy,
+                "diff_summary": diff_summary,
             })
 
         except Exception as e:
             db.rollback()
             return error_response(code=40001, message=f"重调度失败: {str(e)}")
+
+    @staticmethod
+    async def redispatch_batch(
+        db: Session,
+        event_codes: List[str],
+        replan_reason: str,
+        strategy: str = "full",
+    ) -> Dict[str, Any]:
+        """
+        批量异常重规划（T3-1）。
+
+        同一调度方案关联的多个异常事件只触发一次重规划（不重复创建重规划任务）。
+        每个唯一调度方案执行一次 redispatch，并回写所有关联事件的重规划批次码。
+
+        Args:
+            db: 数据库会话
+            event_codes: 异常事件编码列表
+            replan_reason: 重规划原因
+            strategy: 重规划策略（partial/full/hybrid）
+
+        Returns:
+            统一响应格式 dict：{events: [...], replanned_schedules: [...]}
+        """
+        if not event_codes:
+            return error_response(code=40001, message="未提供异常事件编码")
+
+        events = (
+            db.query(ExceptionEvent)
+            .filter(ExceptionEvent.event_code.in_(event_codes))
+            .all()
+        )
+        if not events:
+            return error_response(code=40401, message="未找到匹配的异常事件")
+
+        # 按关联调度方案分组（去重：同一方案只重规划一次）
+        schedule_to_events: Dict[str, List[ExceptionEvent]] = {}
+        skipped: List[str] = []
+        for event in events:
+            if event.status == "resolved":
+                skipped.append(event.event_code)
+                continue
+            if not event.related_schedule_code:
+                skipped.append(event.event_code)
+                continue
+            schedule_to_events.setdefault(event.related_schedule_code, []).append(event)
+
+        results: List[Dict[str, Any]] = []
+        for schedule_code, evts in schedule_to_events.items():
+            # 用第一个事件提取排除参数；其余事件仅标记 replan_batch_code
+            result = await ReplanService.redispatch(
+                db=db,
+                original_schedule_code=schedule_code,
+                replan_reason=replan_reason,
+                event=evts[0],
+                strategy=strategy,
+            )
+            new_code = None
+            if result.get("code") == 0 and result.get("data"):
+                new_code = (
+                    result["data"].get("schedule_code")
+                    or result["data"].get("batch_code")
+                )
+                for evt in evts:
+                    evt.replan_batch_code = new_code
+            results.append({
+                "schedule_code": schedule_code,
+                "event_codes": [e.event_code for e in evts],
+                "result_code": result.get("code"),
+                "message": result.get("message"),
+                "new_schedule_code": new_code,
+                "strategy": result.get("data", {}).get("strategy", strategy) if result.get("code") == 0 else strategy,
+                "diff_summary": result.get("data", {}).get("diff_summary") if result.get("code") == 0 else None,
+            })
+        db.commit()
+
+        return success_response(data={
+            "replanned_schedules": results,
+            "skipped": skipped,
+            "total_events": len(events),
+            "strategy": strategy,
+        })
 
     @staticmethod
     async def reroute(
