@@ -18,6 +18,7 @@ from sqlalchemy import desc
 
 from algorithms.factory import get_global_strategy
 from algorithms.packaging import packaging
+from algorithms.explainer import build_explanation
 from models.global_schedule import GlobalSchedule
 from models.order import Order
 from models.goods import Goods
@@ -157,6 +158,8 @@ class ScheduleService:
             )
             
             # 3. 仅存 global_schedules（status=draft）
+            #    T2-3：构建结构化解释（评分拆解/约束命中/备选方案）并随方案落库
+            explanation = build_explanation(schedule_result)
             global_schedule_obj = GlobalSchedule(
                 schedule_code=schedule_result["schedule_code"],
                 order_codes=schedule_result["order_codes"],
@@ -169,6 +172,7 @@ class ScheduleService:
                 version=1,
                 is_replan=is_replan,
                 status="draft",  # 新建记录直接设为 draft（非状态转换，不进 state_machine）
+                explanation_data=explanation,
             )
             db.add(global_schedule_obj)
             db.commit()
@@ -195,6 +199,8 @@ class ScheduleService:
                 "objective_scores": schedule_result.get("objective_scores"),
                 "score_breakdown": schedule_result.get("score_breakdown"),
                 "alternatives": schedule_result.get("alternatives", []),
+                # T2-3 调度结果可解释性
+                "explanation": explanation,
             })
             
         except ValueError as e:
@@ -390,6 +396,16 @@ class ScheduleService:
                     "goods_items": pkg.goods_items,
                 })
 
+            # T2-3：读取落库的结构化解释；历史方案无数据时按存储字段现场构建
+            explanation = gs.explanation_data
+            if not explanation:
+                explanation = build_explanation({
+                    "goods_schedules": new_goods_schedules,
+                    "total_distance": float(gs.total_distance),
+                    "total_time": float(gs.total_time),
+                    "total_goods": gs.total_goods,
+                })
+
             return success_response(data={
                 "schedule_code": gs.schedule_code,
                 "total_distance": float(gs.total_distance),
@@ -402,6 +418,7 @@ class ScheduleService:
                 "is_replan": gs.is_replan,
                 "goods_schedules": new_goods_schedules,
                 "packages": pkg_list,
+                "explanation": explanation,
                 "created_at": gs.created_at.isoformat() if gs.created_at else None,
             })
         except Exception as e:

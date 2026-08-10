@@ -414,6 +414,7 @@ def global_schedule(
     result["objective_scores"] = best["objective_scores"]
     result["score_breakdown"] = scoring.score_breakdown(best["metrics"], objectives_config)
     result["composite_score"] = best["overall_score"]
+    result["metrics"] = best["metrics"]
     result["alternatives"] = [
         {
             "profile": r["profile"],

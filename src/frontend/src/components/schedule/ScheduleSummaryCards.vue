@@ -22,6 +22,25 @@ const displayScore = computed(() => {
   return typeof raw === 'number' ? raw.toFixed(1) : '—'
 })
 
+/** T2-3 多目标分项评分（来自 explanation.score_breakdown，列表形式） */
+const breakdownItems = computed(() => {
+  const s = props.summary
+  const items = s?.explanation?.score_breakdown ?? []
+  if (items.length) return items
+  // 兼容旧字段（前端曾经期望的单目标拆解对象）
+  const legacy = s?.score_breakdown
+  if (legacy) {
+    return [
+      { objective: '距离', weight: 0, direction: 'minimize' as const, score: legacy.distance_component },
+      { objective: '时间', weight: 0, direction: 'minimize' as const, score: legacy.time_component },
+      { objective: '货物', weight: 0, direction: 'minimize' as const, score: legacy.goods_component },
+    ]
+  }
+  return []
+})
+
+const constraints = computed(() => props.summary?.explanation?.constraints_hit ?? [])
+
 const tooltipContent = computed(() => {
   const s = props.summary
   if (!s) return ''
@@ -46,6 +65,17 @@ const tooltipContent = computed(() => {
 
   return lines.join('\n')
 })
+
+function objectiveLabel(obj: string): string {
+  const map: Record<string, string> = {
+    distance: '距离',
+    time: '时间',
+    load_rate: '满载率',
+    on_time_rate: '时效',
+    cost: '成本',
+  }
+  return map[obj] ?? obj
+}
 </script>
 
 <template>
@@ -108,6 +138,50 @@ const tooltipContent = computed(() => {
       </el-card>
     </el-col>
     </el-row>
+
+    <!-- T2-3 评分拆解与约束命中 -->
+    <el-collapse v-if="summary && (breakdownItems.length || constraints.length)" class="explain-collapse">
+      <el-collapse-item
+        title="评分拆解与约束分析"
+        name="explain"
+      >
+        <div v-if="summary.explanation?.summary" class="explain-summary">
+          {{ summary.explanation.summary }}
+        </div>
+        <div v-if="breakdownItems.length" class="explain-grid">
+          <div
+            v-for="item in breakdownItems"
+            :key="item.objective"
+            class="explain-item"
+          >
+            <span class="explain-item-label">
+              {{ objectiveLabel(item.objective) }}
+              <el-tag v-if="item.weight" size="small" type="info">
+                w{{ (item.weight * 100).toFixed(0) }}%
+              </el-tag>
+            </span>
+            <span class="explain-item-score">
+              {{ item.score != null ? (item.score * 100).toFixed(0) + '分' : '—' }}
+            </span>
+            <span v-if="item.raw != null" class="explain-item-raw">
+              原始 {{ item.raw.toFixed(1) }}
+            </span>
+          </div>
+        </div>
+        <ul v-if="constraints.length" class="explain-constraints">
+          <li
+            v-for="(c, i) in constraints"
+            :key="i"
+            :class="['explain-constraint', `is-${c.severity}`]"
+          >
+            <el-tag :type="c.severity === 'warning' ? 'warning' : 'success'" size="small">
+              {{ c.name }}
+            </el-tag>
+            <span>{{ c.detail }}</span>
+          </li>
+        </ul>
+      </el-collapse-item>
+    </el-collapse>
   </div>
 </template>
 
@@ -152,5 +226,71 @@ const tooltipContent = computed(() => {
 .summary-score {
   cursor: help;
   display: inline-block;
+}
+
+.explain-collapse {
+  margin-top: 12px;
+  border: 1px solid var(--border-color-lighter, #ebeef5);
+  border-radius: var(--card-radius, 6px);
+}
+
+.explain-summary {
+  font-size: 13px;
+  color: var(--text-regular, #606266);
+  margin-bottom: 10px;
+}
+
+.explain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.explain-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--fill-color-light, #f5f7fa);
+  border-radius: 4px;
+}
+
+.explain-item-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-regular, #606266);
+}
+
+.explain-item-score {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #303133);
+}
+
+.explain-item-raw {
+  font-size: 12px;
+  color: var(--text-secondary, #909399);
+}
+
+.explain-constraints {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.explain-constraint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--text-regular, #606266);
+}
+
+.explain-constraint.is-warning {
+  color: var(--el-color-warning, #e6a23c);
 }
 </style>

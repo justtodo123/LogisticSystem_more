@@ -9,6 +9,37 @@ export interface ScoreBreakdown {
   formula?: string
 }
 
+/** T2-3 分项评分（多目标） */
+export interface ScoreBreakdownItem {
+  objective: string
+  metric?: string
+  raw?: number | null
+  weight: number
+  direction: 'minimize' | 'maximize'
+  score?: number | null
+}
+
+export interface ConstraintHit {
+  name: string
+  detail: string
+  severity: 'info' | 'warning'
+  hit: boolean
+}
+
+/** T2-3 结构化解释：评分拆解 + 约束命中 + 备选方案 */
+export interface ScheduleExplanation {
+  score_breakdown?: ScoreBreakdownItem[]
+  composite_score?: number | null
+  constraints_hit?: ConstraintHit[]
+  alternatives?: Array<{
+    profile: string
+    overall_score: number
+    total_distance: number
+    total_time: number
+  }>
+  summary?: string
+}
+
 export interface GlobalScheduleSummary {
   schedule_code: string
   total_distance: number
@@ -17,6 +48,7 @@ export interface GlobalScheduleSummary {
   score: number
   score_display?: number
   score_breakdown?: ScoreBreakdown
+  explanation?: ScheduleExplanation
   package_count?: number
   version?: number
   is_replan?: boolean

@@ -651,6 +651,13 @@ class TestCreateGlobalScheduleBoundaries:
         assert "goods_schedules" in body["data"]
         assert "packages" in body["data"]
 
+        # T2-3：详情响应包含结构化解释（评分拆解 + 约束命中）
+        explanation = body["data"].get("explanation")
+        assert explanation is not None
+        assert "score_breakdown" in explanation
+        assert "constraints_hit" in explanation
+        assert "composite_score" in explanation
+
 
 class TestCreateNodeDispatch:
     """测试触发节点调度（阶段4）"""

@@ -22,6 +22,8 @@ class GlobalSchedule(Base):
     replan_reason = Column(String(500), nullable=True)
     is_replan = Column(Boolean, nullable=False, server_default="0")  # False
     status = Column(String(20), nullable=False, server_default="active")
+    # T2-3 调度结果可解释性：结构化解释数据（评分拆解/约束命中/备选方案）
+    explanation_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
     # 自关联：重规划版本链

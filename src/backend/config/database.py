@@ -100,3 +100,10 @@ def _run_phase1_migrations(engine):
                     conn.commit()
         
         # T0-4: idempotency_records 表由 create_all 创建，无需手动迁移
+
+        # T2-3: global_schedules 表新增 explanation_data 列（可解释性）
+        if "global_schedules" in inspector.get_table_names():
+            gs_cols = [c["name"] for c in inspector.get_columns("global_schedules")]
+            if "explanation_data" not in gs_cols:
+                conn.execute(text("ALTER TABLE global_schedules ADD COLUMN explanation_data JSON"))
+                conn.commit()

@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 from config.database import settings
+from algorithms.explainer import build_prompt_section
 
 logger = logging.getLogger(__name__)
 
@@ -370,6 +371,13 @@ class DeepSeekService:
         if len(pkg_summary) > 20:
             packages_text += f"\n...（共 {len(pkg_summary)} 个包裹，已截断）"
 
+        # T2-3：基于结构化数据解释（评分拆解/约束命中/备选方案），而非纯黑盒
+        structured_section = ""
+        if schedule_data.get("explanation") or any(
+            schedule_data.get(k) for k in ("objective_scores", "score_breakdown", "composite_score")
+        ):
+            structured_section = "\n\n结构化评分与约束分析：\n" + build_prompt_section(schedule_data)
+
         user_prompt = f"""请解释以下调度方案：
 
 调度方案编码: {schedule_data.get('schedule_code', '?')}
@@ -379,14 +387,14 @@ class DeepSeekService:
 评分: {schedule_data.get('score', '?')}
 算法类型: {schedule_data.get('algorithm_type', '?')}
 创建时间: {schedule_data.get('created_at', '?')}
-
+{structured_section}
 货物路径清单:
 {goods_text if goods_text else '（无数据）'}
 
 包裹清单:
 {packages_text if packages_text else '（无数据）'}
 
-请生成解释。"""
+请基于以上结构化数据生成解释。"""
 
         # 3. 调用DeepSeek API
         try:
