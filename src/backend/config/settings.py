@@ -65,6 +65,16 @@ class Settings(BaseSettings):
     # 外部 ERP 推送订单 Webhook 的 API Key；为空时回退到 Bearer JWT 认证（便于本地联调）
     ERP_API_KEY: str = ""
 
+    # ── 地图服务（T5-2）──
+    # MAP_PROVIDER: amap（高德）/ baidu（百度）；为空或未配置 MAP_API_KEY 时降级直线距离
+    MAP_PROVIDER: str = ""
+    MAP_API_KEY: str = ""
+    # 无 API Key 时是否用 直线距离×系数 估算道路距离（城市路网通常 1.2~1.5 倍）；默认关闭保持既有行为
+    MAP_ROAD_APPROX: bool = False
+    MAP_ROAD_FACTOR: float = 1.3
+    # 平均行驶速度（km/h），用于 ETA 估算
+    MAP_AVG_SPEED_KMH: float = 60.0
+
     @model_validator(mode="after")
     def _sync_jwt_expiry(self) -> "Settings":
         """当未显式设置 JWT_EXPIRE_SECONDS 时，从 JWT_EXPIRE_HOURS 自动计算"""

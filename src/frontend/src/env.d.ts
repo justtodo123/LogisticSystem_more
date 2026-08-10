@@ -11,6 +11,7 @@ interface ImportMetaEnv {
   readonly VITE_USE_MOCK_SIMULATION: string
   readonly VITE_USE_MOCK_EXCEPTIONS: string
   readonly VITE_USE_MOCK_AI: string
+  readonly VITE_MAP_API_KEY?: string
 }
 
 interface ImportMeta {

@@ -7,7 +7,6 @@ F006 路径规划算法
 算法输出：route_data (字典，包含一个route的数据)
 """
 
-import math
 import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -20,30 +19,7 @@ from models.node_dispatch import NodeDispatch
 from models.route import Route
 
 from algorithms.base import SchedulingStrategy
-
-
-def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """
-    Haversine 公式计算两点间球面距离（公里）
-    
-    Args:
-        lat1, lng1: 点1的纬度和经度（度）
-        lat2, lng2: 点2的纬度和经度（度）
-        
-    Returns:
-        距离（公里）
-    """
-    R = 6371.0  # 地球半径（公里）
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    delta_phi = math.radians(lat2 - lat1)
-    delta_lambda = math.radians(lng2 - lng1)
-    
-    a = (math.sin(delta_phi / 2) ** 2 
-         + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2)
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    
-    return R * c
+from services.map_service import get_route_distance, SOURCE_LABEL
 
 
 def _generate_route_code(db: Session) -> str:
@@ -171,25 +147,30 @@ def run_route_planning(db: Session, dispatch_id: int, custom_weights: Optional[D
         if not from_node or not to_node:
             continue
         
-        # c. 使用 Haversine 公式计算距离
-        distance = _haversine(
+        # c. 计算距离与 ETA（T5-2：真实路网距离 / 估算 / Haversine 三档降级）
+        dist_info = get_route_distance(
             float(from_node.latitude), float(from_node.longitude),
-            float(to_node.latitude), float(to_node.longitude)
+            float(to_node.latitude), float(to_node.longitude),
+            mode="driving",
         )
-        
-        # d. 生成 route_segments (P0用直线距离，road_name='虚拟道路')
+        distance = dist_info["distance_km"]
+        time = dist_info["duration_minutes"]
+        source = dist_info["source"]
+
+        # d. 生成 route_segments（road_name 标识距离来源）
         segment = {
-            "road_name": "虚拟道路",
+            "road_name": SOURCE_LABEL[source],
             "start_lng": float(from_node.longitude),
             "start_lat": float(from_node.latitude),
             "end_lng": float(to_node.longitude),
-            "end_lat": float(to_node.latitude)
+            "end_lat": float(to_node.latitude),
         }
+        # 真实/估算道路距离时附带路网数据字段；纯直线时保持原输出形状
+        if source != "haversine":
+            segment["real_distance"] = round(distance, 3)
+            segment["eta_minutes"] = round(time, 2)
         route_segments.append(segment)
-        
-        # e. 计算时间（距离 / 平均速度，暂定60km/h）
-        time = distance / 60.0 * 60  # 转换为分钟
-        
+
         # e. 计算碳排放（燃油车：距离×0.2kg/km，电动车：0）
         emission = _calculate_emission(distance, vehicle.energy_type)
         

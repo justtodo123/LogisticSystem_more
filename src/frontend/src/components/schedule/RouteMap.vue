@@ -7,6 +7,8 @@ import {
   computeBounds,
   projectPoint,
 } from '@/utils/geo-projection'
+import { isAmapConfigured } from '@/utils/load-amap'
+import AmapRouteMap from './AmapRouteMap.vue'
 import RouteMapViewport from './RouteMapViewport.vue'
 
 const props = withDefaults(
@@ -34,6 +36,15 @@ const FULLSCREEN_HEIGHT = 560
 const fullscreenVisible = ref(false)
 const inlineViewportRef = ref<InstanceType<typeof RouteMapViewport> | null>(null)
 const fullscreenViewportRef = ref<InstanceType<typeof RouteMapViewport> | null>(null)
+const inlineAmapRef = ref<InstanceType<typeof AmapRouteMap> | null>(null)
+const fullscreenAmapRef = ref<InstanceType<typeof AmapRouteMap> | null>(null)
+
+// T5-2：配置了 VITE_MAP_API_KEY 时优先使用真实高德地图；加载失败降级为 Canvas/SVG
+const useAmap = ref(isAmapConfigured())
+
+function onAmapLoadError(): void {
+  useAmap.value = false
+}
 
 function projectRoute(width: number, height: number) {
   const data = props.data
@@ -96,11 +107,19 @@ const fullscreenProjected = computed(() =>
 )
 
 function zoomInline(factor: number): void {
-  inlineViewportRef.value?.zoomBy(factor)
+  if (useAmap.value) {
+    inlineAmapRef.value?.zoomBy(factor)
+  } else {
+    inlineViewportRef.value?.zoomBy(factor)
+  }
 }
 
 function resetInline(): void {
-  inlineViewportRef.value?.resetView()
+  if (useAmap.value) {
+    inlineAmapRef.value?.resetView()
+  } else {
+    inlineViewportRef.value?.resetView()
+  }
 }
 
 function openFullscreen(): void {
@@ -108,18 +127,18 @@ function openFullscreen(): void {
 }
 
 function onFullscreenOpened(): void {
-  fullscreenViewportRef.value?.resetView()
+  if (useAmap.value) {
+    fullscreenAmapRef.value?.resetView()
+  } else {
+    fullscreenViewportRef.value?.resetView()
+  }
 }
 </script>
 
 <template>
   <div v-loading="loading" class="route-map-wrap">
-    <el-empty
-      v-if="!loading && !inlineProjected"
-      :description="emptyDescription"
-    />
-
-    <template v-else-if="inlineProjected">
+    <!-- T5-2：高德地图模式 -->
+    <template v-if="useAmap">
       <div class="route-map-toolbar">
         <el-button-group size="small">
           <el-button :icon="ZoomIn" title="放大" @click="zoomInline(1.2)" />
@@ -137,14 +156,16 @@ function onFullscreenOpened(): void {
         </el-button>
       </div>
 
-      <RouteMapViewport
-        ref="inlineViewportRef"
-        :projected="inlineProjected"
+      <AmapRouteMap
+        v-if="data"
+        ref="inlineAmapRef"
+        :data="data"
         :stroke-color="strokeColor"
-        :width="INLINE_WIDTH"
         :height="INLINE_HEIGHT"
         @package-click="emit('package-click', $event)"
+        @load-error="onAmapLoadError"
       />
+      <el-empty v-else :description="emptyDescription" />
 
       <div v-if="data" class="route-map-meta">
         <span>路线 {{ data.route_code }}</span>
@@ -153,9 +174,56 @@ function onFullscreenOpened(): void {
         <span class="route-map-legend">
           <i class="legend-dot legend-node" />节点
           <i class="legend-dot legend-pkg" />包裹
-          <i class="legend-arrow" />带货路段方向
+          <i class="legend-arrow" />真实道路路径
         </span>
       </div>
+    </template>
+
+    <!-- 降级模式：Canvas/SVG 示意画线 -->
+    <template v-else>
+      <el-empty
+        v-if="!loading && !inlineProjected"
+        :description="emptyDescription"
+      />
+
+      <template v-else-if="inlineProjected">
+        <div class="route-map-toolbar">
+          <el-button-group size="small">
+            <el-button :icon="ZoomIn" title="放大" @click="zoomInline(1.2)" />
+            <el-button :icon="ZoomOut" title="缩小" @click="zoomInline(0.84)" />
+            <el-button :icon="RefreshRight" title="重置视图" @click="resetInline" />
+          </el-button-group>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            :icon="FullScreen"
+            @click="openFullscreen"
+          >
+            全屏查看
+          </el-button>
+        </div>
+
+        <RouteMapViewport
+          ref="inlineViewportRef"
+          :projected="inlineProjected"
+          :stroke-color="strokeColor"
+          :width="INLINE_WIDTH"
+          :height="INLINE_HEIGHT"
+          @package-click="emit('package-click', $event)"
+        />
+
+        <div v-if="data" class="route-map-meta">
+          <span>路线 {{ data.route_code }}</span>
+          <span>带货距离 {{ data.total_distance.toFixed(1) }} km</span>
+          <span>带货时间 {{ data.total_time.toFixed(0) }} min</span>
+          <span class="route-map-legend">
+            <i class="legend-dot legend-node" />节点
+            <i class="legend-dot legend-pkg" />包裹
+            <i class="legend-arrow" />带货路段方向
+          </span>
+        </div>
+      </template>
     </template>
 
     <el-dialog
@@ -167,8 +235,17 @@ function onFullscreenOpened(): void {
       class="route-map-dialog"
       @opened="onFullscreenOpened"
     >
+      <AmapRouteMap
+        v-if="useAmap && data"
+        ref="fullscreenAmapRef"
+        :data="data"
+        :stroke-color="strokeColor"
+        :height="FULLSCREEN_HEIGHT"
+        @package-click="emit('package-click', $event)"
+        @load-error="onAmapLoadError"
+      />
       <RouteMapViewport
-        v-if="fullscreenProjected"
+        v-else-if="fullscreenProjected"
         ref="fullscreenViewportRef"
         :projected="fullscreenProjected"
         :stroke-color="strokeColor"
