@@ -1,0 +1,39 @@
+# 不进入 Docker 构建上下文的路径（保持镜像精简 + 防止密钥泄露）
+
+# 版本控制 / 文档
+.git
+.github
+My_doc
+docs
+scripts
+*.md
+*.xlsx
+
+# Python 后端
+src/backend/.venv
+src/backend/venv
+src/backend/__pycache__
+**/__pycache__
+src/backend/.pytest_cache
+src/backend/data
+src/backend/tests
+src/backend/htmlcov
+
+# Node 前端
+src/frontend/node_modules
+src/frontend/dist
+src/frontend/.vite
+*.tsbuildinfo
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+*.local
+
+# 数据库 / 日志
+*.db
+*.sqlite
+*.sqlite3
+logs
+*.log

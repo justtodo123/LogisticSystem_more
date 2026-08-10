@@ -1,0 +1,26 @@
+# 后端镜像：FastAPI + uvicorn
+# 构建：docker build -f Dockerfile.backend -t logistics-backend .
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    ENV=prod
+
+WORKDIR /app
+
+# 先安装依赖，充分利用 Docker 层缓存
+COPY src/backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制后端源码
+COPY src/backend/ /app/
+
+# SQLite 数据目录（docker-compose 中挂载 volume 持久化）
+RUN mkdir -p /app/data
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)" || exit 1
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

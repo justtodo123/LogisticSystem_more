@@ -1,0 +1,49 @@
+# CD 工作流：main 分支通过（CI 为分支保护必检项）后自动构建并推送 Docker 镜像
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker-build-push:
+    name: 构建并推送 Docker 镜像
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # GHCR 镜像名必须全小写，github.repository 可能含大写（如 LogisticSystem）
+      - name: 计算小写镜像名
+        id: vars
+        run: echo "image=$(echo 'ghcr.io/${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 构建并推送后端镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.backend
+          push: true
+          tags: |
+            ${{ steps.vars.outputs.image }}-backend:latest
+            ${{ steps.vars.outputs.image }}-backend:${{ github.sha }}
+
+      - name: 构建并推送前端镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.frontend
+          push: true
+          tags: |
+            ${{ steps.vars.outputs.image }}-frontend:latest
+            ${{ steps.vars.outputs.image }}-frontend:${{ github.sha }}
