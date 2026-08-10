@@ -134,6 +134,19 @@ class ArrivalConfirmService:
             else:
                 goods_status = "packed"
 
+            # T3-2：送达确认后发送通知（失败不影响主流程）
+            try:
+                from services.notification import (
+                    SCENARIO_ARRIVAL_CONFIRMED,
+                    send_notification_fire_and_forget,
+                )
+                send_notification_fire_and_forget(db, SCENARIO_ARRIVAL_CONFIRMED, {
+                    "package_code": package_code,
+                    "schedule_code": schedule_code,
+                })
+            except Exception:
+                pass  # 通知失败不影响主业务流程
+
             return {
                 "package_code": package_code,
                 "status": "delivered",

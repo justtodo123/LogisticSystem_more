@@ -14,8 +14,9 @@ from .node_dispatch import NodeDispatch
 from .route import Route
 from .exception_event import ExceptionEvent
 from .idempotency_record import IdempotencyRecord
+from .notification_config import NotificationConfig
 
 __all__ = ["User", "LogEvent", "Node", "StorageCenter", "SortingCenter",
            "Order", "Goods", "Package", "Vehicle", "Driver", "GlobalSchedule",
            "DispatchBatch", "NodeDispatch", "Route", "ExceptionEvent",
-           "IdempotencyRecord"]
+           "IdempotencyRecord", "NotificationConfig"]

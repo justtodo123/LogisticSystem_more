@@ -521,7 +521,24 @@ class ScheduleService:
             pkg_count = db.query(Package).filter(
                 Package.schedule_id == gs.id
             ).count()
-            
+
+            # T3-2：调度确认后发送通知（失败不影响主流程）
+            try:
+                from services.notification import (
+                    SCENARIO_SCHEDULE_CONFIRMED,
+                    send_notification,
+                )
+                await send_notification(db, SCENARIO_SCHEDULE_CONFIRMED, {
+                    "schedule_code": gs.schedule_code,
+                    "total_goods": gs.total_goods,
+                    "total_distance": float(gs.total_distance),
+                    "total_time": float(gs.total_time),
+                    "score": raw_score,
+                    "is_replan": gs.is_replan,
+                })
+            except Exception:
+                pass  # 通知失败不影响主业务流程
+
             return success_response(data={
                 "schedule_code": gs.schedule_code,
                 "total_distance": float(gs.total_distance),

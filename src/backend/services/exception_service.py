@@ -168,6 +168,23 @@ class ExceptionService:
             db.commit()
             db.refresh(event)
 
+            # T3-2：异常发生后发送通知（失败不影响主流程）
+            try:
+                from services.notification import (
+                    SCENARIO_EXCEPTION_CREATED,
+                    send_notification,
+                )
+                await send_notification(db, SCENARIO_EXCEPTION_CREATED, {
+                    "event_code": event.event_code,
+                    "exception_type": event.exception_type,
+                    "exception_subtype": event.exception_subtype,
+                    "target_code": event.target_code,
+                    "recommended_action": event.recommended_action,
+                    "description": event.description,
+                })
+            except Exception:
+                pass  # 通知失败不影响主业务流程
+
             return success_response(
                 data=ExceptionService._to_response(event, db).model_dump()
             )

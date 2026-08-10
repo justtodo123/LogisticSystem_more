@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
+  Bell,
   Box,
   DocumentChecked,
   Expand,
@@ -40,6 +41,7 @@ const menuItems: MenuItem[] = [
   { index: '/nodes/sorting', label: '分拣中心', icon: Location },
   { index: '/arrival-confirm', label: '节点到货确认', icon: DocumentChecked },
   { index: '/exceptions', label: '异常管理', icon: Warning },
+  { index: '/notifications', label: '消息通知', icon: Bell },
 ]
 
 const menuTitleMap = Object.fromEntries(menuItems.map((item) => [item.index, item.label]))

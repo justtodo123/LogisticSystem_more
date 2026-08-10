@@ -85,6 +85,12 @@ const router = createRouter({
           meta: { title: '节点到货确认' },
         },
         {
+          path: 'notifications',
+          name: 'Notifications',
+          component: () => import('@/views/settings/NotificationSettings.vue'),
+          meta: { title: '消息通知' },
+        },
+        {
           path: 'health',
           name: 'HealthCheck',
           component: () => import('@/views/HealthCheck.vue'),

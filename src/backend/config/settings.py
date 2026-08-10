@@ -45,6 +45,16 @@ class Settings(BaseSettings):
     IDEMPOTENCY_TTL_HOURS: int = 24
     DEEPSEEK_TIMEOUT_SECONDS: int = 15
 
+    # ── 消息通知（T3-2）──
+    NOTIFICATION_CHANNELS: str = "console"  # 逗号分隔：console,email,wechat_work
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    EMAIL_RECIPIENTS: str = ""  # 逗号分隔的收件人
+    WECHAT_WORK_WEBHOOK: str = ""
+
     @model_validator(mode="after")
     def _sync_jwt_expiry(self) -> "Settings":
         """当未显式设置 JWT_EXPIRE_SECONDS 时，从 JWT_EXPIRE_HOURS 自动计算"""
