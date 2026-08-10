@@ -20,6 +20,7 @@ from api.exception_events import router as exceptions_router
 from api.ai import router as ai_router
 from api.arrival_confirm import router as arrival_confirm_router
 from api.audit_logs import router as audit_logs_router
+from api.schedule_override import router as schedule_override_router
 from config.settings import settings
 from middleware.idempotency import IdempotencyMiddleware
 from middleware.timeout import TimeoutMiddleware
@@ -100,6 +101,9 @@ app.include_router(ai_router)
 # 注册到货确认路由
 app.include_router(arrival_confirm_router)
 app.include_router(audit_logs_router)
+
+# 注册人工干预调度路由（T2-4）
+app.include_router(schedule_override_router)
 
 
 # ─── 全局异常处理器 ───────────────────────────────────────────────

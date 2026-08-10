@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { DispatchBatchDetail, NodeDispatchItem } from '@/types/dispatch'
 import { formatNodeWithName } from '@/utils/schedule-format'
+import { listDrivers } from '@/api/drivers'
+import { listVehicles } from '@/api/vehicles'
+import {
+  overrideDispatchDriver,
+  overrideDispatchVehicle,
+  undoDispatchOverride,
+} from '@/api/schedule'
 
 const props = defineProps<{
   detail: DispatchBatchDetail | null
@@ -10,9 +18,24 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'open-dispatch': [item: NodeDispatchItem]
+  'refresh': []
 }>()
 
 const keyword = ref('')
+
+// ── T2-4 人工干预：换车/换司机对话框 ──
+const overrideVisible = ref(false)
+const overrideKind = ref<'vehicle' | 'driver'>('vehicle')
+const overrideDispatch = ref<string | null>(null)
+const candidateOptions = ref<Array<{ value: string; label: string }>>([])
+const candidateLoading = ref(false)
+const targetCode = ref('')
+
+/** 批次处于可执行前（pending/l0_l1_done/未知）时允许人工干预 */
+const canIntervene = computed(() => {
+  const s = props.detail?.status
+  return s == null || s === 'pending' || s === 'l0_l1_done'
+})
 
 interface PhaseGroup {
   level_phase: 0 | 1
@@ -65,6 +88,76 @@ function formatPackages(codes: string[]): string {
 
 function nonReturnTasks(tasks: NodeDispatchItem['tasks']) {
   return tasks.filter((t) => !t.is_return)
+}
+
+// ── T2-4 人工干预操作 ──
+async function openOverride(row: NodeDispatchItem, kind: 'vehicle' | 'driver'): Promise<void> {
+  overrideKind.value = kind
+  overrideDispatch.value = row.dispatch_code
+  targetCode.value = ''
+  overrideVisible.value = true
+  candidateLoading.value = true
+  try {
+    if (kind === 'vehicle') {
+      const res = await listVehicles({ page: 1, page_size: 200 })
+      candidateOptions.value = res.items.map((v) => ({
+        value: v.vehicle_code,
+        label: `${v.vehicle_code}（${v.model}）`,
+      }))
+    } else {
+      const res = await listDrivers({ page: 1, page_size: 200 })
+      candidateOptions.value = res.items.map((d) => ({
+        value: d.driver_code,
+        label: `${d.driver_code}（${d.name}）`,
+      }))
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '加载候选列表失败')
+  } finally {
+    candidateLoading.value = false
+  }
+}
+
+async function applyOverride(): Promise<void> {
+  if (!overrideDispatch.value || !targetCode.value) {
+    ElMessage.warning('请选择目标' + (overrideKind.value === 'vehicle' ? '车辆' : '司机'))
+    return
+  }
+  try {
+    const result =
+      overrideKind.value === 'vehicle'
+        ? await overrideDispatchVehicle(overrideDispatch.value, targetCode.value)
+        : await overrideDispatchDriver(overrideDispatch.value, targetCode.value)
+    overrideVisible.value = false
+    ElMessage.success(
+      `干预成功：${result.vehicle_code ?? result.driver_code}（版本 v${result.version}）`,
+    )
+    emit('refresh')
+  } catch (err) {
+    // 后端校验拒绝时 message 即拒绝原因
+    ElMessage.error(err instanceof Error ? err.message : '人工干预失败')
+  }
+}
+
+async function handleUndo(row: NodeDispatchItem): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `确认撤销「${row.dispatch_code}」的人工干预？将恢复到调整前的车辆/司机。`,
+      '撤销干预',
+      { type: 'warning', confirmButtonText: '撤销', cancelButtonText: '取消' },
+    )
+  } catch {
+    return // cancelled
+  }
+  try {
+    const result = await undoDispatchOverride(row.dispatch_code)
+    ElMessage.success(
+      `已撤销，恢复车辆 ${result.vehicle_code ?? '—'} / 司机 ${result.driver_code ?? '—'}（版本 v${result.version}）`,
+    )
+    emit('refresh')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '撤销失败')
+  }
 }
 </script>
 
@@ -137,14 +230,89 @@ function nonReturnTasks(tasks: NodeDispatchItem['tasks']) {
           </template>
         </el-table-column>
         <el-table-column prop="vehicle_code" label="车辆编号" min-width="120" />
-        <el-table-column prop="driver_code" label="司机编号" min-width="120" />
+        <el-table-column prop="driver_code" label="司机编号" min-width="120">
+          <template #default="{ row }">
+            {{ row.driver_code ?? '—' }}
+            <el-tag v-if="row.can_undo" type="warning" size="small" class="overridden-tag">
+              已干预
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="距离 (km)" min-width="100">
           <template #default="{ row }">
             {{ row.total_distance?.toFixed(1) ?? '—' }}
           </template>
         </el-table-column>
+        <el-table-column v-if="canIntervene"
+          label="干预" min-width="180" fixed="right"
+        >
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              size="small"
+              @click="openOverride(row, 'vehicle')"
+            >
+              换车
+            </el-button>
+            <el-button
+              link
+              type="primary"
+              size="small"
+              @click="openOverride(row, 'driver')"
+            >
+              换司机
+            </el-button>
+            <el-button
+              v-if="row.can_undo"
+              link
+              type="danger"
+              size="small"
+              @click="handleUndo(row)"
+            >
+              撤销
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </div>
+
+    <!-- T2-4 换车/换司机对话框 -->
+    <el-dialog
+      v-model="overrideVisible"
+      :title="overrideKind === 'vehicle' ? '更换车辆' : '更换司机'"
+      width="420px"
+      destroy-on-close
+    >
+      <div class="override-dialog-body">
+        <div class="override-target">调度明细：{{ overrideDispatch }}</div>
+        <el-select
+          v-model="targetCode"
+          filterable
+          :loading="candidateLoading"
+          :placeholder="overrideKind === 'vehicle' ? '选择目标车辆' : '选择目标司机'"
+          class="override-select"
+        >
+          <el-option
+            v-for="opt in candidateOptions"
+            :key="opt.value"
+            :label="opt.label"
+            :value="opt.value"
+          />
+        </el-select>
+        <div class="override-hint">
+          系统将自动校验
+          {{ overrideKind === 'vehicle' ? '容量 / 时窗 / 路径数' : '驾时 / 排班 / 节点' }}
+          约束，不满足时拒绝并提示原因。
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="overrideVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!targetCode" @click="applyOverride">
+          确认更换
+        </el-button>
+      </template>
+    </el-dialog>
   </el-card>
 </template>
 
@@ -178,6 +346,30 @@ function nonReturnTasks(tasks: NodeDispatchItem['tasks']) {
 
 .phase-code {
   font-size: 13px;
+  color: #909399;
+}
+
+.overridden-tag {
+  margin-left: 4px;
+}
+
+.override-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.override-target {
+  font-size: 13px;
+  color: #606266;
+}
+
+.override-select {
+  width: 100%;
+}
+
+.override-hint {
+  font-size: 12px;
   color: #909399;
 }
 </style>

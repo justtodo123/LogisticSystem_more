@@ -294,6 +294,7 @@ async function onAiDraftCreated(scheduleCode: string): Promise<void> {
         :detail="batchDetail"
         :loading="batchDetailLoading"
         @open-dispatch="openDispatch"
+        @refresh="refreshDispatch"
       />
 
       <UnallocatedAlert :codes="batchDetail?.unallocated_packages" />

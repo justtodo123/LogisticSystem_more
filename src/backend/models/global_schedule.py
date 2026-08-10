@@ -24,6 +24,8 @@ class GlobalSchedule(Base):
     status = Column(String(20), nullable=False, server_default="active")
     # T2-3 调度结果可解释性：结构化解释数据（评分拆解/约束命中/备选方案）
     explanation_data = Column(JSON, nullable=True)
+    # T2-4 人工干预调度：撤销干预计数（每撤销一次人工干预自增 1）
+    undo_version = Column(Integer, nullable=False, server_default="0")
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
     # 自关联：重规划版本链

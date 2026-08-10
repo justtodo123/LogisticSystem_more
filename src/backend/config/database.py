@@ -107,3 +107,17 @@ def _run_phase1_migrations(engine):
             if "explanation_data" not in gs_cols:
                 conn.execute(text("ALTER TABLE global_schedules ADD COLUMN explanation_data JSON"))
                 conn.commit()
+
+        # T2-4: 人工干预调度 — global_schedules 表新增 undo_version（撤销计数）
+        if "global_schedules" in inspector.get_table_names():
+            gs_cols = [c["name"] for c in inspector.get_columns("global_schedules")]
+            if "undo_version" not in gs_cols:
+                conn.execute(text("ALTER TABLE global_schedules ADD COLUMN undo_version INTEGER DEFAULT 0"))
+                conn.commit()
+
+        # T2-4: 人工干预调度 — node_dispatches 表新增 override_snapshot（撤销快照）
+        if "node_dispatches" in inspector.get_table_names():
+            nd_cols = [c["name"] for c in inspector.get_columns("node_dispatches")]
+            if "override_snapshot" not in nd_cols:
+                conn.execute(text("ALTER TABLE node_dispatches ADD COLUMN override_snapshot JSON"))
+                conn.commit()

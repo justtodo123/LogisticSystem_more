@@ -24,6 +24,8 @@ export interface NodeDispatchItem {
   tasks: DispatchTask[]
   total_distance: number
   total_time?: number
+  /** T2-4 人工干预：该明细是否可撤销干预 */
+  can_undo?: boolean
 }
 
 export interface DispatchBatchSummary {

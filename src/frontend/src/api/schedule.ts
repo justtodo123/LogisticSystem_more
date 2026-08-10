@@ -215,3 +215,85 @@ export async function getDispatchBatch(
   )
   return normalizeBatchDetail(data)
 }
+
+// ── T2-4 人工干预调度 ─────────────────────────────────────────
+
+export interface ScheduleOverrideResult {
+  dispatch_code: string
+  vehicle_code?: string | null
+  driver_code?: string | null
+  version: number
+  route_code?: string
+  recalculated?: boolean
+  can_undo?: boolean
+  undo_version?: number | null
+  deleted_route_codes?: string[]
+}
+
+export interface ScheduleOverrideRecalcResult {
+  batch_code: string
+  recalculated_count: number
+  dispatches: Array<{
+    dispatch_code: string
+    route_code: string
+    total_distance: number
+    total_time: number
+    total_emission: number
+  }>
+}
+
+export async function overrideDispatchVehicle(
+  dispatchCode: string,
+  vehicleCode: string,
+  reason?: string,
+): Promise<ScheduleOverrideResult> {
+  const { data } = await request.put<ScheduleOverrideResult>(
+    '/override/vehicle',
+    {
+      dispatch_code: dispatchCode,
+      vehicle_code: vehicleCode,
+      ...(reason ? { reason } : {}),
+    },
+  )
+  return data
+}
+
+export async function overrideDispatchDriver(
+  dispatchCode: string,
+  driverCode: string,
+  reason?: string,
+): Promise<ScheduleOverrideResult> {
+  const { data } = await request.put<ScheduleOverrideResult>(
+    '/override/driver',
+    {
+      dispatch_code: dispatchCode,
+      driver_code: driverCode,
+      ...(reason ? { reason } : {}),
+    },
+  )
+  return data
+}
+
+export async function recalculateOverride(
+  batchCode: string,
+  reason?: string,
+): Promise<ScheduleOverrideRecalcResult> {
+  const { data } = await request.post<ScheduleOverrideRecalcResult>(
+    '/override/recalculate',
+    {
+      batch_code: batchCode,
+      ...(reason ? { reason } : {}),
+    },
+  )
+  return data
+}
+
+export async function undoDispatchOverride(
+  dispatchCode: string,
+): Promise<ScheduleOverrideResult> {
+  const { data } = await request.post<ScheduleOverrideResult>(
+    '/override/undo',
+    { dispatch_code: dispatchCode },
+  )
+  return data
+}

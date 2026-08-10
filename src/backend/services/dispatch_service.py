@@ -101,6 +101,8 @@ class DispatchService:
             "tasks": tasks_with_detail,
             "total_distance": float(dispatch.total_distance),
             "total_time": float(dispatch.total_time),
+            # T2-4 人工干预：是否可撤销
+            "can_undo": bool(dispatch.override_snapshot),
         }
 
     @staticmethod

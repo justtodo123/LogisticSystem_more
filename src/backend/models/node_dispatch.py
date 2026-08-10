@@ -25,6 +25,8 @@ class NodeDispatch(Base):
     assigned_at = Column(DateTime, nullable=False, server_default=func.now())
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    # T2-4 人工干预调度：撤销快照（记录干预前的 vehicle_id/driver_id/原因，支持撤销恢复）
+    override_snapshot = Column(JSON, nullable=True)
 
     # 自关联：重规划版本链
     parent = relationship("NodeDispatch", remote_side=[id], backref="children")
