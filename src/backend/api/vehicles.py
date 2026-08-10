@@ -15,8 +15,21 @@ from core.response_schema import (
     VehicleDeleteData
 )
 from models.user import User
+from utils.cache import cache_delete_prefix, cached
+from core.error_codes import CODE_SUCCESS
 
 router = APIRouter(prefix="/api/vehicles", tags=["车辆管理"])
+
+
+@cached(ttl=300, key_prefix="vehicles:list", keys=("page", "page_size", "status", "node_code"))
+async def _load_vehicles(page: int, page_size: int, status: Optional[str], node_code: Optional[str], db: Session):
+    """车辆列表（带缓存，T4-3）"""
+    return await VehicleService.get_vehicles(page, page_size, status, node_code, db)
+
+
+async def _invalidate_vehicle_list_cache() -> None:
+    """车辆数据变更后使列表缓存失效"""
+    await cache_delete_prefix("vehicles:list")
 
 
 @router.get("", response_model=ResponseSchema[VehicleListData])
@@ -29,7 +42,7 @@ async def list_vehicles(
     current_user: User = Depends(get_current_user)
 ):
     """车辆列表"""
-    result = await VehicleService.get_vehicles(page, page_size, status, node_code, db)
+    result = await _load_vehicles(page, page_size, status, node_code, db)
     return result
 
 
@@ -41,6 +54,8 @@ async def create_vehicle(
 ):
     """新增车辆"""
     result = await VehicleService.create_vehicle(vehicle, db)
+    if result.get("code") == CODE_SUCCESS:
+        await _invalidate_vehicle_list_cache()
     return result
 
 
@@ -64,6 +79,8 @@ async def update_vehicle(
 ):
     """编辑车辆"""
     result = await VehicleService.update_vehicle(vehicle_code, vehicle, db)
+    if result.get("code") == CODE_SUCCESS:
+        await _invalidate_vehicle_list_cache()
     return result
 
 
@@ -75,4 +92,6 @@ async def delete_vehicle(
 ):
     """删除车辆"""
     result = await VehicleService.delete_vehicle(vehicle_code, db)
+    if result.get("code") == CODE_SUCCESS:
+        await _invalidate_vehicle_list_cache()
     return result

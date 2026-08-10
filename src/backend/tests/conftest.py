@@ -5,6 +5,7 @@
 - 内存 SQLite 数据库会话
 - 测试基础数据工厂（节点、订单、货物、车辆、司机）
 - 认证辅助函数
+- 全局缓存清理（T4-3，防止跨测试缓存污染）
 """
 import pytest
 from sqlalchemy import create_engine
@@ -18,6 +19,15 @@ from models.goods import Goods
 from models.user import User
 from models.vehicle import Vehicle
 from models.driver import Driver
+
+
+@pytest.fixture(autouse=True)
+def _clear_global_memory_cache():
+    """每个测试前后清空全局内存缓存，避免跨测试污染（T4-3）"""
+    from utils.cache import memory_cache
+    memory_cache.clear()
+    yield
+    memory_cache.clear()
 
 
 # ── 数据库固件 ─────────────────────────────────────────────

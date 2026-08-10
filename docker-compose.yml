@@ -12,10 +12,25 @@ services:
       DATABASE_URL: sqlite:////app/data/logistics.db
       JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
       CORS_ORIGINS: http://localhost:8080
+      # T4-3 Redis 缓存（容器网络内服务名 redis）
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
     volumes:
       - logistics-data:/app/data
     ports:
       - "8000:8000"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: logistics-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - logistics-redis:/data
+    ports:
+      - "6379:6379"
     restart: unless-stopped
 
   frontend:
@@ -32,3 +47,4 @@ services:
 
 volumes:
   logistics-data:
+  logistics-redis:

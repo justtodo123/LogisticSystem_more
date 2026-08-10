@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     EMAIL_RECIPIENTS: str = ""  # 逗号分隔的收件人
     WECHAT_WORK_WEBHOOK: str = ""
 
+    # ── Redis 缓存（T4-3）──
+    # REDIS_ENABLED=false 或 REDIS_URL 为空时，utils/cache 自动降级到进程内内存缓存（dev 友好）
+    REDIS_ENABLED: bool = False
+    REDIS_URL: str = ""
+    REDIS_CACHE_TTL: int = 300
+
     @model_validator(mode="after")
     def _sync_jwt_expiry(self) -> "Settings":
         """当未显式设置 JWT_EXPIRE_SECONDS 时，从 JWT_EXPIRE_HOURS 自动计算"""

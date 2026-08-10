@@ -4,19 +4,21 @@
 通过 X-Idempotency-Key 请求头实现写操作幂等：
 - POST/PUT/PATCH 请求携带 X-Idempotency-Key 时，最多执行一次
 - 重复请求在 TTL 内返回第一次的缓存响应（HTTP 200）
-- TTL 过期后视为新请求（通过 expires_at 判断）
+- TTL 过期后视为新请求
+
+存储（T4-3）：从 SQLite 迁移到 Redis，Redis 不可用时降级到进程内内存缓存；
+过期清理依赖缓存 TTL 自动完成，无需 DB 记录。
 """
 import json
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from sqlalchemy.orm import Session
 
-from config.database import SessionLocal
-from models.idempotency_record import IdempotencyRecord
+from utils.idempotency_store import (
+    get_idempotency_response,
+    save_idempotency_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,93 +47,62 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if not idempotency_key:
             return await call_next(request)
 
-        db: Session = SessionLocal()
         try:
-            # 1. 查询是否已存在该键的记录
-            existing = (
-                db.query(IdempotencyRecord)
-                .filter(IdempotencyRecord.idempotency_key == idempotency_key)
-                .first()
-            )
+            # 1. 查询是否已存在该键的记录（Redis → 内存降级）
+            existing = await get_idempotency_response(idempotency_key, self.ttl_hours)
 
-            if existing:
-                # 检查是否过期
-                if existing.expires_at.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc):
-                    logger.info(f"命中幂等缓存 key={idempotency_key[:20]}...")
-                    response_data = existing.response_data or {}
-                    return Response(
-                        content=json.dumps(response_data, ensure_ascii=False),
-                        status_code=200,
-                        media_type="application/json",
-                    )
-                else:
-                    # TTL 过期，删除旧记录
-                    db.delete(existing)
-                    db.commit()
+            if existing is not None:
+                logger.info("命中幂等缓存 key=%s...", idempotency_key[:20])
+                return Response(
+                    content=json.dumps(existing, ensure_ascii=False),
+                    status_code=200,
+                    media_type="application/json",
+                )
 
             # 2. 正常执行请求
             response: Response = await call_next(request)
 
             # 3. 仅缓存成功响应（2xx）
             if 200 <= response.status_code < 300:
-                self._cache_response(db, idempotency_key, response)
+                response = await self._capture_and_cache(idempotency_key, response)
 
             return response
 
         except Exception:
-            db.rollback()
+            logger.exception("幂等中间件异常，放行请求")
             return await call_next(request)  # 幂等中间件异常不阻断正常流程
-        finally:
-            db.close()
 
-    def _cache_response(self, db: Session, key: str, response: Response) -> None:
-        """缓存成功响应到幂等记录表"""
+    @staticmethod
+    async def _read_body(response: Response) -> bytes:
+        """读取响应体（BaseHTTPMiddleware 返回 _StreamingResponse，需消费 body_iterator）"""
+        if hasattr(response, "body_iterator"):
+            chunks = [chunk async for chunk in response.body_iterator]
+            return b"".join(chunks)
+        body = response.body
+        return body if isinstance(body, bytes) else str(body).encode("utf-8")
+
+    async def _capture_and_cache(self, key: str, response: Response) -> Response:
+        """读取响应体并缓存到缓存存储（Redis / 内存），返回带原始 body 的重建响应
+
+        注意：读取 body_iterator 会消费响应流，必须重建 Response 以保留响应体。
+        """
+        body_bytes = await self._read_body(response)
+
         try:
-            # 读取响应体（FastAPI Response.body 可能是 bytes / 协程）
-            body = response.body
-            if isinstance(body, bytes):
-                body_str = body.decode("utf-8", errors="replace")
-            else:
-                body_str = str(body)
-
+            body_str = body_bytes.decode("utf-8", errors="replace")
             response_json = json.loads(body_str) if body_str else {}
-        except (json.JSONDecodeError, Exception):
-            response_json = {"_raw": body_str}
+        except Exception:
+            response_json = {"_raw": body_bytes.decode("utf-8", errors="replace")}
 
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=self.ttl_hours)
+        await save_idempotency_response(key, response_json, self.ttl_hours)
+        logger.debug("已缓存幂等响应 key=%s..., TTL=%sh", key[:20], self.ttl_hours)
 
-        record = IdempotencyRecord(
-            idempotency_key=key,
-            response_data=response_json,
-            expires_at=expires_at,
+        headers = {
+            k: v for k, v in response.headers.items() if k.lower() != "content-length"
+        }
+        return Response(
+            content=body_bytes,
+            status_code=response.status_code,
+            media_type=response.media_type,
+            headers=headers,
         )
-        db.add(record)
-        db.commit()
-        logger.debug(f"已缓存幂等响应 key={key[:20]}..., TTL={self.ttl_hours}h")
-
-
-def cleanup_expired_idempotency_records(db: Optional[Session] = None) -> int:
-    """清理过期的幂等记录（可由定时任务调用）"""
-    close_db = False
-    if db is None:
-        db = SessionLocal()
-        close_db = True
-
-    try:
-        now_utc = datetime.now(timezone.utc)
-        expired = db.query(IdempotencyRecord).filter(
-            IdempotencyRecord.expires_at < now_utc
-        )
-        count = expired.count()
-        expired.delete()
-        db.commit()
-        if count:
-            logger.info(f"清理了 {count} 条过期幂等记录")
-        return count
-    except Exception as e:
-        db.rollback()
-        logger.error(f"清理过期幂等记录失败：{e}")
-        raise
-    finally:
-        if close_db:
-            db.close()

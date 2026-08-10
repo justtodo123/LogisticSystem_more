@@ -18,8 +18,21 @@ from core.response_schema import (
     SortingCenterDeleteData
 )
 from models.user import User
+from utils.cache import cache_delete_prefix, cached
+from core.error_codes import CODE_SUCCESS
 
 router = APIRouter(prefix="/api/nodes", tags=["节点管理"])
+
+
+@cached(ttl=300, key_prefix="nodes:list", keys=("page", "page_size", "node_type", "level"))
+async def _load_nodes(page: int, page_size: int, node_type: Optional[str], level: Optional[int], db: Session):
+    """节点列表（带缓存，T4-3）"""
+    return await NodeService.get_nodes(page, page_size, node_type, level, db)
+
+
+async def _invalidate_node_list_cache() -> None:
+    """节点数据变更后使列表缓存失效"""
+    await cache_delete_prefix("nodes:list")
 
 
 @router.get("", response_model=ResponseSchema[NodeListData])
@@ -32,7 +45,7 @@ async def list_nodes(
     current_user: User = Depends(get_current_user)
 ):
     """节点列表"""
-    result = await NodeService.get_nodes(page, page_size, node_type, level, db)
+    result = await _load_nodes(page, page_size, node_type, level, db)
     return result
 
 
@@ -44,6 +57,8 @@ async def create_storage_center(
 ):
     """新增存储中心"""
     result = await NodeService.create_storage_center(center.dict(), db)
+    if result.get("code") == CODE_SUCCESS:
+        await _invalidate_node_list_cache()
     return result
 
 
@@ -56,6 +71,8 @@ async def update_storage_center(
 ):
     """编辑存储中心"""
     result = await NodeService.update_storage_center(node_code, center.dict(exclude_unset=True), db)
+    if result.get("code") == CODE_SUCCESS:
+        await _invalidate_node_list_cache()
     return result
 
 
@@ -67,6 +84,8 @@ async def delete_storage_center(
 ):
     """删除存储中心"""
     result = await NodeService.delete_storage_center(node_code, db)
+    if result.get("code") == CODE_SUCCESS:
+        await _invalidate_node_list_cache()
     return result
 
 
@@ -78,6 +97,8 @@ async def create_sorting_center(
 ):
     """新增分拣中心"""
     result = await NodeService.create_sorting_center(center.dict(), db)
+    if result.get("code") == CODE_SUCCESS:
+        await _invalidate_node_list_cache()
     return result
 
 
@@ -90,6 +111,8 @@ async def update_sorting_center(
 ):
     """编辑分拣中心"""
     result = await NodeService.update_sorting_center(node_code, center.dict(exclude_unset=True), db)
+    if result.get("code") == CODE_SUCCESS:
+        await _invalidate_node_list_cache()
     return result
 
 
@@ -101,6 +124,8 @@ async def delete_sorting_center(
 ):
     """删除分拣中心"""
     result = await NodeService.delete_sorting_center(node_code, db)
+    if result.get("code") == CODE_SUCCESS:
+        await _invalidate_node_list_cache()
     return result
 
 
