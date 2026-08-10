@@ -61,7 +61,7 @@ class TestScheduleServiceNormalFlow:
         # 验证预览后 orders/goods 状态不变
         for order in test_orders.values():
             db_session.refresh(order)
-            assert order.status == "pending"
+            assert order.status == "unassigned"
         for goods in test_goods.values():
             db_session.refresh(goods)
             assert goods.status == "pending_pack"
@@ -91,12 +91,14 @@ class TestScheduleServiceNormalFlow:
         packed_count = sum(1 for p in packages if p.status == "packed")
         pending_count = sum(1 for p in packages if p.status == "pending_pack")
         assert packed_count > 0, "应至少有一个 L0→L1 包裹状态为 packed"
-        assert pending_count > 0, "应至少有一个 L1→L2 包裹状态为 pending_pack"
+        # F021 确认阶段仅生成 L0→L1 包裹（status=packed）；
+        # L1→L2 包裹在 confirm-arrival 触发 repacking 时才创建（status=pending_pack）
+        assert pending_count == 0, "确认阶段不应生成 L1→L2 包裹"
 
         # 验证 orders 状态：pending → delivering
         for order in test_orders.values():
             db_session.refresh(order)
-            assert order.status == "delivering"
+            assert order.status == "assigned"
 
         # 验证 goods 状态：pending_pack → packed
         for goods in test_goods.values():
@@ -238,7 +240,7 @@ class TestScheduleServiceP1PreviewConfirm:
         # 验证订单状态不变
         for order in test_orders.values():
             db_session.refresh(order)
-            assert order.status == "pending", "预览模式不应改变订单状态"
+            assert order.status == "unassigned", "预览模式不应改变订单状态"
 
         # 验证货物状态不变
         for goods in test_goods.values():
@@ -295,10 +297,10 @@ class TestScheduleServiceP1PreviewConfirm:
         ).first()
         assert gs.status == "active"
 
-        # 验证订单状态：pending → delivering
+        # 验证订单状态：unassigned → assigned
         for order in test_orders.values():
             db_session.refresh(order)
-            assert order.status == "delivering"
+            assert order.status == "assigned"
 
         # 验证货物状态：pending_pack → packed
         for goods in test_goods.values():
@@ -327,7 +329,7 @@ class TestScheduleServiceP1PreviewConfirm:
         schedule_code = preview_result["data"]["schedule_code"]
 
         # 2. 修改订单状态（模拟状态变化，completed 是 Order 合法状态且不可再确认）
-        test_orders["O001"].status = "completed"
+        test_orders["O001"].status = "signed"
         db_session.commit()
 
         # 3. 确认（应失败）

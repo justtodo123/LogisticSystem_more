@@ -89,3 +89,14 @@ async def import_orders(
     """批量导入订单"""
     result = await OrderService.import_orders(file, skip_errors, db)
     return result
+
+
+@router.post("/{order_code}/close", response_model=ResponseSchema[OrderUpdateData])
+async def close_order(
+    order_code: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher)
+):
+    """关闭订单（T1-1 新增：unassigned/assigned → closed）"""
+    result = await OrderService.close_order(order_code, db)
+    return result

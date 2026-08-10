@@ -158,11 +158,11 @@ def global_schedule(
     elif is_replan:
         query = db.query(Order).filter(Order.status == "exception")
     else:
-        query = db.query(Order).filter(Order.status == "pending")
+        query = db.query(Order).filter(Order.status == "unassigned")
     orders = query.all()
 
     if not orders:
-        raise ValueError("没有找到符合条件的订单（请确认订单存在且状态为 pending/exception，或提供了有效的 order_codes）")
+        raise ValueError("没有找到符合条件的订单（请确认订单存在且状态为 unassigned/exception，或提供了有效的 order_codes）")
 
     # ── 2. 预加载 L1 节点（含 sorting_center 属性） ──
     l1_nodes = (

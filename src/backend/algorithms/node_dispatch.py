@@ -386,9 +386,11 @@ def dispatch_level(
             slots = []
             for v in vehicles:
                 score = _calculate_vehicle_score(v, from_n, to_n, 1, cfg)
+                # 使用 load_rate_max 限制可用容量（T1-2 新增）
+                effective_capacity = float(v.capacity) * (v.load_rate_max if v.load_rate_max else 0.9)
                 slots.append({
                     "vehicle": v,
-                    "capacity": float(v.capacity),
+                    "capacity": effective_capacity,
                     "score": score,
                     "assigned_packages": [],
                     "assigned_weight": 0.0,
@@ -434,6 +436,8 @@ def dispatch_level(
                     float(from_n.latitude), float(from_n.longitude),
                     float(to_n.latitude), float(to_n.longitude)
                 )
+                # 计算预估成本（距离 × cost_per_km × 2 往返，T1-2 新增）
+                cost_per_km = vehicle.cost_per_km if vehicle.cost_per_km else 5.0
                 dispatch = {
                     "vehicle_code": vehicle.vehicle_code,
                     "driver_code": driver.driver_code if driver else None,
@@ -445,6 +449,7 @@ def dispatch_level(
                     ],
                     "total_distance": dist_one_way * 2,
                     "total_time": dist_one_way * 2 / 60.0,
+                    "estimated_cost": round(dist_one_way * 2 * cost_per_km, 2),
                     "vehicle_id": vehicle.id,
                     "driver_id": driver.id if driver else None,
                 }

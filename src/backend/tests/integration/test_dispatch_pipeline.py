@@ -260,7 +260,7 @@ class TestDispatchPipeline:
         orders = db_session.query(Order).filter(Order.order_code.in_(order_codes)).all()
         for order in orders:
             db_session.refresh(order)
-            # 所有货物送达后，订单应该变为completed
+            # 所有货物送达后，订单应该变为signed
             # 这里验证订单状态合法
-            assert order.status in ["pending", "delivering", "completed"]
+            assert order.status in ["unassigned", "assigned", "in_transit", "signed"]
 

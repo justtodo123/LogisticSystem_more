@@ -153,9 +153,11 @@ class PackageService:
                 elif goods.node_id != node_id:
                     return {"code": CODE_NODE_NOT_FOUND, "message": f"货物 {goods_code} 与其他货物不在同一个节点", "data": None}
                 
+                # 查询货物所属订单（避免原实现中同一查询执行两次）
+                order = db.query(Order).filter(Order.id == goods.order_id).first()
                 goods_list.append({
                     "goods_code": goods.goods_code,
-                    "order_code": db.query(Order).filter(Order.id == goods.order_id).first().order_code if db.query(Order).filter(Order.id == goods.order_id).first() else ""
+                    "order_code": order.order_code if order else ""
                 })
 
             # 4. 创建新包裹（状态 pending_pack，goods_items 为重新分配的货物）

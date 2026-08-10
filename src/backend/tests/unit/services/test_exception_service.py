@@ -284,7 +284,7 @@ class TestReplanService:
         for order_code in original.order_codes:
             order = test_orders.get(order_code)
             if order:
-                order.status = "delivering"
+                order.status = "in_transit"
         db_session.commit()
 
         # 2. 调用 redispatch（将触发 ScheduleService + DispatchService）

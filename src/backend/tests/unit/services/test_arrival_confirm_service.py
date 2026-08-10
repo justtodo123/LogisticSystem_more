@@ -126,6 +126,8 @@ class TestConfirmArrival:
         7. 验证写入 exception_events
         """
         # 1. 准备测试数据
+        # 0. 将订单状态推进到 in_transit（异常要求订单处于 in_transit 状态）
+        test_orders["O002"].status = "in_transit"
         # 1.1 更新 fixture 货物 G003（属于 O002）的状态和位置
         goods = test_goods["G003"]  # fixture: G003 -> O002
         goods.status = "in_transit"
@@ -281,10 +283,11 @@ class TestConfirmArrival:
               confirm-arrival 异常确认 → delivered → exception
         验证：delivered → exception 转换不抛 ValueError（Bug1 修复后）
         """
-        # 1. 准备：货物 G003（属于 O002）
+        # 1. 准备：货物 G003（属于 O002），订单需在 in_transit 状态才可标记异常
         goods = test_goods["G003"]
         goods.status = "in_transit"
         goods.node_id = test_nodes["SC001"].id
+        test_orders["O002"].status = "in_transit"
 
         # 1.2 创建 GlobalSchedule
         global_schedule = GlobalSchedule(
@@ -357,9 +360,11 @@ class TestConfirmArrival:
         goods.status = "delivered"
         goods.node_id = test_nodes["SO010"].id  # L2 终点
 
-        # 1.1 关联订单设为 completed（模拟已完成送达）
-        order = test_orders["O003"]
-        order.status = "completed"
+        # 1.1 关联订单设为 signed（模拟已完成送达，需查询后直接修改避免 fixture 会话过期问题）
+        from models.order import Order
+        order = db_session.query(Order).filter(Order.order_code == "O003").first()
+        order.status = "signed"
+        db_session.commit()
 
         # 1.2 创建 GlobalSchedule
         global_schedule = GlobalSchedule(

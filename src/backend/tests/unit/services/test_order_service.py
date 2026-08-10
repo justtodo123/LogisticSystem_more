@@ -63,7 +63,7 @@ def sample_order():
     order.order_code = "O1700000000000"
     order.destination_node_id = 1
     order.time_window = "2026-06-15 10:00-12:00"
-    order.status = "pending"
+    order.status = "unassigned"
     order.created_at = datetime.now()
     order.updated_at = datetime.now()
     return order
@@ -86,7 +86,7 @@ class TestOrderServiceCreateOrder:
         mock_order = MagicMock()
         mock_order.order_code = "O1700000000000"
         mock_order.destination_node_id = sample_node.id
-        mock_order.status = "pending"
+        mock_order.status = "unassigned"
         mock_order.created_at = datetime(2026, 6, 15, 10, 0, 0)
         mock_order.updated_at = datetime(2026, 6, 15, 10, 0, 0)
         mock_order.id = 1
@@ -116,7 +116,7 @@ class TestOrderServiceCreateOrder:
         assert result["message"] == "success"
         assert "order_code" in result["data"]
         assert result["data"]["destination_node_code"] == "SO001"
-        assert result["data"]["status"] == "pending"
+        assert result["data"]["status"] == "unassigned"
 
     @pytest.mark.asyncio
     async def test_create_order_destination_not_found(self, mock_db):
@@ -226,7 +226,7 @@ class TestOrderServiceGetOrders:
         mock_query.offset.return_value.limit.return_value.all.return_value = []
         
         # 执行
-        result = await OrderService.get_orders(1, 20, "pending", mock_db)
+        result = await OrderService.get_orders(1, 20, "unassigned", mock_db)
         
         # 验证
         assert result["code"] == CODE_SUCCESS
@@ -310,7 +310,7 @@ class TestOrderServiceUpdateOrder:
     async def test_update_order_status_not_allowed(self, mock_db, sample_order):
         """测试订单状态不允许修改"""
         # 设置订单状态为delivering
-        sample_order.status = "delivering"
+        sample_order.status = "in_transit"
         mock_db.query.return_value.filter.return_value.first.return_value = sample_order
         
         # 创建更新数据
@@ -358,7 +358,7 @@ class TestOrderServiceDeleteOrder:
     async def test_delete_order_status_not_allowed(self, mock_db, sample_order):
         """测试订单状态不允许删除"""
         # 设置订单状态为delivering
-        sample_order.status = "delivering"
+        sample_order.status = "in_transit"
         mock_db.query.return_value.filter.return_value.first.return_value = sample_order
         
         # 执行

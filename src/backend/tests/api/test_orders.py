@@ -109,7 +109,7 @@ class TestGetOrders:
             order_code="O001",
             destination_node_id=node.id,
             time_window="全天",
-            status="pending",
+            status="unassigned",
         )
         db_session.add(order)
         db_session.commit()
@@ -301,7 +301,7 @@ class TestDeleteOrder:
             order_code="O001",
             destination_node_id=node.id,
             time_window="全天",
-            status="pending",  # pending状态可以删除
+            status="unassigned",  # unassigned状态可以删除
         )
         db_session.add(order)
         db_session.commit()
@@ -363,7 +363,7 @@ class TestDeleteOrder:
             order_code="O001",
             destination_node_id=node.id,
             time_window="全天",
-            status="delivering",  # delivering状态不可删除
+            status="in_transit",  # in_transit状态不可删除
         )
         db_session.add(order)
         db_session.commit()
@@ -439,18 +439,18 @@ class TestUpdateOrder:
             order_code="O001",
             destination_node_id=node.id,
             time_window="全天",
-            status="pending",
+            status="unassigned",
         )
         db_session.add(order)
         db_session.commit()
-        
+
         # 登录获取token
         login_resp = client.post(
             "/api/auth/login",
             json={"username": "testuser", "password": "123456"},
         )
         token = login_resp.json()["data"]["access_token"]
-        
+
         # 更新订单
         response = client.put(
             "/api/orders/O001",
@@ -536,13 +536,13 @@ class TestUpdateOrder:
         db_session.add(sc)
         db_session.commit()
         
-        # 创建测试订单（delivering状态）
+        # 创建测试订单（in_transit状态）
         from models.order import Order
         order = Order(
             order_code="O001",
             destination_node_id=node.id,
             time_window="全天",
-            status="delivering",  # delivering状态不可更新
+            status="in_transit",  # in_transit状态不可更新
         )
         db_session.add(order)
         db_session.commit()

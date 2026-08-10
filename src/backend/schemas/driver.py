@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 from typing import Optional
 from pydantic import BaseModel
 
@@ -10,6 +10,10 @@ class DriverCreate(BaseModel):
     phone: str
     license_type: str  # C1/C2/B1/B2/A1/A2
     shift: str
+    shift_start: Optional[str] = None   # HH:MM 格式
+    shift_end: Optional[str] = None     # HH:MM 格式
+    max_drive_hours: Optional[float] = 8.0
+    max_continuous_hours: Optional[float] = 4.0
     node_code: str
     status: Optional[str] = "idle"
 
@@ -20,6 +24,10 @@ class DriverUpdate(BaseModel):
     phone: Optional[str] = None
     license_type: Optional[str] = None
     shift: Optional[str] = None
+    shift_start: Optional[str] = None
+    shift_end: Optional[str] = None
+    max_drive_hours: Optional[float] = None
+    max_continuous_hours: Optional[float] = None
     node_code: Optional[str] = None
     status: Optional[str] = None
 
@@ -31,6 +39,10 @@ class DriverResponse(BaseModel):
     phone: str
     license_type: str
     shift: str
+    shift_start: Optional[str] = None
+    shift_end: Optional[str] = None
+    max_drive_hours: float
+    max_continuous_hours: float
     node_code: str
     node_name: str
     status: str

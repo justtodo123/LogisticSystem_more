@@ -154,15 +154,16 @@ class TestPackageServiceRepackPackage:
         mock_new_pkg.updated_at = datetime(2026, 6, 15, 10, 0, 0)
         
         with patch('services.package_service.Package', return_value=mock_new_pkg):
-            # 模拟数据库查询 - 需要7次first()调用
+            # 模拟数据库查询 - 需要8次first()调用
             mock_db.query.return_value.filter.return_value.first.side_effect = [
                 sample_package,  # 1. 查询原包裹
                 MagicMock(goods_code="G1700000000000_0", order_id=1, node_id=1, status="pending_pack"),  # 2. 查询货物1
-                MagicMock(order_code="O1700000000000"),  # 3. 查询订单(第一次，if判断)
-                MagicMock(order_code="O1700000000000"),  # 4. 查询订单(第二次，获取order_code)
-                MagicMock(goods_code="G1700000000000_0", weight=10.0, volume=0.5),  # 5. 查询货物(第二次for循环，第164行)
-                MagicMock(node_code="SC001", name="存储中心1"),  # 6. 查询from节点(commit后)
-                MagicMock(node_code="SO001", name="分拣中心1"),  # 7. 查询to节点(commit后)
+                MagicMock(order_code="O1700000000000"),  # 3. 查询订单
+                MagicMock(goods_code="G1700000000000_0", weight=10.0, volume=0.5),  # 4. 查询货物(第二次for循环)
+                MagicMock(node_code="SC001", name="存储中心1"),  # 5. 查询from节点
+                MagicMock(node_code="SO001", name="分拣中心1"),  # 6. 查询to节点
+                MagicMock(node_code="SC001", name="存储中心1"),  # 7. 查询from节点(commit后)
+                MagicMock(node_code="SO001", name="分拣中心1"),  # 8. 查询to节点(commit后)
             ]
         
             # 创建重新打包请求

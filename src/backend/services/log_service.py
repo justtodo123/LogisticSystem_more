@@ -25,6 +25,16 @@ EVENT_NODE_DISPATCH = "node_dispatch"
 EVENT_ROUTE_PLAN = "route_plan"
 EVENT_REPLAN = "replan"
 EVENT_DEEPSEEK_CALL = "deepseek_call"
+EVENT_SCHEDULE_CONFIRM = "schedule_confirm"
+EVENT_SCHEDULE_DISCARD = "schedule_discard"
+EVENT_EXCEPTION_RESOLVE = "exception_resolve"
+
+VALID_EVENTS = [
+    EVENT_LOGIN, EVENT_LOGOUT, EVENT_GLOBAL_SCHEDULE,
+    EVENT_NODE_DISPATCH, EVENT_ROUTE_PLAN, EVENT_REPLAN,
+    EVENT_DEEPSEEK_CALL, EVENT_SCHEDULE_CONFIRM, EVENT_SCHEDULE_DISCARD,
+    EVENT_EXCEPTION_RESOLVE,
+]
 
 
 class LogService:
@@ -36,49 +46,27 @@ class LogService:
         user_id: int,
         role: str,
         event_data: Optional[Dict[str, Any]] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
         db: Optional[Session] = None
     ) -> LogEvent:
         """
         记录埋点事件
         
         Args:
-            event_name: 事件名称（login/logout/global_schedule/node_dispatch/route_plan/replan/deepseek_call）
+            event_name: 事件名称
             user_id: 用户ID
-            role: 用户角色（dispatcher/manager）
+            role: 用户角色
             event_data: 事件附加数据（JSON格式）
-            db: 数据库会话（可选，不提供则创建新会话）
+            ip_address: 请求者IP地址
+            user_agent: 请求者User-Agent
+            db: 数据库会话（可选）
             
         Returns:
             LogEvent 对象
-            
-        Examples:
-            # 记录登录事件
-            LogService.log_event(
-                event_name="login",
-                user_id=1,
-                role="dispatcher",
-                event_data={"ip": "127.0.0.1", "user_agent": "Mozilla/5.0"}
-            )
-            
-            # 记录全局调度事件
-            LogService.log_event(
-                event_name="global_schedule",
-                user_id=1,
-                role="dispatcher",
-                event_data={
-                    "schedule_code": "GS20260622001",
-                    "order_count": 50,
-                    "algorithm_type": "traditional"
-                }
-            )
         """
         # 验证事件类型
-        valid_events = [
-            EVENT_LOGIN, EVENT_LOGOUT, EVENT_GLOBAL_SCHEDULE,
-            EVENT_NODE_DISPATCH, EVENT_ROUTE_PLAN, EVENT_REPLAN,
-            EVENT_DEEPSEEK_CALL
-        ]
-        if event_name not in valid_events:
+        if event_name not in VALID_EVENTS:
             logger.warning(f"未知的事件类型：{event_name}")
         
         # 构建事件数据
@@ -86,7 +74,9 @@ class LogService:
             event_name=event_name,
             user_id=user_id,
             role=role,
-            event_data=event_data or {}
+            event_data=event_data or {},
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
         
         # 写入数据库
@@ -269,4 +259,37 @@ def build_deepseek_call_event_data(
         "function_name": function_name,
         "success": success,
         "degraded": degraded
+    }
+
+
+def build_schedule_confirm_event_data(
+    schedule_code: str,
+    order_count: int = 0
+) -> Dict[str, Any]:
+    """构建调度确认事件的 event_data"""
+    return {
+        "schedule_code": schedule_code,
+        "order_count": order_count,
+    }
+
+
+def build_schedule_discard_event_data(
+    schedule_code: str,
+    reason: str = ""
+) -> Dict[str, Any]:
+    """构建调度废弃事件的 event_data"""
+    return {
+        "schedule_code": schedule_code,
+        "reason": reason,
+    }
+
+
+def build_exception_resolve_event_data(
+    event_code: str,
+    action: str
+) -> Dict[str, Any]:
+    """构建异常处理事件的 event_data"""
+    return {
+        "event_code": event_code,
+        "action": action,
     }

@@ -13,7 +13,7 @@ class Node(Base):
     location = Column(String(255), nullable=False)
     latitude = Column(DECIMAL(10, 6), nullable=False)
     longitude = Column(DECIMAL(10, 6), nullable=False)
-    node_type = Column(String(32), nullable=False)  # storage_center / sorting_center
+    node_type = Column(String(32), nullable=False)  # storage_center / sorting_center / regional_hub / branch_office / partner_node
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 

@@ -446,8 +446,8 @@ class ScheduleService:
                 Order.order_code.in_(gs.order_codes)
             ).all()
             
-            # 重规划时允许 delivering 状态（订单已在上一版本方案中推进）
-            allowed_statuses = ("pending", "exception") if not gs.is_replan else ("pending", "exception", "delivering")
+            # 重规划时允许 assigned/in_transit 状态（订单已在上一版本方案中推进）
+            allowed_statuses = ("unassigned", "exception") if not gs.is_replan else ("unassigned", "exception", "assigned", "in_transit")
             for order in orders:
                 if order.status not in allowed_statuses:
                     # 删除 draft

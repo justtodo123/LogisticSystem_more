@@ -182,7 +182,7 @@ class SimulationService:
                 # 检查是否所有货物都已 delivered
                 all_delivered = all(g.status == "delivered" for g in all_goods)
                 
-                if all_delivered and order.status == "delivering":
+                if all_delivered and order.status == "in_transit":
                     check_and_update_order_status(db, order.order_code)
                     delivered_order_codes.append(order.order_code)
             

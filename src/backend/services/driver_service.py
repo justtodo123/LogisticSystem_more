@@ -29,12 +29,27 @@ class DriverService:
                 return {"code": CODE_NODE_NOT_FOUND, "message": "节点不存在", "data": None}
 
             # 3. 创建Driver记录
+            from datetime import time as dt_time
+            
+            ss = None
+            se = None
+            if driver_create.shift_start:
+                parts = driver_create.shift_start.split(":")
+                ss = dt_time(int(parts[0]), int(parts[1]))
+            if driver_create.shift_end:
+                parts = driver_create.shift_end.split(":")
+                se = dt_time(int(parts[0]), int(parts[1]))
+            
             driver = Driver(
                 driver_code=driver_create.driver_code,
                 name=driver_create.name,
                 phone=driver_create.phone,
                 license_type=driver_create.license_type,
                 shift=driver_create.shift,
+                shift_start=ss,
+                shift_end=se,
+                max_drive_hours=driver_create.max_drive_hours or 8.0,
+                max_continuous_hours=driver_create.max_continuous_hours or 4.0,
                 node_id=node.id,
                 status=driver_create.status or "idle"
             )
@@ -51,6 +66,10 @@ class DriverService:
                     "phone": driver.phone,
                     "license_type": driver.license_type,
                     "shift": driver.shift,
+                    "shift_start": str(driver.shift_start) if driver.shift_start else None,
+                    "shift_end": str(driver.shift_end) if driver.shift_end else None,
+                    "max_drive_hours": driver.max_drive_hours,
+                    "max_continuous_hours": driver.max_continuous_hours,
                     "node_code": node.node_code,
                     "node_name": node.name,
                     "status": driver.status,
@@ -90,6 +109,10 @@ class DriverService:
                     "phone": driver.phone,
                     "license_type": driver.license_type,
                     "shift": driver.shift,
+                    "shift_start": str(driver.shift_start) if driver.shift_start else None,
+                    "shift_end": str(driver.shift_end) if driver.shift_end else None,
+                    "max_drive_hours": driver.max_drive_hours,
+                    "max_continuous_hours": driver.max_continuous_hours,
                     "node_code": node.node_code if node else "",
                     "node_name": node.name if node else "",
                     "status": driver.status,
@@ -160,6 +183,18 @@ class DriverService:
                 driver.license_type = driver_update.license_type
             if driver_update.shift is not None:
                 driver.shift = driver_update.shift
+            if driver_update.shift_start is not None:
+                from datetime import time as dt_time
+                parts = driver_update.shift_start.split(":")
+                driver.shift_start = dt_time(int(parts[0]), int(parts[1]))
+            if driver_update.shift_end is not None:
+                from datetime import time as dt_time
+                parts = driver_update.shift_end.split(":")
+                driver.shift_end = dt_time(int(parts[0]), int(parts[1]))
+            if driver_update.max_drive_hours is not None:
+                driver.max_drive_hours = driver_update.max_drive_hours
+            if driver_update.max_continuous_hours is not None:
+                driver.max_continuous_hours = driver_update.max_continuous_hours
             if driver_update.node_code is not None:
                 node = db.query(Node).filter(Node.node_code == driver_update.node_code).first()
                 if not node:

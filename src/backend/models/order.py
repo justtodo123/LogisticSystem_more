@@ -11,7 +11,7 @@ class Order(Base):
     order_code = Column(String(64), unique=True, nullable=False, index=True)
     destination_node_id = Column(Integer, ForeignKey("nodes.id"), nullable=False)
     time_window = Column(String(32), nullable=False)
-    status = Column(String(32), nullable=False, server_default="pending")
+    status = Column(String(32), nullable=False, server_default="unassigned")  # unassigned/assigned/in_transit/signed/exception/closed
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 

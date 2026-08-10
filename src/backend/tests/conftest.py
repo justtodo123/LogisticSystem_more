@@ -222,7 +222,7 @@ def test_orders(db_session, test_nodes):
             order_code=od["order_code"],
             destination_node_id=test_nodes[od["destination_node_code"]].id,
             time_window=od["time_window"],
-            status="pending",
+            status="unassigned",
         )
         db_session.add(order)
         order_objects[od["order_code"]] = order

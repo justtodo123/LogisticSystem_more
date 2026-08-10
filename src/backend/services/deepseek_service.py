@@ -203,7 +203,8 @@ class DeepSeekService:
             request_body = DeepSeekService._build_request_body(user_prompt)
             api_url = DeepSeekService._build_api_url()
 
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            api_timeout = settings.DEEPSEEK_TIMEOUT_SECONDS
+            async with httpx.AsyncClient(timeout=api_timeout) as client:
                 response = await client.post(
                     api_url,
                     headers={
@@ -230,10 +231,11 @@ class DeepSeekService:
             }
             
         except httpx.TimeoutException:
-            logger.error("DeepSeek API 调用超时（30秒）")
+            timeout_s = settings.DEEPSEEK_TIMEOUT_SECONDS
+            logger.error(f"DeepSeek API 调用超时（{timeout_s}秒）")
             return {
                 "success": False,
-                "error": "DeepSeek API 调用超时（30秒）",
+                "error": f"DeepSeek API 调用超时（{timeout_s}秒）",
                 "algorithm_params": DeepSeekService._load_default_params()
             }
         except httpx.HTTPStatusError as e:
@@ -391,7 +393,7 @@ class DeepSeekService:
             request_body = DeepSeekService._build_request_body(user_prompt, system_prompt)
             api_url = DeepSeekService._build_api_url()
             
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=settings.DEEPSEEK_TIMEOUT_SECONDS) as client:
                 response = await client.post(
                     api_url,
                     headers={
@@ -544,7 +546,7 @@ L1→L2调度次数: {batch_data.get('l1_l2_dispatch_count', '?')}
             request_body = DeepSeekService._build_request_body(user_prompt, system_prompt)
             api_url = DeepSeekService._build_api_url()
             
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=settings.DEEPSEEK_TIMEOUT_SECONDS) as client:
                 response = await client.post(
                     api_url,
                     headers={
@@ -666,7 +668,7 @@ L1→L2调度次数: {batch_data.get('l1_l2_dispatch_count', '?')}
             request_body = DeepSeekService._build_request_body(user_prompt, system_prompt)
             api_url = DeepSeekService._build_api_url()
             
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=settings.DEEPSEEK_TIMEOUT_SECONDS) as client:
                 response = await client.post(
                     api_url,
                     headers={

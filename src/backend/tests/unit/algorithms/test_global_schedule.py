@@ -126,7 +126,7 @@ class TestGlobalScheduleHardConstraint:
             order_code="O_NO_L1",
             destination_node_id=l2.id,
             time_window="全天",
-            status="pending",
+            status="unassigned",
         )
         db_session.add(order)
         db_session.flush()

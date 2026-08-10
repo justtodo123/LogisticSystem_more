@@ -47,7 +47,7 @@ def _create_test_node(db, code="N001", name="测试节点", node_type="sorting_c
     return node
 
 
-def _create_test_order(db, code="O001", status="pending", dest_node=None):
+def _create_test_order(db, code="O001", status="unassigned", dest_node=None):
     """创建测试 Order（依赖 dest_node_id 外键）"""
     from models.order import Order
     if dest_node is None:
@@ -208,23 +208,23 @@ class TestUpdateOrdersAfterF007:
         request.addfinalizer(lambda: (self.db.close(), Base.metadata.drop_all(engine)))
         self.node = _create_test_node(self.db)
 
-    def test_pending_to_delivering(self):
+    def test_unassigned_to_assigned(self):
         from models.order import Order
         from services.state_machine import update_orders_after_f007
-        order = Order(order_code="O001", destination_node_id=self.node.id, time_window="08:00-18:00", status="pending")
+        order = Order(order_code="O001", destination_node_id=self.node.id, time_window="08:00-18:00", status="unassigned")
         self.db.add(order)
         self.db.flush()
         update_orders_after_f007(self.db, ["O001"])
-        assert order.status == "delivering"
+        assert order.status == "assigned"
 
-    def test_exception_to_delivering(self):
+    def test_exception_to_assigned(self):
         from models.order import Order
         from services.state_machine import update_orders_after_f007
         order = Order(order_code="O002", destination_node_id=self.node.id, time_window="08:00-18:00", status="exception")
         self.db.add(order)
         self.db.flush()
         update_orders_after_f007(self.db, ["O002"])
-        assert order.status == "delivering"
+        assert order.status == "assigned"
 
     def test_completed_no_change(self):
         from models.order import Order
@@ -282,7 +282,7 @@ class TestMarkExceptionStatuses:
         self.db = Session()
         request.addfinalizer(lambda: (self.db.close(), Base.metadata.drop_all(engine)))
         self.node = _create_test_node(self.db)
-        self.order = _create_test_order(self.db, code="O001", dest_node=self.node, status="delivering")
+        self.order = _create_test_order(self.db, code="O001", dest_node=self.node, status="in_transit")
         self.schedule = _create_test_schedule(self.db, code="GS002", order_codes=["O001"])
 
     def test_mark_orders_exception(self):
@@ -308,7 +308,7 @@ class TestResetGoodsForReplan:
         self.db = Session()
         request.addfinalizer(lambda: (self.db.close(), Base.metadata.drop_all(engine)))
         self.node = _create_test_node(self.db)
-        self.order = _create_test_order(self.db, code="O001", dest_node=self.node, status="delivering")
+        self.order = _create_test_order(self.db, code="O001", dest_node=self.node, status="in_transit")
 
     def test_reset_packed_goods(self):
         from services.state_machine import reset_goods_for_replan
@@ -330,11 +330,16 @@ class TestResetGoodsForReplan:
 # 所有合法转换（current_status, target_status, entity_name）
 ALL_VALID_TRANSITIONS = [
     # ── Order ──
-    ("pending", "delivering", "订单"),
-    ("pending", "exception", "订单"),
-    ("delivering", "completed", "订单"),
-    ("delivering", "exception", "订单"),
-    ("exception", "delivering", "订单"),
+    ("unassigned", "assigned", "订单"),
+    ("unassigned", "closed", "订单"),
+    ("assigned", "in_transit", "订单"),
+    ("assigned", "closed", "订单"),
+    ("in_transit", "signed", "订单"),
+    ("in_transit", "exception", "订单"),
+    ("signed", "exception", "订单"),
+    ("exception", "assigned", "订单"),
+    ("exception", "in_transit", "订单"),
+    ("exception", "closed", "订单"),
     # ── Goods ──
     ("pending_pack", "packed", "货物"),
     ("pending_pack", "exception", "货物"),
@@ -378,9 +383,12 @@ ALL_VALID_TRANSITIONS = [
 # 关键非法转换（应触发 ValueError）
 ALL_INVALID_TRANSITIONS = [
     # ── Order ──
-    ("completed", "delivering", "订单"),
-    ("completed", "exception", "订单"),
-    ("delivering", "pending", "订单"),
+    ("signed", "in_transit", "订单"),
+    ("signed", "assigned", "订单"),
+    ("closed", "unassigned", "订单"),
+    ("closed", "assigned", "订单"),
+    ("closed", "in_transit", "订单"),
+    ("in_transit", "unassigned", "订单"),
     # ── Goods ──
     ("delivered", "in_transit", "货物"),
     ("delivered", "pending_pack", "货物"),

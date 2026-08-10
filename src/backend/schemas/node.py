@@ -10,7 +10,7 @@ class NodeResponse(BaseModel):
     location: str
     latitude: float
     longitude: float
-    node_type: str  # storage_center / sorting_center
+    node_type: str  # storage_center / sorting_center / regional_hub / branch_office / partner_node
     created_at: datetime
     updated_at: datetime
 

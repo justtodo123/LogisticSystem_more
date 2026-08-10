@@ -4,7 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel
-import os
+import json
+import logging
 from api.auth import router as auth_router
 from api.orders import router as orders_router
 from api.goods import router as goods_router
@@ -18,7 +19,14 @@ from api.simulation import router as simulation_router
 from api.exception_events import router as exceptions_router
 from api.ai import router as ai_router
 from api.arrival_confirm import router as arrival_confirm_router
+from api.audit_logs import router as audit_logs_router
+from config.settings import settings
+from middleware.idempotency import IdempotencyMiddleware
+from middleware.timeout import TimeoutMiddleware
+from middleware.audit_log import AuditLogMiddleware
 from utils.response import error_response
+
+logger = logging.getLogger(__name__)
 
 
 class HealthResponse(BaseModel):
@@ -37,10 +45,9 @@ app = FastAPI(
 )
 
 # 配置CORS中间件
-cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+cors_origins_str = settings.CORS_ORIGINS
 # 支持逗号分隔的多个源，或JSON数组格式
 if cors_origins_str.startswith("[") and cors_origins_str.endswith("]"):
-    import json
     cors_origins = json.loads(cors_origins_str)
 else:
     cors_origins = [origin.strip() for origin in cors_origins_str.split(",")]
@@ -52,6 +59,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 注册幂等控制中间件（T0-4 新增）
+app.add_middleware(
+    IdempotencyMiddleware,
+    ttl_hours=settings.IDEMPOTENCY_TTL_HOURS,
+)
+
+# 注册全局超时中间件（T0-5 新增）
+app.add_middleware(
+    TimeoutMiddleware,
+    timeout_seconds=settings.REQUEST_TIMEOUT_SECONDS,
+)
+
+# 注册审计日志中间件（T0-3 新增）— 放在最后，限流后的请求才记录
+app.add_middleware(AuditLogMiddleware)
 
 # 注册认证路由
 app.include_router(auth_router)
@@ -77,6 +99,7 @@ app.include_router(ai_router)
 
 # 注册到货确认路由
 app.include_router(arrival_confirm_router)
+app.include_router(audit_logs_router)
 
 
 # ─── 全局异常处理器 ───────────────────────────────────────────────
@@ -113,6 +136,9 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     elif status_code == 500:
         code = 50000
         message = "服务器内部错误"
+    elif status_code == 504:
+        code = 50400
+        message = "请求超时"
     else:
         code = status_code * 100
         message = detail
@@ -139,8 +165,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
-    """健康检查接口"""
-    return HealthResponse()
+    """健康检查接口（含 AI 服务状态）"""
+    ai_status = "available" if settings.DEEPSEEK_API_KEY else "degraded"
+    return HealthResponse(
+        data={
+            "status": "ok",
+            "environment": settings.ENV,
+            "ai_service": ai_status,
+        }
+    )
 
 
 # 应用启动时初始化数据库（创建所有表）
@@ -148,5 +181,6 @@ async def health_check():
 async def startup_event():
     """应用启动事件"""
     from config.database import init_db
+    logger.info(f"启动环境：ENV={settings.ENV}，数据库={settings.DATABASE_URL}")
     init_db()
 

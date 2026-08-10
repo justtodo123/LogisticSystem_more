@@ -183,9 +183,9 @@ class ArrivalConfirmService:
                     processed_orders.add(order_code)
                     order = db.query(Order).filter(Order.order_code == order_code).first()
                     if order and order.status != "exception":
-                        # delivering → exception: 正常转换
-                        # completed → exception: force=True（异常场景：订单已完成但后补标记异常）
-                        order_needs_force = (order.status == "completed")
+                        # in_transit → exception: 正常转换
+                        # signed → exception: force=True（异常场景：订单已签收但后补标记异常）
+                        order_needs_force = (order.status == "signed")
                         transition_order_status(db, order, "exception", force=order_needs_force)
                         order_status = "exception"
 
@@ -501,8 +501,8 @@ class ArrivalConfirmService:
         all_goods = db.query(Goods).filter(Goods.order_id == order.id).all()
         all_delivered = all(g.status == "delivered" for g in all_goods)
 
-        if all_delivered and order.status == "delivering":
-            transition_order_status(db, order, "completed")
+        if all_delivered and order.status == "in_transit":
+            transition_order_status(db, order, "signed")
 
     @staticmethod
     def _cascade_exception_packages(

@@ -121,13 +121,13 @@ class TestCreateGlobalSchedule:
             order_code="O001",
             destination_node_id=node_dest1.id,
             time_window="全天",
-            status="pending",
+            status="unassigned",
         )
         order2 = Order(
             order_code="O002",
             destination_node_id=node_dest2.id,
             time_window="全天",
-            status="pending",
+            status="unassigned",
         )
         db_session.add_all([order1, order2])
         db_session.flush()
@@ -392,7 +392,7 @@ class TestCreateGlobalScheduleBoundaries:
             order_code="O001",
             destination_node_id=node_so.id,
             time_window="全天",
-            status="pending",
+            status="unassigned",
         )
         db_session.add(order)
         db_session.flush()
@@ -599,7 +599,7 @@ class TestCreateGlobalScheduleBoundaries:
             order_code="O001",
             destination_node_id=node_l2.id,
             time_window="全天",
-            status="pending",
+            status="unassigned",
         )
         db_session.add(order)
         db_session.flush()
@@ -737,7 +737,7 @@ class TestCreateNodeDispatch:
             order_code="O001",
             destination_node_id=node_l2.id,
             time_window="全天",
-            status="pending",
+            status="unassigned",
         )
         db_session.add(order)
         db_session.flush()

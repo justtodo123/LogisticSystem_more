@@ -67,10 +67,10 @@ class TestSchedulePipeline:
         packages = db_session.query(Package).filter(Package.schedule_id == gs.id).all()
         assert len(packages) > 0
 
-        # 验证 orders 状态变为 delivering
+        # 验证 orders 状态变为 assigned
         for order_code in ["O001", "O002", "O003"]:
             order = db_session.query(Order).filter(Order.order_code == order_code).first()
-            assert order.status == "delivering"
+            assert order.status == "assigned"
 
         # ── 第3步：节点间调度（第一次，L0→L1）──────────────────────────────
         # 为简化测试，我们假设测试数据已经包含了车辆和司机（test_vehicles, test_drivers）
@@ -182,7 +182,7 @@ class TestScheduleTransaction:
         pkg_count = db_session.query(Package).count()
         assert pkg_count == 0
 
-        # 验证事务回滚：orders 状态应该保持 pending
+        # 验证事务回滚：orders 状态应该保持 unassigned
         for order_code in ["O001", "O002", "O003"]:
             order = db_session.query(Order).filter(Order.order_code == order_code).first()
-            assert order.status == "pending"
+            assert order.status == "unassigned"

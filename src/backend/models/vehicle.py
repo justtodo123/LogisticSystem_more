@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, ForeignKey, String, DECIMAL, JSON, DateTime
+from sqlalchemy import Column, Integer, ForeignKey, String, DECIMAL, JSON, DateTime, Float, Time
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .base import Base
@@ -14,6 +14,12 @@ class Vehicle(Base):
     energy_type = Column(String(16), nullable=False)  # fuel / electric
     vehicle_type = Column(String(32), nullable=False, server_default="normal")  # normal / cold_chain (P1)
     capability_tags = Column(JSON, nullable=True)  # e.g. ["cold_chain"] (P1)
+    plate_number = Column(String(20), nullable=True)  # 车牌号
+    time_window_start = Column(Time, nullable=True)  # 可用时段-开始
+    time_window_end = Column(Time, nullable=True)  # 可用时段-结束
+    route_limit = Column(Integer, nullable=False, server_default="5")  # 单日最大路径数
+    cost_per_km = Column(Float, nullable=False, server_default="5.0")  # 每公里运营成本(元)
+    load_rate_max = Column(Float, nullable=False, server_default="0.9")  # 最大装载率(0~1)
     last_arrived_node_id = Column(Integer, ForeignKey("nodes.id"), nullable=False)
     last_arrived_longitude = Column(DECIMAL(10, 6), nullable=True)
     last_arrived_latitude = Column(DECIMAL(10, 6), nullable=True)

@@ -9,7 +9,7 @@
    - 确认确认 → draft → active（执行 F021 + 状态更新）
    - 丢弃 draft → 物理删除记录（返回 "discarded" 瞬态值）
    - active 方案不可变（immutable）
-1. F007完成 → 订单状态: pending/exception → delivering
+1. F007完成 → 订单状态: unassigned/exception → assigned
 2. F021完成 → 货物状态: pending_pack/exception → packed
                包裹状态: L0→L1: pending_pack → packed
                           L1→L2: 新建时 status=pending_pack（激活前不变）
@@ -21,7 +21,7 @@
 5. confirm-arrival（正常→L1）→ 货物: in_transit → pending_pack（触发 L1 重新打包）
                                    L1→L2包裹: pending_pack → packed（F021 激活）
 6. confirm-arrival（正常→L2）→ 货物: in_transit → delivered
-                               订单: delivering → completed（全部货物送达后）
+                               订单: in_transit → signed（全部货物送达后）
 7. confirm-arrival（异常）→ 包裹/货物/订单 → exception; 写入 exception_events
 8. 批次状态流转: pending → l0_l1_done（L0→L1 confirm 完成）→ completed/failed
 9. 异常事件创建 → 关联订单/货物/包裹 → exception; 关联车辆 → disabled
@@ -40,10 +40,12 @@ from algorithms.packaging import packaging
 # ══════════════════════════════════════════════════════════════════════
 
 ORDER_TRANSITIONS = {
-    "pending":    ["delivering", "exception"],
-    "delivering": ["completed", "exception"],
-    "completed":  [],
-    "exception":  ["delivering"],  # 重规划恢复
+    "unassigned": ["assigned", "closed"],
+    "assigned":    ["in_transit", "closed"],
+    "in_transit":  ["signed", "exception"],
+    "signed":      ["exception"],                         # 签收后仍可发现异常
+    "exception":   ["assigned", "in_transit", "closed"],  # 重规划重新分配 / 回到运输中 / 关闭
+    "closed":      [],
 }
 
 GOODS_TRANSITIONS = {
@@ -178,6 +180,7 @@ def update_state_after_f005(
     更新以下状态：
     - 货物状态: packed → in_transit
     - 包裹状态: packed → in_transit
+    - 订单状态: assigned → in_transit
     - 车辆状态: idle → delivering
     - 司机状态: idle → busy
     
@@ -186,7 +189,8 @@ def update_state_after_f005(
         dispatch: 调度明细对象
         package_codes: 包裹编码列表
     """
-    # 1. 更新包裹状态和货物状态
+    # 1. 更新包裹状态和货物状态，并收集涉及的订单编码
+    order_codes_set = set()
     for pkg_code in package_codes:
         pkg = db.query(Package).filter(Package.package_code == pkg_code).first()
         if pkg:
@@ -204,6 +208,10 @@ def update_state_after_f005(
                         goods = db.query(Goods).filter(Goods.goods_code == goods_code).first()
                         if goods:
                             transition_goods_status(db, goods, 'in_transit')
+                        # 收集订单编码
+                        order_code = item.get('order_code')
+                        if order_code:
+                            order_codes_set.add(order_code)
     
     # 3. 更新车辆状态
     vehicle = db.query(Vehicle).filter(Vehicle.id == dispatch.vehicle_id).first()
@@ -214,6 +222,10 @@ def update_state_after_f005(
     driver = db.query(Driver).filter(Driver.id == dispatch.driver_id).first()
     if driver:
         transition_driver_status(db, driver, 'busy')
+    
+    # 5. 更新订单状态：assigned → in_transit（T1-1 新增）
+    if order_codes_set:
+        update_orders_after_f005(db, list(order_codes_set))
     
     db.flush()
 
@@ -494,7 +506,7 @@ def simulate_delivery_l1_to_l2(
                         if goods:
                             transition_goods_status(db, goods, 'delivered')
     
-    # 4. 更新订单状态（仅当该订单所有货物都已 delivered 时才设为 completed）
+    # 4. 更新订单状态（仅当该订单所有货物都已 delivered 时才设为 signed）
     for order_code in order_codes:
         check_and_update_order_status(db, order_code)
     
@@ -515,7 +527,7 @@ def check_and_update_order_status(db: Session, order_code: str) -> None:
     """
     检查并更新订单状态
     
-    如果订单的所有货物都已delivered，则将订单状态更新为completed
+    如果订单的所有货物都已delivered，则将订单状态更新为signed
     
     Args:
         db: 数据库会话
@@ -531,9 +543,9 @@ def check_and_update_order_status(db: Session, order_code: str) -> None:
     # 检查是否所有货物都已delivered
     all_delivered = all(g.status == 'delivered' for g in goods_list)
     
-    # 异常订单不走 completed（ORDER_TRANSITIONS["exception"] = ["delivering"]）
+    # 异常订单不走 signed（ORDER_TRANSITIONS["exception"] = ["in_transit", "closed"]）
     if all_delivered and order.status != "exception":
-        transition_order_status(db, order, 'completed')
+        transition_order_status(db, order, 'signed')
 
 
 def transition_global_schedule_status(
@@ -598,7 +610,7 @@ def update_orders_after_f007(
     """
     F007 全局调度完成后的订单状态更新。
 
-    Order: pending / exception → delivering
+    Order: unassigned / exception → assigned
 
     Args:
         db: 数据库会话
@@ -606,8 +618,24 @@ def update_orders_after_f007(
     """
     for order_code in order_codes:
         order = db.query(Order).filter(Order.order_code == order_code).first()
-        if order and order.status in ("pending", "exception"):
-            transition_order_status(db, order, "delivering")
+        if order and order.status in ("unassigned", "exception"):
+            transition_order_status(db, order, "assigned")
+    db.flush()
+
+
+def update_orders_after_f005(
+    db: Session,
+    order_codes: List[str],
+) -> None:
+    """
+    F005 节点间调度完成后 → 订单 assigned → in_transit
+
+    在 F005 成功分配车辆并创建调度记录后调用。
+    """
+    for order_code in order_codes:
+        order = db.query(Order).filter(Order.order_code == order_code).first()
+        if order and order.status == "assigned":
+            transition_order_status(db, order, "in_transit")
     db.flush()
 
 
@@ -664,7 +692,7 @@ def mark_exception_statuses(
     创建异常事件时，将关联实体状态标记为 exception。
 
     更新以下状态：
-    - Order:  delivering → exception
+    - Order:  in_transit → exception
     - Goods:  packed / in_transit → exception
     - Package: packed / in_transit / pending_pack → exception
 
@@ -685,7 +713,7 @@ def mark_exception_statuses(
         order_codes = json.loads(order_codes)
     for order_code in (order_codes or []):
         order = db.query(Order).filter(Order.order_code == order_code).first()
-        if order and order.status == "delivering":
+        if order and order.status == "in_transit":
             transition_order_status(db, order, "exception")
 
     # 2. 更新货物状态

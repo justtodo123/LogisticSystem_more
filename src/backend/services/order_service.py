@@ -64,7 +64,7 @@ class OrderService:
                 order_code=order_code,
                 destination_node_id=dest_node.id,
                 time_window=order_create.time_window,
-                status="pending"
+                status="unassigned"
             )
             db.add(order)
             db.flush()  # 获取order.id
@@ -204,8 +204,8 @@ class OrderService:
             if not order:
                 return {"code": CODE_ORDER_NOT_FOUND, "message": "订单不存在", "data": None}
 
-            # 2. 校验订单状态（delivering/completed/exception不可修改）
-            if order.status in ["delivering", "completed", "exception"]:
+            # 2. 校验订单状态（in_transit/signed/exception不可修改）
+            if order.status in ["in_transit", "signed", "exception"]:
                 return {"code": CODE_ORDER_STATUS_NOT_ALLOWED, "message": "订单状态不允许修改", "data": None}
 
             # 3. 更新字段
@@ -249,8 +249,8 @@ class OrderService:
             if not order:
                 return {"code": CODE_ORDER_NOT_FOUND, "message": "订单不存在", "data": None}
 
-            # 2. 校验订单状态（delivering/completed/exception不可删除）
-            if order.status in ["delivering", "completed", "exception"]:
+            # 2. 校验订单状态（in_transit/signed/exception不可删除）
+            if order.status in ["in_transit", "signed", "exception"]:
                 return {"code": CODE_ORDER_STATUS_NOT_ALLOWED, "message": "订单状态不允许删除", "data": None}
 
             # 3. 先删除关联的goods（避免NOT NULL约束错误）
@@ -331,7 +331,7 @@ class OrderService:
                         order_code=order_code,
                         destination_node_id=dest_node.id,
                         time_window=time_window,
-                        status="pending"
+                        status="unassigned"
                     )
                     db.add(order)
                     db.flush()
@@ -375,4 +375,39 @@ class OrderService:
         except Exception as e:
             db.rollback()
             return {"code": CODE_INTERNAL_ERROR, "message": f"导入订单失败: {str(e)}", "data": None}
+
+    @staticmethod
+    async def close_order(order_code: str, db: Session) -> Dict[str, Any]:
+        """关闭订单（T1-1 新增：unassigned/assigned → closed）"""
+        try:
+            from services.state_machine import transition_order_status
+
+            # 1. 查询Order
+            order = db.query(Order).filter(Order.order_code == order_code).first()
+            if not order:
+                return {"code": CODE_ORDER_NOT_FOUND, "message": "订单不存在", "data": None}
+
+            # 2. 校验状态：仅 unassigned / assigned 可关闭
+            if order.status not in ("unassigned", "assigned"):
+                return {
+                    "code": CODE_ORDER_STATUS_NOT_ALLOWED,
+                    "message": f"订单状态 '{order.status}' 不允许关闭（仅 unassigned/assigned 可关闭）",
+                    "data": None
+                }
+
+            # 3. 执行状态转换
+            try:
+                transition_order_status(db, order, "closed")
+            except ValueError as e:
+                return {"code": CODE_ORDER_STATUS_NOT_ALLOWED, "message": str(e), "data": None}
+
+            db.commit()
+            return {
+                "code": CODE_SUCCESS,
+                "message": "订单已关闭",
+                "data": {"order_code": order.order_code, "status": order.status}
+            }
+        except Exception as e:
+            db.rollback()
+            return {"code": CODE_INTERNAL_ERROR, "message": f"关闭订单失败: {str(e)}", "data": None}
 

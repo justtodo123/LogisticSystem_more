@@ -34,6 +34,17 @@ class VehicleService:
                 return {"code": CODE_NODE_NOT_FOUND, "message": "最后到达节点不存在", "data": None}
 
             # 4. 创建Vehicle记录
+            from datetime import time as dt_time
+            
+            tw_start = None
+            tw_end = None
+            if vehicle_create.time_window_start:
+                parts = vehicle_create.time_window_start.split(":")
+                tw_start = dt_time(int(parts[0]), int(parts[1]))
+            if vehicle_create.time_window_end:
+                parts = vehicle_create.time_window_end.split(":")
+                tw_end = dt_time(int(parts[0]), int(parts[1]))
+            
             vehicle = Vehicle(
                 vehicle_code=vehicle_create.vehicle_code,
                 model=vehicle_create.model,
@@ -41,6 +52,12 @@ class VehicleService:
                 energy_type=vehicle_create.energy_type,
                 vehicle_type=vehicle_create.vehicle_type or "normal",
                 capability_tags=vehicle_create.capability_tags,
+                plate_number=vehicle_create.plate_number,
+                time_window_start=tw_start,
+                time_window_end=tw_end,
+                route_limit=vehicle_create.route_limit or 5,
+                cost_per_km=vehicle_create.cost_per_km or 5.0,
+                load_rate_max=vehicle_create.load_rate_max or 0.9,
                 last_arrived_node_id=last_arrived_node.id,
                 status=vehicle_create.status or "idle",
                 node_id=node.id
@@ -59,6 +76,12 @@ class VehicleService:
                     "energy_type": vehicle.energy_type,
                     "vehicle_type": vehicle.vehicle_type,
                     "capability_tags": vehicle.capability_tags,
+                    "plate_number": vehicle.plate_number,
+                    "time_window_start": str(vehicle.time_window_start) if vehicle.time_window_start else None,
+                    "time_window_end": str(vehicle.time_window_end) if vehicle.time_window_end else None,
+                    "route_limit": vehicle.route_limit,
+                    "cost_per_km": vehicle.cost_per_km,
+                    "load_rate_max": vehicle.load_rate_max,
                     "last_arrived_node_code": last_arrived_node.node_code,
                     "last_arrived_node_name": last_arrived_node.name,
                     "status": vehicle.status,
@@ -102,6 +125,12 @@ class VehicleService:
                     "energy_type": vehicle.energy_type,
                     "vehicle_type": vehicle.vehicle_type,
                     "capability_tags": vehicle.capability_tags,
+                    "plate_number": vehicle.plate_number,
+                    "time_window_start": str(vehicle.time_window_start) if vehicle.time_window_start else None,
+                    "time_window_end": str(vehicle.time_window_end) if vehicle.time_window_end else None,
+                    "route_limit": vehicle.route_limit,
+                    "cost_per_km": vehicle.cost_per_km,
+                    "load_rate_max": vehicle.load_rate_max,
                     "last_arrived_node_code": last_arrived_node.node_code if last_arrived_node else "",
                     "last_arrived_node_name": last_arrived_node.name if last_arrived_node else "",
                     "status": vehicle.status,
@@ -180,6 +209,22 @@ class VehicleService:
                 vehicle.vehicle_type = vehicle_update.vehicle_type
             if vehicle_update.capability_tags is not None:
                 vehicle.capability_tags = vehicle_update.capability_tags
+            if vehicle_update.plate_number is not None:
+                vehicle.plate_number = vehicle_update.plate_number
+            if vehicle_update.time_window_start is not None:
+                from datetime import time as dt_time
+                parts = vehicle_update.time_window_start.split(":")
+                vehicle.time_window_start = dt_time(int(parts[0]), int(parts[1]))
+            if vehicle_update.time_window_end is not None:
+                from datetime import time as dt_time
+                parts = vehicle_update.time_window_end.split(":")
+                vehicle.time_window_end = dt_time(int(parts[0]), int(parts[1]))
+            if vehicle_update.route_limit is not None:
+                vehicle.route_limit = vehicle_update.route_limit
+            if vehicle_update.cost_per_km is not None:
+                vehicle.cost_per_km = vehicle_update.cost_per_km
+            if vehicle_update.load_rate_max is not None:
+                vehicle.load_rate_max = vehicle_update.load_rate_max
             if vehicle_update.node_code is not None:
                 node = db.query(Node).filter(Node.node_code == vehicle_update.node_code).first()
                 if not node:

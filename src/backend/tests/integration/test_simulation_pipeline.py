@@ -92,7 +92,7 @@ def setup_simulation_data(db_session):
         order_code="O_TEST_001",
         destination_node_id=sorting_node_l2.id,
         time_window="2026-06-15 10:00-12:00",
-        status="delivering"  # 模拟已调度的订单
+        status="in_transit"  # 模拟已调度的订单（在途）
     )
     db_session.add(order)
     db_session.flush()
@@ -380,7 +380,7 @@ class TestSimulationPipeline:
         db_session.flush()
         assert data["goods"].status == "delivered"
 
-        # 4. 验证订单状态变为completed
+        # 4. 验证订单状态变为signed
         check_and_update_order_status(db_session, data["order"].order_code)
         db_session.refresh(data["order"])
-        assert data["order"].status == "completed"
+        assert data["order"].status == "signed"

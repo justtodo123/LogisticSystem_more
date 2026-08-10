@@ -8,7 +8,7 @@
 
 | 步骤    | 包裹状态               | 货物状态               | 车辆状态         | 司机状态     |
 | ------- | ---------------------- | ---------------------- | ---------------- | ------------ |
-| F005完成 | packed → in_transit    | packed → in_transit     | idle → delivering | idle → busy |
+| F005完成 | packed → in_transit    | packed → in_transit     | assigned → in_transit | idle → delivering | idle → busy |
 """
 from typing import List, Optional, Dict, Any
 
