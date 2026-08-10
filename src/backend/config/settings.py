@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     # 平均行驶速度（km/h），用于 ETA 估算
     MAP_AVG_SPEED_KMH: float = 60.0
 
+    # ── 报表分析（T5-3）──
+    # SLA 达成率判定：订单从创建到签收（signed）的完成耗时不超过该值即视为准时（小时）
+    SLA_TARGET_HOURS: float = 24.0
+
     @model_validator(mode="after")
     def _sync_jwt_expiry(self) -> "Settings":
         """当未显式设置 JWT_EXPIRE_SECONDS 时，从 JWT_EXPIRE_HOURS 自动计算"""

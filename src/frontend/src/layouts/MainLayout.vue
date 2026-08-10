@@ -16,6 +16,7 @@ import {
   UserFilled,
   Van,
   Warning,
+  TrendCharts,
 } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 import { useAuthStore } from '@/stores/auth'
@@ -42,6 +43,7 @@ const menuItems: MenuItem[] = [
   { index: '/arrival-confirm', label: '节点到货确认', icon: DocumentChecked },
   { index: '/exceptions', label: '异常管理', icon: Warning },
   { index: '/notifications', label: '消息通知', icon: Bell },
+  { index: '/reports', label: '报表分析', icon: TrendCharts },
 ]
 
 const menuTitleMap = Object.fromEntries(menuItems.map((item) => [item.index, item.label]))

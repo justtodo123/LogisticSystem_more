@@ -91,6 +91,12 @@ const router = createRouter({
           meta: { title: '消息通知' },
         },
         {
+          path: 'reports',
+          name: 'Reports',
+          component: () => import('@/views/reports/Dashboard.vue'),
+          meta: { title: '报表分析' },
+        },
+        {
           path: 'health',
           name: 'HealthCheck',
           component: () => import('@/views/HealthCheck.vue'),
