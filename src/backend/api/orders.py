@@ -83,11 +83,20 @@ async def delete_order(
 async def import_orders(
     file: UploadFile = File(...),
     skip_errors: bool = True,
+    column_mapping: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_dispatcher)
 ):
-    """批量导入订单"""
-    result = await OrderService.import_orders(file, skip_errors, db)
+    """批量导入订单
+
+    - skip_errors=true（默认）：错误行跳过，成功行入库，返回 failed_rows 指明失败行
+    - skip_errors=false：存在任一错误行则整体回滚
+    - column_mapping：可选 JSON 字符串，自定义列映射，格式 {"文件表头名": "系统字段名"}
+      系统字段：destination_node_code / storage_center_code / time_window /
+               goods_name / goods_type / weight / volume
+      不传时默认文件表头即为系统字段名（向后兼容原模板）
+    """
+    result = await OrderService.import_orders(file, skip_errors, db, column_mapping)
     return result
 
 

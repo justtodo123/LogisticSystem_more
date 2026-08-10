@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     REDIS_URL: str = ""
     REDIS_CACHE_TTL: int = 300
 
+    # ── ERP 对接（T5-1）──
+    # 外部 ERP 推送订单 Webhook 的 API Key；为空时回退到 Bearer JWT 认证（便于本地联调）
+    ERP_API_KEY: str = ""
+
     @model_validator(mode="after")
     def _sync_jwt_expiry(self) -> "Settings":
         """当未显式设置 JWT_EXPIRE_SECONDS 时，从 JWT_EXPIRE_HOURS 自动计算"""

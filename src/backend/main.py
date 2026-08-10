@@ -22,6 +22,8 @@ from api.arrival_confirm import router as arrival_confirm_router
 from api.audit_logs import router as audit_logs_router
 from api.schedule_override import router as schedule_override_router
 from api.notifications import router as notifications_router
+from api.export import router as export_router
+from api.erp_webhook import router as erp_webhook_router
 from config.settings import settings
 from middleware.idempotency import IdempotencyMiddleware
 from middleware.timeout import TimeoutMiddleware
@@ -108,6 +110,12 @@ app.include_router(schedule_override_router)
 
 # 注册消息通知路由（T3-2）
 app.include_router(notifications_router)
+
+# 注册数据导出路由（T5-1）
+app.include_router(export_router)
+
+# 注册 ERP 对接路由（T5-1）
+app.include_router(erp_webhook_router)
 
 
 # ─── 全局异常处理器 ───────────────────────────────────────────────

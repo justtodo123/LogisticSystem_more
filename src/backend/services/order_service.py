@@ -6,6 +6,7 @@ import openpyxl
 import tempfile
 import os
 import random
+import json
 
 from models.order import Order
 from models.goods import Goods
@@ -14,7 +15,7 @@ from models.sorting_center import SortingCenter
 from schemas.order import OrderCreate, OrderUpdate, OrderResponse, OrderImportResponse
 from core.error_codes import (CODE_SUCCESS, CODE_PARAM_ERROR, CODE_INTERNAL_ERROR,
                              CODE_ORDER_NOT_FOUND, CODE_ORDER_STATUS_NOT_ALLOWED,
-                             CODE_NODE_NOT_FOUND)
+                             CODE_NODE_NOT_FOUND, CODE_ORDER_IMPORT_FAILED)
 
 
 class OrderService:
@@ -268,8 +269,14 @@ class OrderService:
             return {"code": CODE_INTERNAL_ERROR, "message": f"删除订单失败: {str(e)}", "data": None}
 
     @staticmethod
-    async def import_orders(file: UploadFile, skip_errors: bool, db: Session) -> Dict[str, Any]:
-        """批量导入订单"""
+    async def import_orders(file: UploadFile, skip_errors: bool, db: Session,
+                            column_mapping: str = None) -> Dict[str, Any]:
+        """批量导入订单（T5-1 增强：自定义列映射 + 错误行报告）
+
+        - column_mapping：JSON 字符串，{"文件表头名": "系统字段名"}
+        - skip_errors=True：错误行跳过并返回 failed_rows；
+          False：存在任一错误行则整体回滚，返回 CODE_ORDER_IMPORT_FAILED
+        """
         try:
             # 1. 读取文件
             contents = await file.read()
@@ -281,18 +288,45 @@ class OrderService:
             ws = wb.active
             os.unlink(tmp_path)  # 删除临时文件
 
-            # 2. 解析表头
+            # 2. 解析表头（支持自定义列映射）
             headers = [cell.value for cell in ws[1]]
+
+            # 列映射：文件列名 → 系统字段名；未映射的列保留原名（即默认表头即系统字段名）
+            mapping = {}
+            if column_mapping:
+                try:
+                    parsed = json.loads(column_mapping)
+                    if isinstance(parsed, dict):
+                        mapping = parsed
+                except Exception:
+                    return {
+                        "code": CODE_PARAM_ERROR,
+                        "message": "column_mapping 必须是合法 JSON 对象",
+                        "data": None,
+                    }
+
+            def to_sys_field(header):
+                if header is None:
+                    return None
+                return mapping.get(header, header)
 
             # 3. 逐行校验并处理
             success_count = 0
             failed_count = 0
             failed_rows = []
+            encountered_error = False
 
             for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                # 跳过空行
+                if row is None or all(cell is None for cell in row):
+                    continue
                 try:
-                    # 解析行数据
-                    row_data = dict(zip(headers, row))
+                    # 解析行数据（应用列映射）
+                    raw = {
+                        headers[i]: row[i]
+                        for i in range(min(len(headers), len(row)))
+                    }
+                    row_data = {to_sys_field(k): v for k, v in raw.items()}
                     destination_node_code = row_data.get("destination_node_code")
                     storage_center_code = row_data.get("storage_center_code")  # 可选列
                     time_window = row_data.get("time_window")
@@ -352,17 +386,31 @@ class OrderService:
 
                     success_count += 1
                 except Exception as e:
+                    encountered_error = True
                     failed_count += 1
                     failed_rows.append({
                         "row": row_idx,
                         "error": str(e)
                     })
                     if not skip_errors:
-                        raise e
+                        break  # 停止处理，稍后整体回滚
+
+            # skip_errors=False 且存在错误行 → 整体回滚
+            if encountered_error and not skip_errors:
+                db.rollback()
+                return {
+                    "code": CODE_ORDER_IMPORT_FAILED,
+                    "message": "导入失败：存在错误行，已整体回滚",
+                    "data": {
+                        "success_count": 0,
+                        "failed_count": failed_count,
+                        "failed_rows": failed_rows,
+                    },
+                }
 
             db.commit()
 
-            # 4. 返回结果
+            # 4. 返回结果（含错误行报告）
             return {
                 "code": CODE_SUCCESS,
                 "message": "success",
