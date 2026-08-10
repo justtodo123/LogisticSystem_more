@@ -8,12 +8,24 @@ DeepSeek API 调用服务
 """
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Type
 
 import httpx
+from pydantic import BaseModel
 
 from config.database import settings
 from algorithms.explainer import build_prompt_section
+from core.ai_guard import (
+    AIValidationError,
+    normalize_algorithm_weights,
+    validate_and_retry,
+)
+from schemas.ai_output import (
+    AnalyzeExceptionResult,
+    ExplainResult,
+    ParsedAlgorithmParams,
+    ReviewResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +177,54 @@ class DeepSeekService:
         return result["choices"][0]["message"]["content"]
 
     @staticmethod
+    async def _post_chat(user_prompt: str, system_prompt: Optional[str] = None) -> str:
+        """
+        发起一次 DeepSeek chat 调用，返回响应文本。
+
+        统一使用 `httpx.AsyncClient`（测试通过 patch services.deepseek_service.httpx.AsyncClient 拦截）；
+        网络/HTTP/解析异常向上抛出，由各公开方法按场景降级。
+        """
+        request_body = DeepSeekService._build_request_body(user_prompt, system_prompt)
+        api_url = DeepSeekService._build_api_url()
+
+        async with httpx.AsyncClient(timeout=settings.DEEPSEEK_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                api_url,
+                headers={
+                    "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json=request_body
+            )
+            response.raise_for_status()
+
+        result = response.json()
+        return DeepSeekService._extract_response_content(result)
+
+    @staticmethod
+    async def _validate_and_retry(
+        schema: Type[BaseModel],
+        user_prompt: str,
+        system_prompt: Optional[str] = None,
+        max_retries: int = 3,
+    ) -> BaseModel:
+        """
+        T6-1：调用 DeepSeek → 结构化校验，校验失败时把错误反馈给 AI 重试（最多 max_retries 次）。
+
+        重试耗尽仍失败 → 抛出 AIValidationError（含原始输出 + 校验错误），由调用方降级。
+        """
+        async def _call(prompt: str, sp: Optional[str]) -> str:
+            return await DeepSeekService._post_chat(prompt, sp)
+
+        return await validate_and_retry(
+            schema=schema,
+            api_call=_call,
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_retries=max_retries,
+        )
+
+    @staticmethod
     def _build_api_url() -> str:
         """构建完整的 API 端点 URL — 统一 /chat/completions"""
         base = settings.DEEPSEEK_API_BASE.rstrip("/")
@@ -199,38 +259,33 @@ class DeepSeekService:
         try:
             # 1. 构建提示词
             user_prompt = build_user_prompt(user_message, system_context)
-            
-            # 2. 调用 API（自动适配 OpenAI / 火山引擎 格式）
-            request_body = DeepSeekService._build_request_body(user_prompt)
-            api_url = DeepSeekService._build_api_url()
 
-            api_timeout = settings.DEEPSEEK_TIMEOUT_SECONDS
-            async with httpx.AsyncClient(timeout=api_timeout) as client:
-                response = await client.post(
-                    api_url,
-                    headers={
-                        "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
-                        "Content-Type": "application/json"
-                    },
-                    json=request_body
-                )
-                response.raise_for_status()
+            # 2. 调用 API + T6-1 结构化校验（失败时错误反馈重试，最多 3 次）
+            validated = await DeepSeekService._validate_and_retry(
+                schema=ParsedAlgorithmParams,
+                user_prompt=user_prompt,
+                system_prompt=None,
+            )
 
-            # 3. 解析响应
-            result = response.json()
-            content = DeepSeekService._extract_response_content(result)
-            
-            # 4. 提取 JSON（可能包含在```json ```中）
-            algorithm_params = DeepSeekService._extract_json(content)
-            
+            # 3. 业务规则：仅保留 3 个已知权重键并归一化到和为 1
+            algorithm_params = normalize_algorithm_weights(validated.model_dump())
+
             logger.info(f"DeepSeek API 调用成功，算法参数：{algorithm_params}")
-            
+
             return {
                 "success": True,
                 "algorithm_params": algorithm_params,
-                "raw_response": content
+                "raw_response": json.dumps(algorithm_params, ensure_ascii=False),
             }
-            
+
+        except AIValidationError as e:
+            logger.error(f"DeepSeek 算法参数输出校验失败（3 次重试后）：{e}")
+            return {
+                "success": False,
+                "error": f"AI 输出校验失败（3 次重试后）：{e}",
+                "algorithm_params": DeepSeekService._load_default_params(),
+                "raw_response": e.raw_output,
+            }
         except httpx.TimeoutException:
             timeout_s = settings.DEEPSEEK_TIMEOUT_SECONDS
             logger.error(f"DeepSeek API 调用超时（{timeout_s}秒）")
@@ -260,39 +315,6 @@ class DeepSeekService:
                 "error": f"DeepSeek API 调用失败：{str(e)}",
                 "algorithm_params": DeepSeekService._load_default_params()
             }
-    
-    @staticmethod
-    def _extract_json(content: str) -> Dict:
-        """
-        从 DeepSeek 返回内容中提取 JSON
-        
-        Args:
-            content: DeepSeek 返回的内容
-            
-        Returns:
-            解析后的 JSON 字典
-        """
-        # 尝试直接解析
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-        
-        # 尝试从 ```json ``` 中提取
-        if "```json" in content:
-            start = content.find("```json") + 7
-            end = content.find("```", start)
-            json_str = content[start:end].strip()
-            return json.loads(json_str)
-        
-        # 尝试从 ``` 中提取
-        if "```" in content:
-            start = content.find("```") + 3
-            end = content.find("```", start)
-            json_str = content[start:end].strip()
-            return json.loads(json_str)
-        
-        raise json.JSONDecodeError("无法从内容中提取 JSON", content, 0)
     
     @staticmethod
     def _load_default_params() -> Dict:
@@ -396,34 +418,21 @@ class DeepSeekService:
 
 请基于以上结构化数据生成解释。"""
 
-        # 3. 调用DeepSeek API
+        # 3. 调用DeepSeek API + T6-1 结构化校验（失败时错误反馈重试，最多 3 次）
         try:
-            request_body = DeepSeekService._build_request_body(user_prompt, system_prompt)
-            api_url = DeepSeekService._build_api_url()
-            
-            async with httpx.AsyncClient(timeout=settings.DEEPSEEK_TIMEOUT_SECONDS) as client:
-                response = await client.post(
-                    api_url,
-                    headers={
-                        "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
-                        "Content-Type": "application/json"
-                    },
-                    json=request_body
-                )
-                response.raise_for_status()
-            
-            # 4. 解析响应
-            result = response.json()
-            content = DeepSeekService._extract_response_content(result)
-            explanation_data = DeepSeekService._extract_json(content)
-            
-            # 5. 验证结果格式
-            if not isinstance(explanation_data, dict) or 'explanation' not in explanation_data:
-                raise ValueError("Invalid response format")
-            
+            result = await DeepSeekService._validate_and_retry(
+                schema=ExplainResult,
+                user_prompt=user_prompt,
+                system_prompt=system_prompt,
+            )
+
             logger.info(f"DeepSeek API 调用成功，生成方案解释")
-            return explanation_data
-            
+            return result.model_dump()
+
+        except AIValidationError as e:
+            # 3 次校验失败：向上抛出，由 api 层返回含原始输出与校验错误的降级响应
+            logger.error(f"DeepSeek 方案解释输出校验失败（3 次重试后）：{e}")
+            raise
         except httpx.TimeoutException:
             logger.error("DeepSeek API 调用超时（30秒）")
             return {
@@ -549,34 +558,21 @@ L1→L2调度次数: {batch_data.get('l1_l2_dispatch_count', '?')}
 请识别潜在风险。
 """
 
-        # 3. 调用DeepSeek API
+        # 3. 调用DeepSeek API + T6-1 结构化校验（失败时错误反馈重试，最多 3 次）
         try:
-            request_body = DeepSeekService._build_request_body(user_prompt, system_prompt)
-            api_url = DeepSeekService._build_api_url()
-            
-            async with httpx.AsyncClient(timeout=settings.DEEPSEEK_TIMEOUT_SECONDS) as client:
-                response = await client.post(
-                    api_url,
-                    headers={
-                        "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
-                        "Content-Type": "application/json"
-                    },
-                    json=request_body
-                )
-                response.raise_for_status()
-            
-            # 4. 解析响应
-            result = response.json()
-            content = DeepSeekService._extract_response_content(result)
-            review_data = DeepSeekService._extract_json(content)
-            
-            # 5. 验证结果格式
-            if not isinstance(review_data, dict) or 'risks' not in review_data:
-                raise ValueError("Invalid response format")
-            
+            result = await DeepSeekService._validate_and_retry(
+                schema=ReviewResult,
+                user_prompt=user_prompt,
+                system_prompt=system_prompt,
+            )
+
             logger.info(f"DeepSeek API 调用成功，生成方案审查报告")
-            return review_data
-            
+            return result.model_dump()
+
+        except AIValidationError as e:
+            # 3 次校验失败：向上抛出，由 api 层返回含原始输出与校验错误的降级响应
+            logger.error(f"DeepSeek 方案审查输出校验失败（3 次重试后）：{e}")
+            raise
         except httpx.TimeoutException:
             logger.error("DeepSeek API 调用超时（30秒）")
             return {"risks": []}
@@ -671,34 +667,21 @@ L1→L2调度次数: {batch_data.get('l1_l2_dispatch_count', '?')}
 请根据以上信息，分析根本原因，并给出具体、可操作的处理建议。
 """
 
-        # 3. 调用DeepSeek API
+        # 3. 调用DeepSeek API + T6-1 结构化校验（失败时错误反馈重试，最多 3 次）
         try:
-            request_body = DeepSeekService._build_request_body(user_prompt, system_prompt)
-            api_url = DeepSeekService._build_api_url()
-            
-            async with httpx.AsyncClient(timeout=settings.DEEPSEEK_TIMEOUT_SECONDS) as client:
-                response = await client.post(
-                    api_url,
-                    headers={
-                        "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
-                        "Content-Type": "application/json"
-                    },
-                    json=request_body
-                )
-                response.raise_for_status()
-            
-            # 4. 解析响应
-            result = response.json()
-            content = DeepSeekService._extract_response_content(result)
-            analysis_data = DeepSeekService._extract_json(content)
-            
-            # 5. 验证结果格式
-            if not isinstance(analysis_data, dict) or 'root_cause' not in analysis_data:
-                raise ValueError("Invalid response format")
-            
+            result = await DeepSeekService._validate_and_retry(
+                schema=AnalyzeExceptionResult,
+                user_prompt=user_prompt,
+                system_prompt=system_prompt,
+            )
+
             logger.info(f"DeepSeek API 调用成功，生成异常分析建议")
-            return analysis_data
-            
+            return result.model_dump()
+
+        except AIValidationError as e:
+            # 3 次校验失败：向上抛出，由 api 层返回含原始输出与校验错误的降级响应
+            logger.error(f"DeepSeek 异常分析输出校验失败（3 次重试后）：{e}")
+            raise
         except httpx.TimeoutException:
             logger.error("DeepSeek API 调用超时（30秒）")
             return {
