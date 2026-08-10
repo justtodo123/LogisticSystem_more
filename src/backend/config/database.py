@@ -40,7 +40,10 @@ def init_db():
     
     # ── Phase 1 数据库迁移（T1-1/T1-2/T1-3 新增字段）──
     _run_phase1_migrations(engine)
-    
+
+    # ── Phase 4 数据库索引优化（T4-2）──
+    _run_phase4_migrations(engine)
+
     # 安全检查：JWT_SECRET 使用默认值时发出警告（仅限演示环境）
     if settings.JWT_SECRET == "default-secret-key-change-in-env":
         import warnings
@@ -121,3 +124,33 @@ def _run_phase1_migrations(engine):
             if "override_snapshot" not in nd_cols:
                 conn.execute(text("ALTER TABLE node_dispatches ADD COLUMN override_snapshot JSON"))
                 conn.commit()
+
+
+def _run_phase4_migrations(engine):
+    """T4-2 数据库索引优化：为高频查询条件列建立（复合）索引（幂等，已存在则跳过）"""
+    with engine.connect() as conn:
+        # orders(status, destination_node_id) — 订单列表按状态 + 目的地过滤
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_orders_status_dest ON orders (status, destination_node_id)"
+        ))
+        # orders(created_at) — 订单列表按创建时间排序
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_orders_created_at ON orders (created_at)"))
+        # goods(order_id, status) — 按订单查货物 + 状态过滤
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_goods_order_status ON goods (order_id, status)"))
+        # packages(from_node_id, to_node_id, status) — 路径规划/状态查询
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_packages_from_to_status "
+            "ON packages (from_node_id, to_node_id, status)"
+        ))
+        # packages(schedule_id) — 按调度方案查包裹
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_packages_schedule_id ON packages (schedule_id)"))
+        # node_dispatches(dispatch_batch_id, level_phase) — 按批次+层级查调度单
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_node_dispatches_batch_phase "
+            "ON node_dispatches (dispatch_batch_id, level_phase)"
+        ))
+        # node_dispatches(vehicle_id) — 按车辆查调度单；模型无 status 列，退化为单列索引
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_node_dispatches_vehicle_id ON node_dispatches (vehicle_id)"
+        ))
+        conn.commit()
