@@ -19,6 +19,8 @@ from models.vehicle import Vehicle
 from models.node_dispatch import NodeDispatch
 from models.route import Route
 
+from algorithms.base import SchedulingStrategy
+
 
 def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """
@@ -220,13 +222,35 @@ def run_route_planning(db: Session, dispatch_id: int, custom_weights: Optional[D
 def _two_opt(route_segments: List[Dict], distances: List[List[float]]) -> List[Dict]:
     """
     2-opt优化算法（MVP不触发，仅实现结构）
-    
+
     Args:
         route_segments: 路径路段列表
         distances: 距离矩阵
-        
+
     Returns:
         优化后的路径路段列表
     """
     # MVP不触发优化，直接返回原路径
     return route_segments
+
+
+class TwoOptRouteStrategy(SchedulingStrategy):
+    """
+    F006 路径规划策略（T2-1 策略模式封装）。
+
+    行为与既有 `run_route_planning()` 完全一致，包装为可插拔策略。
+    """
+
+    name = "greedy"
+
+    def schedule(
+        self,
+        db: Session,
+        dispatch_id: int,
+        custom_weights: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        return run_route_planning(
+            db=db,
+            dispatch_id=dispatch_id,
+            custom_weights=custom_weights,
+        )

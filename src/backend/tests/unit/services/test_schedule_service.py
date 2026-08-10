@@ -130,8 +130,11 @@ class TestScheduleServiceExceptionRollback:
         """
         F007 抛出异常 → preview 返回错误 → 无任何写入
         """
-        with patch("services.schedule_service.global_schedule") as mock_gs:
-            mock_gs.side_effect = ValueError("模拟 F007 算法失败")
+        # T2-1：服务经策略工厂调用算法，改为 mock 工厂返回的策略实例
+        with patch("services.schedule_service.get_global_strategy") as mock_factory:
+            mock_strategy = MagicMock()
+            mock_strategy.schedule.side_effect = ValueError("模拟 F007 算法失败")
+            mock_factory.return_value = mock_strategy
 
             result = await ScheduleService.create_global_schedule(
                 order_codes=None,

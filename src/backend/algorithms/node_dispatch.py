@@ -42,6 +42,8 @@ from services.state_machine import (
     check_and_update_order_status
 )
 
+from algorithms.base import SchedulingStrategy
+
 
 def _load_config() -> dict:
     """加载算法配置权重"""
@@ -936,6 +938,36 @@ _batch_seq: int = 0
 _batch_date: str = ""
 _dispatch_seq: int = 0
 _dispatch_date: str = ""
+
+
+class GreedyNodeDispatchStrategy(SchedulingStrategy):
+    """
+    F005 贪心节点调度策略（T2-1 策略模式封装）。
+
+    行为与既有 `run_node_dispatch()` 完全一致，仅将其包装为可插拔策略，
+    供 `algorithms.factory.get_dispatch_strategy()` 按配置选择。
+    """
+
+    name = "greedy"
+
+    def schedule(
+        self,
+        db: Session,
+        schedule_code: str,
+        demo_mode: bool = False,
+        excluded_vehicles: Optional[List[str]] = None,
+        is_replan: bool = False,
+        custom_weights: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        return run_node_dispatch(
+            db=db,
+            schedule_code=schedule_code,
+            demo_mode=demo_mode,
+            excluded_vehicles=excluded_vehicles,
+            is_replan=is_replan,
+            custom_weights=custom_weights,
+        )
+
 
 # 导出公共函数
 __all__ = ['run_node_dispatch', 'dispatch_level', 'update_state_after_f005', 'simulate_delivery_l0_to_l1', 'simulate_delivery_l1_to_l2']

@@ -1,4 +1,5 @@
 {
+  "engine": "greedy",
   "global_schedule_weights": {
     "w1_distance": 0.5,
     "w2_time": 0.3,

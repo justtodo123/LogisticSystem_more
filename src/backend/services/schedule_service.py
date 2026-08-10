@@ -16,7 +16,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from algorithms.global_schedule import global_schedule
+from algorithms.factory import get_global_strategy
 from algorithms.packaging import packaging
 from models.global_schedule import GlobalSchedule
 from models.order import Order
@@ -146,9 +146,11 @@ class ScheduleService:
                                     message=f"订单 {existing_code} 已有活跃的调度方案 ({gs.schedule_code})，请先完成或丢弃现有方案"
                                 )
             
-            # 2. 执行 F007（纯计算）
-            schedule_result = global_schedule(
-                order_codes, algorithm, db,
+            # 2. 执行 F007（纯计算，经策略工厂按 engine 选择算法）
+            schedule_result = get_global_strategy().schedule(
+                db=db,
+                order_codes=order_codes,
+                algorithm=algorithm,
                 excluded_nodes=excluded_nodes,
                 is_replan=is_replan,
                 custom_weights=custom_weights,

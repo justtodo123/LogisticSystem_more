@@ -14,7 +14,7 @@ from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import Session
 
-from algorithms.node_dispatch import run_node_dispatch
+from algorithms.factory import get_dispatch_strategy
 from models.dispatch_batch import DispatchBatch
 from models.node_dispatch import NodeDispatch
 from models.node import Node
@@ -133,8 +133,15 @@ class DispatchService:
             统一响应格式 dict
         """
         try:
-            # 1. 调用 F005 算法（纯计算，不提交事务）
-            dispatch_result = run_node_dispatch(db, schedule_code, demo_mode, excluded_vehicles, is_replan=is_replan, custom_weights=custom_weights)
+            # 1. 调用 F005 算法（纯计算，不提交事务；经策略工厂按 engine 选择算法）
+            dispatch_result = get_dispatch_strategy().schedule(
+                db=db,
+                schedule_code=schedule_code,
+                demo_mode=demo_mode,
+                excluded_vehicles=excluded_vehicles,
+                is_replan=is_replan,
+                custom_weights=custom_weights,
+            )
             
             # 2. 检查是否有调度明细创建
             dispatches = dispatch_result["dispatches"]

@@ -17,6 +17,8 @@ from models.order import Order
 from models.goods import Goods
 from models.package import Package
 
+from algorithms.base import SchedulingStrategy
+
 
 def _load_config() -> dict:
     """加载算法配置权重"""
@@ -300,3 +302,32 @@ def global_schedule(
         "score": overall_score,
         "goods_schedules": goods_schedules,
     }
+
+
+class GreedyGlobalScheduleStrategy(SchedulingStrategy):
+    """
+    F007 贪心全局调度策略（T2-1 策略模式封装）。
+
+    行为与既有 `global_schedule()` 完全一致，仅将其包装为可插拔策略，
+    供 `algorithms.factory.get_global_strategy()` 按配置选择。
+    """
+
+    name = "greedy"
+
+    def schedule(
+        self,
+        db: Session,
+        order_codes: Optional[List[str]] = None,
+        algorithm: str = "traditional",
+        excluded_nodes: Optional[List[str]] = None,
+        is_replan: bool = False,
+        custom_weights: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        return global_schedule(
+            order_codes=order_codes,
+            algorithm=algorithm,
+            db=db,
+            excluded_nodes=excluded_nodes,
+            is_replan=is_replan,
+            custom_weights=custom_weights,
+        )

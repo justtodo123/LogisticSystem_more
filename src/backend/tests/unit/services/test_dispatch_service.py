@@ -62,17 +62,19 @@ class TestCreateNodeDispatch:
         db_session.add(package)
         db_session.commit()
         
-        # Mock 算法函数（注意：需要 mock dispatch_service 模块中导入的引用）
-        with patch("services.dispatch_service.run_node_dispatch") as mock_dispatch:
-            mock_dispatch.return_value = {
-                "batch_code": "BATCH001",
-                "total_distance": 50.0,
-                "total_time": 120.0,
-                "dispatch_count": 1,
-                "dispatches": [{"vehicle_code": "V001", "driver_code": "D001"}],
-                "unallocated_packages": [],
-                "status": "pending"
-            }
+        # Mock 算法策略（T2-1：服务经策略工厂调用算法，改为 mock 工厂返回的策略实例）
+        mock_strategy = MagicMock()
+        mock_strategy.schedule.return_value = {
+            "batch_code": "BATCH001",
+            "total_distance": 50.0,
+            "total_time": 120.0,
+            "dispatch_count": 1,
+            "dispatches": [{"vehicle_code": "V001", "driver_code": "D001"}],
+            "unallocated_packages": [],
+            "status": "pending"
+        }
+        with patch("services.dispatch_service.get_dispatch_strategy") as mock_factory:
+            mock_factory.return_value = mock_strategy
             
             # 调用服务方法
             result = await DispatchService.create_node_dispatch(
