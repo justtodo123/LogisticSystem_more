@@ -25,6 +25,7 @@ from api.notifications import router as notifications_router
 from api.export import router as export_router
 from api.erp_webhook import router as erp_webhook_router
 from api.reports import router as reports_router
+from api.ai_confirmation import router as ai_confirmation_router
 from config.settings import settings
 from middleware.idempotency import IdempotencyMiddleware
 from middleware.timeout import TimeoutMiddleware
@@ -120,6 +121,9 @@ app.include_router(erp_webhook_router)
 
 # 注册报表分析路由（T5-3）
 app.include_router(reports_router)
+
+# 注册 AI 建议确认闸门路由（T6-2）
+app.include_router(ai_confirmation_router)
 
 
 # ─── 全局异常处理器 ───────────────────────────────────────────────

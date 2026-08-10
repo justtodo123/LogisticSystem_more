@@ -11,6 +11,8 @@ import type {
   AiParseRequest,
   AiParseResult,
   AiReviewRequest,
+  AiSuggestion,
+  AiSuggestionList,
 } from '@/types/ai'
 
 export async function parseAi(payload: AiParseRequest): Promise<AiParseResult> {
@@ -89,4 +91,38 @@ function normalizeP1Error(err: unknown): Error {
     return new Error(err.message)
   }
   return err instanceof Error ? err : new Error('请求失败')
+}
+
+// ═══ T6-2 AI 建议确认闸门 ═══
+
+export interface AiSuggestionConfirmResult {
+  suggestion: AiSuggestion
+  applied_schedule_code?: string | null
+}
+
+export async function getAiSuggestions(
+  status?: string,
+): Promise<AiSuggestionList> {
+  const { data } = await request.get<AiSuggestionList>('/ai/suggestions', {
+    params: status ? { status } : undefined,
+  })
+  return data
+}
+
+export async function confirmAiSuggestion(
+  id: number,
+  note?: string,
+): Promise<AiSuggestionConfirmResult> {
+  const { data } = await request.post<AiSuggestionConfirmResult>(
+    `/ai/suggestions/${id}/confirm`,
+    note ? { note } : {},
+  )
+  return data
+}
+
+export async function rejectAiSuggestion(
+  id: number,
+  note?: string,
+): Promise<void> {
+  await request.post(`/ai/suggestions/${id}/reject`, note ? { note } : {})
 }

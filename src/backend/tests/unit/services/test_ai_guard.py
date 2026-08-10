@@ -18,7 +18,9 @@ from core.ai_guard import (
     check_algorithm_params,
     check_analyze_result,
     check_review_result,
+    classify_suggestion_level,
     normalize_algorithm_weights,
+    should_gate,
     validate_and_retry,
 )
 from schemas.ai_output import (
@@ -195,6 +197,26 @@ class TestBusinessRules:
             "root_cause": "拥堵", "suggestions": [], "auto_fix_available": False,
         })
         assert len(check_analyze_result(bad)) == 1
+
+
+@pytest.mark.unit
+class TestSuggestionGate:
+    """T6-2：AI 建议确认闸门级别分类与闸门判定"""
+
+    def test_classify_parse_is_suggestion(self):
+        """parse（生成调度建议）→ suggestion，需人工确认"""
+        assert classify_suggestion_level("parse") == "suggestion"
+
+    def test_classify_others_are_info(self):
+        """explain/review/analyze → info，仅供展示"""
+        for source in ("explain", "review", "analyze"):
+            assert classify_suggestion_level(source) == "info"
+
+    def test_should_gate(self):
+        """suggestion/action 进入闸门，info 直接展示"""
+        assert should_gate("suggestion") is True
+        assert should_gate("action") is True
+        assert should_gate("info") is False
 
 
 @pytest.mark.unit

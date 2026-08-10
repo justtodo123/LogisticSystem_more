@@ -1,8 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import type { GlobalScheduleSummary } from '@/types/schedule'
 import { useAiParse } from '@/composables/useAiParse'
 import { useAiExplain } from '@/composables/useAiExplain'
+import {
+  confirmAiSuggestion,
+  rejectAiSuggestion,
+} from '@/api/ai'
+import type { AiSuggestionStatus } from '@/types/ai'
 import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
 import ExplainResultBody from '@/components/ai/ExplainResultBody.vue'
 
@@ -35,6 +41,76 @@ const {
     emit('draft-created', code)
   },
 })
+
+// ── T6-2 AI 建议确认闸门状态 ──
+const suggestionDeciding = ref(false)
+const decidedStatus = ref<AiSuggestionStatus | null>(null)
+
+const currentSuggestionId = computed<number | null>(
+  () => lastResult.value?.suggestion_id ?? null,
+)
+const currentSuggestionLevel = computed<string | null>(
+  () => lastResult.value?.suggestion_level ?? null,
+)
+
+const suggestionLevelLabel = computed(() => {
+  const level = currentSuggestionLevel.value
+  if (level === 'suggestion') return '需调度员确认'
+  if (level === 'action') return '自动执行'
+  if (level === 'info') return '仅供参考'
+  return null
+})
+
+const suggestionLevelTagType = computed(() => {
+  const level = currentSuggestionLevel.value
+  if (level === 'suggestion') return 'warning'
+  if (level === 'action') return 'danger'
+  return 'info'
+})
+
+const suggestionDecidedTag = computed(() => {
+  const status = decidedStatus.value
+  if (status === 'confirmed') return { type: 'success', text: '已确认应用' }
+  if (status === 'rejected') return { type: 'info', text: '已拒绝' }
+  return null
+})
+
+async function applySuggestion(): Promise<void> {
+  const id = currentSuggestionId.value
+  if (id == null || suggestionDeciding.value) return
+  suggestionDeciding.value = true
+  try {
+    const result = await confirmAiSuggestion(id)
+    decidedStatus.value = result.suggestion.status
+    if (result.applied_schedule_code) {
+      ElMessage.success(
+        `AI 建议已确认，方案 ${result.applied_schedule_code} 已打包生效`,
+      )
+      emit('draft-created', result.applied_schedule_code)
+    } else {
+      ElMessage.success('AI 建议已确认')
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '确认失败')
+  } finally {
+    suggestionDeciding.value = false
+  }
+}
+
+async function rejectSuggestionAction(): Promise<void> {
+  const id = currentSuggestionId.value
+  if (id == null || suggestionDeciding.value) return
+  suggestionDeciding.value = true
+  try {
+    await rejectAiSuggestion(id)
+    decidedStatus.value = 'rejected'
+    ElMessage.info('AI 建议已拒绝')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '拒绝失败')
+  } finally {
+    suggestionDeciding.value = false
+  }
+}
 
 const {
   loading: explainLoading,
@@ -235,6 +311,53 @@ function handleExplainClick(): void {
 
       <p class="result-subtitle">算法参数</p>
       <pre class="params-json">{{ JSON.stringify(lastResult.algorithm_params, null, 2) }}</pre>
+
+      <div v-if="currentSuggestionId != null" class="suggestion-gate">
+        <div class="suggestion-gate-header">
+          <span class="result-subtitle">AI 建议确认闸门</span>
+          <el-tag
+            v-if="suggestionLevelLabel"
+            :type="suggestionLevelTagType"
+            size="small"
+          >
+            {{ currentSuggestionLevel }} · {{ suggestionLevelLabel }}
+          </el-tag>
+          <el-tag
+            v-if="suggestionDecidedTag"
+            :type="suggestionDecidedTag.type"
+            size="small"
+          >
+            {{ suggestionDecidedTag.text }}
+          </el-tag>
+        </div>
+        <p class="suggestion-gate-hint">
+          确认后执行 F021 打包，draft 方案转为 active（实际调度生效）；拒绝仅记录，不触发调度修改。建议 ID：{{
+            currentSuggestionId
+          }}
+        </p>
+        <div
+          v-if="!suggestionDecidedTag && currentSuggestionLevel !== 'info'"
+          class="suggestion-gate-actions"
+        >
+          <el-button
+            type="success"
+            size="small"
+            :loading="suggestionDeciding"
+            :disabled="suggestionDeciding"
+            @click="applySuggestion"
+          >
+            应用建议
+          </el-button>
+          <el-button
+            size="small"
+            :loading="suggestionDeciding"
+            :disabled="suggestionDeciding"
+            @click="rejectSuggestionAction"
+          >
+            拒绝
+          </el-button>
+        </div>
+      </div>
     </div>
 
     <el-divider content-position="left">P1 功能</el-divider>
@@ -374,6 +497,38 @@ function handleExplainClick(): void {
 }
 
 .replan-list {
+  margin-top: 12px;
+}
+
+.suggestion-gate {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.suggestion-gate-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.suggestion-gate-header .result-subtitle {
+  margin: 0;
+}
+
+.suggestion-gate-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+}
+
+.suggestion-gate-actions {
+  display: flex;
+  gap: 8px;
   margin-top: 12px;
 }
 

@@ -28,6 +28,10 @@ VALID_SEVERITIES = ("high", "medium", "low")
 WEIGHT_KEYS = ("distance", "time", "package_count")
 DEFAULT_WEIGHTS = {"distance": 0.5, "time": 0.3, "package_count": 0.2}
 
+# ── AI 建议确认闸门（T6-2）──
+SUGGESTION_LEVELS = ("info", "suggestion", "action")
+SUGGESTION_STATUSES = ("pending", "confirmed", "rejected")
+
 
 class AIValidationError(ValueError):
     """AI 输出校验失败（重试耗尽后抛出），携带原始输出与校验错误详情"""
@@ -185,6 +189,22 @@ def check_analyze_result(result: AnalyzeExceptionResult) -> List[str]:
     if not result.suggestions:
         violations.append("suggestions 为空，应给出至少一条处理建议")
     return violations
+
+
+def classify_suggestion_level(source: str) -> str:
+    """按 AI 功能来源标注建议级别（T6-2）
+
+    - parse（生成调度参数/draft 方案）→ suggestion：需调度员确认后应用
+    - explain / review / analyze → info：仅供展示，无需确认
+    """
+    if source == "parse":
+        return "suggestion"
+    return "info"
+
+
+def should_gate(level: str) -> bool:
+    """是否进入确认闸门：suggestion/action 需要人工确认，info 直接展示"""
+    return level in ("suggestion", "action")
 
 
 def normalize_algorithm_weights(raw: Dict[str, Any]) -> Dict[str, Any]:

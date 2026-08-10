@@ -40,6 +40,34 @@ export interface AiParseData {
   is_replan?: boolean
   status?: 'draft'
   reference_codes?: string[] | null
+  /** T6-2：AI 建议确认闸门 — parse 成功后返回的建议记录与级别 */
+  suggestion_id?: number | null
+  suggestion_level?: AiSuggestionLevel | null
+}
+
+export type AiSuggestionLevel = 'info' | 'suggestion' | 'action'
+
+export type AiSuggestionStatus = 'pending' | 'confirmed' | 'rejected'
+
+export interface AiSuggestion {
+  id: number
+  suggestion_code: string
+  level: AiSuggestionLevel
+  source: string
+  title: string
+  content: string
+  payload?: AlgorithmParams | null
+  related_schedule_code?: string | null
+  status: AiSuggestionStatus
+  applied_schedule_code?: string | null
+  decision_note?: string | null
+  created_at?: string | null
+  decided_at?: string | null
+}
+
+export interface AiSuggestionList {
+  items: AiSuggestion[]
+  total: number
 }
 
 export interface AiResponseMeta {

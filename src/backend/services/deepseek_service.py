@@ -276,6 +276,7 @@ class DeepSeekService:
                 "success": True,
                 "algorithm_params": algorithm_params,
                 "raw_response": json.dumps(algorithm_params, ensure_ascii=False),
+                "level": "suggestion",  # T6-2：AI 调度建议需调度员确认后应用
             }
 
         except AIValidationError as e:
@@ -427,7 +428,9 @@ class DeepSeekService:
             )
 
             logger.info(f"DeepSeek API 调用成功，生成方案解释")
-            return result.model_dump()
+            data = result.model_dump()
+            data["level"] = "info"  # T6-2：解释仅供展示，无需确认
+            return data
 
         except AIValidationError as e:
             # 3 次校验失败：向上抛出，由 api 层返回含原始输出与校验错误的降级响应
@@ -567,7 +570,9 @@ L1→L2调度次数: {batch_data.get('l1_l2_dispatch_count', '?')}
             )
 
             logger.info(f"DeepSeek API 调用成功，生成方案审查报告")
-            return result.model_dump()
+            data = result.model_dump()
+            data["level"] = "info"  # T6-2：审查结果仅供展示，无需确认
+            return data
 
         except AIValidationError as e:
             # 3 次校验失败：向上抛出，由 api 层返回含原始输出与校验错误的降级响应
@@ -676,7 +681,9 @@ L1→L2调度次数: {batch_data.get('l1_l2_dispatch_count', '?')}
             )
 
             logger.info(f"DeepSeek API 调用成功，生成异常分析建议")
-            return result.model_dump()
+            data = result.model_dump()
+            data["level"] = "info"  # T6-2：异常分析仅供展示，无需确认
+            return data
 
         except AIValidationError as e:
             # 3 次校验失败：向上抛出，由 api 层返回含原始输出与校验错误的降级响应

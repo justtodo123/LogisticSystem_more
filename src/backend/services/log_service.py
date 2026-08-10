@@ -32,6 +32,8 @@ EVENT_SCHEDULE_OVERRIDE = "schedule_override"
 EVENT_BATCH_REPLAN = "batch_replan"
 EVENT_NOTIFICATION_CONFIG = "notification_config"
 EVENT_NOTIFICATION_TEST = "notification_test"
+EVENT_AI_SUGGESTION_CONFIRM = "ai_suggestion_confirm"
+EVENT_AI_SUGGESTION_REJECT = "ai_suggestion_reject"
 
 VALID_EVENTS = [
     EVENT_LOGIN, EVENT_LOGOUT, EVENT_GLOBAL_SCHEDULE,
@@ -39,6 +41,7 @@ VALID_EVENTS = [
     EVENT_DEEPSEEK_CALL, EVENT_SCHEDULE_CONFIRM, EVENT_SCHEDULE_DISCARD,
     EVENT_EXCEPTION_RESOLVE, EVENT_SCHEDULE_OVERRIDE, EVENT_BATCH_REPLAN,
     EVENT_NOTIFICATION_CONFIG, EVENT_NOTIFICATION_TEST,
+    EVENT_AI_SUGGESTION_CONFIRM, EVENT_AI_SUGGESTION_REJECT,
 ]
 
 
@@ -297,4 +300,23 @@ def build_exception_resolve_event_data(
     return {
         "event_code": event_code,
         "action": action,
+    }
+
+
+def build_ai_suggestion_decision_event_data(
+    suggestion_code: str,
+    level: str,
+    source: str,
+    related_schedule_code: Optional[str] = None,
+    applied_schedule_code: Optional[str] = None,
+    note: str = "",
+) -> Dict[str, Any]:
+    """构建 AI 建议确认/拒绝事件的 event_data（T6-2）"""
+    return {
+        "suggestion_code": suggestion_code,
+        "level": level,
+        "source": source,
+        "related_schedule_code": related_schedule_code,
+        "applied_schedule_code": applied_schedule_code,
+        "note": note,
     }

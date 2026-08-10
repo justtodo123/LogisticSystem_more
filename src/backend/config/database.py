@@ -32,7 +32,7 @@ def init_db():
         User, LogEvent, Node, StorageCenter, SortingCenter,
         Order, Goods, Package, Vehicle, Driver, GlobalSchedule,
         DispatchBatch, NodeDispatch, Route, ExceptionEvent,
-        IdempotencyRecord
+        IdempotencyRecord, AiSuggestion
     )
     
     # 创建所有表

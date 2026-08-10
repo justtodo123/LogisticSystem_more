@@ -19,6 +19,8 @@ from services.log_service import LogService, build_deepseek_call_event_data
 from services.schedule_service import ScheduleService
 from services.dispatch_service import DispatchService
 from services.exception_service import ExceptionService
+from services.ai_suggestion_service import create_suggestion
+from core.ai_guard import classify_suggestion_level
 from api.dependencies import get_current_user
 from models.user import User
 from utils.response import success_response, error_response
@@ -87,6 +89,15 @@ async def parse_natural_language(
                 return result
             new_code = result["data"]["schedule_code"]
 
+            # T6-2：记录 AI 建议（suggestion 级别 → 需调度员确认后应用）
+            suggestion = _record_parse_suggestion(
+                db=db, user=current_user,
+                algorithm_params=algorithm_params,
+                related_schedule_code=new_code,
+                title=f"AI 调度建议（重规划）· 基于 {target_code}",
+                content=f"AI 建议对 {target_code} 生成重规划方案 {new_code}，确认后执行打包生效",
+            )
+
             return {
                 "code": 0, "message": "success",
                 "data": {
@@ -96,6 +107,8 @@ async def parse_natural_language(
                     "is_replan": True,
                     "status": "draft",
                     "reference_codes": reference_codes,
+                    "suggestion_id": suggestion.id,
+                    "suggestion_level": suggestion.level,
                 },
                 "meta": {"degraded": degraded, "degraded_reason": degraded_reason},
             }
@@ -104,6 +117,16 @@ async def parse_natural_language(
             schedule_code = await _execute_new_schedule(
                 db=db, algorithm_params=algorithm_params,
             )
+
+            # T6-2：记录 AI 建议（suggestion 级别 → 需调度员确认后应用）
+            suggestion = _record_parse_suggestion(
+                db=db, user=current_user,
+                algorithm_params=algorithm_params,
+                related_schedule_code=schedule_code,
+                title="AI 调度建议（新建）",
+                content=f"AI 建议生成 draft 方案 {schedule_code}，确认后执行打包生效",
+            )
+
             return {
                 "code": 0, "message": "success",
                 "data": {
@@ -113,6 +136,8 @@ async def parse_natural_language(
                     "is_replan": False,
                     "status": "draft",
                     "reference_codes": reference_codes,
+                    "suggestion_id": suggestion.id,
+                    "suggestion_level": suggestion.level,
                 },
                 "meta": {"degraded": degraded, "degraded_reason": degraded_reason},
             }
@@ -256,6 +281,28 @@ def _log_deepseek(user_id: int, role: str, success: bool, degraded: bool, db: Se
             function_name="parse", success=success, degraded=degraded,
         ),
         db=db,
+    )
+
+
+def _record_parse_suggestion(
+    db: Session,
+    user: User,
+    algorithm_params: Dict[str, Any],
+    related_schedule_code: str,
+    title: str,
+    content: str,
+):
+    """T6-2：parse 成功后记录 AI 建议（suggestion 级别，pending 状态）"""
+    return create_suggestion(
+        db=db,
+        level=classify_suggestion_level("parse"),
+        source="parse",
+        title=title,
+        content=content,
+        user_id=user.id,
+        role=user.role,
+        payload=algorithm_params,
+        related_schedule_code=related_schedule_code,
     )
 
 

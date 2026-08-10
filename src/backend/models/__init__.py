@@ -15,8 +15,9 @@ from .route import Route
 from .exception_event import ExceptionEvent
 from .idempotency_record import IdempotencyRecord
 from .notification_config import NotificationConfig
+from .ai_suggestion import AiSuggestion
 
 __all__ = ["User", "LogEvent", "Node", "StorageCenter", "SortingCenter",
            "Order", "Goods", "Package", "Vehicle", "Driver", "GlobalSchedule",
            "DispatchBatch", "NodeDispatch", "Route", "ExceptionEvent",
-           "IdempotencyRecord", "NotificationConfig"]
+           "IdempotencyRecord", "NotificationConfig", "AiSuggestion"]
