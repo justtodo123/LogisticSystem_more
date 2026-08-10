@@ -5,6 +5,17 @@
     "w2_time": 0.3,
     "w3_packages": 0.2
   },
+  "global_schedule_objectives": {
+    "distance":    { "weight": 0.30, "direction": "minimize", "metric": "distance" },
+    "time":        { "weight": 0.25, "direction": "minimize", "metric": "time" },
+    "load_rate":   { "weight": 0.20, "direction": "maximize", "metric": "load_rate" },
+    "on_time_rate": { "weight": 0.15, "direction": "maximize", "metric": "on_time_rate" },
+    "cost":        { "weight": 0.10, "direction": "minimize", "metric": "cost" }
+  },
+  "cost_params": {
+    "cost_per_km": 1.5,
+    "handling_cost_per_goods": 2.0
+  },
   "node_dispatch_weights": {
     "w1_distance": 0.5,
     "w2_time": 0.3,

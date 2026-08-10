@@ -6,7 +6,7 @@ F007 全局调度算法
 """
 import math
 import json
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from models.goods import Goods
 from models.package import Package
 
 from algorithms.base import SchedulingStrategy
+from algorithms import scoring
 
 
 def _load_config() -> dict:
@@ -29,6 +30,23 @@ def _load_config() -> dict:
     )
     with open(config_path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def _load_objectives_config() -> dict:
+    """
+    加载多目标评分配置（T2-2）。
+
+    Returns:
+        {objective: {"weight": float, "direction": str, "metric": str}}
+    """
+    config = _load_config()
+    return config.get("global_schedule_objectives", {})
+
+
+def _cost_per_km() -> float:
+    """每公里运输成本（元/km），用于 cost 目标估算"""
+    config = _load_config()
+    return float(config.get("cost_params", {}).get("cost_per_km", 1.5))
 
 
 def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -102,94 +120,48 @@ def _generate_schedule_code(db: Session) -> str:
     return f"GS{today_str}{_schedule_seq:03d}"
 
 
-def global_schedule(
-    order_codes: Optional[List[str]],
-    algorithm: str,
+# 候选方案权重画像（T2-2 多目标评分：在关键分叉点生成 ≥3 个候选方案供评分器排序）
+_CANDIDATE_PROFILES: Dict[str, Tuple[float, float, float]] = {
+    "balanced": (0.5, 0.3, 0.2),          # 与既有默认权重一致（行为基准）
+    "distance_first": (0.7, 0.15, 0.15),  # 距离优先
+    "time_first": (0.15, 0.7, 0.15),      # 时效优先
+}
+
+
+def _build_schedule(
     db: Session,
+    orders: List[Order],
+    l1_nodes: List[Node],
+    l1_node_map: Dict[int, Any],
+    w1: float,
+    w2: float,
+    w3: float,
     excluded_nodes: Optional[List[str]] = None,
-    is_replan: bool = False,
-    custom_weights: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+) -> Tuple[Dict[str, Any], Dict[str, float]]:
     """
-    F007 全局调度算法
+    以给定权重画像执行贪心 L1 选择，构建一份完整调度方案并采集多目标原始指标（T2-2）。
 
     Args:
-        order_codes: 订单编号列表（可选，None 则处理所有 pending/exception 订单）
-        algorithm: 算法类型（"traditional" 或 "deepseek"，阶段3仅实现 traditional）
         db: 数据库会话
-        excluded_nodes: 排除的节点编码列表（重规划时使用）
-        is_replan: 是否为重规划模式（True=只调度exception订单，False=只调度pending订单）
-        custom_weights: 自定义权重参数（可选，优先级高于 algorithm_config.json）
-            格式: {"global_schedule": {"weights": {"distance": 0.7, "time": 0.2, "package_count": 0.1}}}
+        orders: 待调度订单
+        l1_nodes: L1 节点列表
+        l1_node_map: L1 id → SortingCenter
+        w1/w2/w3: 距离/时间/货物数权重
+        excluded_nodes: 排除的节点编码列表
 
     Returns:
-        dict: {
-            "schedule_code": str,
-            "order_codes": List[str],
-            "total_distance": float,
-            "total_time": float,
-            "total_goods": int,
-            "score": float,
-            "goods_schedules": List[dict],
-        }
-
-    Raises:
-        ValueError: 无法为某货物找到满足条件的 L1 节点
+        (schedule_dict, metrics):
+        - schedule_dict: 不含 schedule_code 的调度方案
+        - metrics: 多目标原始指标（distance/time/goods_count/load_rate/on_time_rate/cost）
     """
-    if algorithm != "traditional":
-        raise ValueError(f"阶段3仅支持 traditional 算法，收到: {algorithm}")
-
-    # 加载配置（custom_weights 优先于文件配置）
-    if custom_weights and "global_schedule" in custom_weights:
-        gs_weights = custom_weights["global_schedule"].get("weights", {})
-        w1 = gs_weights.get("distance", 0.5)
-        w2 = gs_weights.get("time", 0.3)
-        w3 = gs_weights.get("package_count", 0.2)
-    else:
-        config = _load_config()
-        weights = config["global_schedule_weights"]
-        w1 = weights["w1_distance"]
-        w2 = weights["w2_time"]
-        w3 = weights["w3_packages"]
-
-    # ── 1. 查询订单 ──
-    # order_codes 显式提供：信任调用方，按编码查询（不限状态，支持 AI 权重重规划）
-    # order_codes 为空：按状态自动筛选
-    if order_codes:
-        query = db.query(Order).filter(Order.order_code.in_(order_codes))
-    elif is_replan:
-        query = db.query(Order).filter(Order.status == "exception")
-    else:
-        query = db.query(Order).filter(Order.status == "unassigned")
-    orders = query.all()
-
-    if not orders:
-        raise ValueError("没有找到符合条件的订单（请确认订单存在且状态为 unassigned/exception，或提供了有效的 order_codes）")
-
-    # ── 2. 预加载 L1 节点（含 sorting_center 属性） ──
-    l1_nodes = (
-        db.query(Node)
-        .join(SortingCenter, Node.id == SortingCenter.node_id)
-        .filter(
-            Node.node_type == "sorting_center",
-            SortingCenter.level == 1,
-        )
-        .all()
-    )
-    if not l1_nodes:
-        raise ValueError("没有找到 1 级分拣中心（L1），请先初始化演示数据")
-
-    # 为每个 L1 节点附加 sorting_center 属性便于访问
-    l1_node_map = {}
-    for node in l1_nodes:
-        sc = db.query(SortingCenter).filter(SortingCenter.node_id == node.id).first()
-        l1_node_map[node.id] = sc
-
-    # ── 3. 遍历订单和货物，贪心选择 L1 ──
     goods_schedules = []
     order_l1_map: Dict[str, str] = {}  # order_code → l1_node_code
     total_distance = 0.0
     total_time = 0.0
+    l1_used_volume: Dict[str, float] = {}  # l1_code → 累计分配体积
+    l1_capacity: Dict[str, float] = {}     # l1_code → 容量
+    on_time_ok = 0
+    on_time_total = 0
 
     for order in orders:
         for goods in order.goods:
@@ -285,16 +257,22 @@ def global_schedule(
                 l0_node, best_l1, l2_node
             )
 
+            # ---- 采集多目标指标（T2-2） ----
+            l1_used_volume[best_l1.node_code] = (
+                l1_used_volume.get(best_l1.node_code, 0.0) + float(goods.volume)
+            )
+            l1_capacity[best_l1.node_code] = float(best_l1_sc.capacity or 0.0)
+            on_time_total += 1
+            if best_l1_sc.max_storage_time is None or estimated_hours <= best_l1_sc.max_storage_time:
+                on_time_ok += 1
+
     # ── 4. 计算结果 ──
     goods_count = len(goods_schedules)
-    # 整体评分：所有货物评分之和（归一化）
+    # 整体评分：所有货物评分之和（保持既有 lower-better 语义）
     overall_score = round(total_distance * w1 + total_time * w2 + goods_count * w3, 4)
-
-    schedule_code = _generate_schedule_code(db)
     involved_order_codes = list(dict.fromkeys(gs["order_code"] for gs in goods_schedules))
 
-    return {
-        "schedule_code": schedule_code,
+    schedule = {
         "order_codes": involved_order_codes,
         "total_distance": round(total_distance, 3),
         "total_time": round(total_time, 3),
@@ -302,6 +280,154 @@ def global_schedule(
         "score": overall_score,
         "goods_schedules": goods_schedules,
     }
+
+    # 多目标原始指标（T2-2）
+    used_capacity_sum = sum(l1_capacity.values())
+    load_rate = (
+        min(1.0, sum(l1_used_volume.values()) / used_capacity_sum)
+        if used_capacity_sum > 0 else 0.0
+    )
+    on_time_rate = (on_time_ok / on_time_total) if on_time_total else 0.0
+    cost = total_distance * _cost_per_km()
+    metrics = {
+        "distance": total_distance,
+        "time": total_time,
+        "goods_count": goods_count,
+        "load_rate": load_rate,
+        "on_time_rate": on_time_rate,
+        "cost": cost,
+    }
+    return schedule, metrics
+
+
+def global_schedule(
+    order_codes: Optional[List[str]],
+    algorithm: str,
+    db: Session,
+    excluded_nodes: Optional[List[str]] = None,
+    is_replan: bool = False,
+    custom_weights: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    F007 全局调度算法
+
+    Args:
+        order_codes: 订单编号列表（可选，None 则处理所有 pending/exception 订单）
+        algorithm: 算法类型（"traditional" 或 "deepseek"，阶段3仅实现 traditional）
+        db: 数据库会话
+        excluded_nodes: 排除的节点编码列表（重规划时使用）
+        is_replan: 是否为重规划模式（True=只调度exception订单，False=只调度pending订单）
+        custom_weights: 自定义权重参数（可选，优先级高于 algorithm_config.json）
+            格式: {"global_schedule": {"weights": {"distance": 0.7, "time": 0.2, "package_count": 0.1}}}
+
+    Returns:
+        dict: {
+            "schedule_code": str,
+            "order_codes": List[str],
+            "total_distance": float,
+            "total_time": float,
+            "total_goods": int,
+            "score": float,
+            "goods_schedules": List[dict],
+            # T2-2 多目标评分
+            "objective_scores": Dict[str, float],   # 各目标归一化分（0~1）
+            "score_breakdown": Dict,                # 评分拆解（raw/normalized/weight）
+            "composite_score": float,               # 综合分（0~1，越高越好）
+            "alternatives": List[dict],             # 备选方案（按综合分降序）
+        }
+
+    Raises:
+        ValueError: 无法为某货物找到满足条件的 L1 节点
+    """
+    if algorithm != "traditional":
+        raise ValueError(f"阶段3仅支持 traditional 算法，收到: {algorithm}")
+
+    # 加载配置（custom_weights 优先于文件配置）
+    if custom_weights and "global_schedule" in custom_weights:
+        gs_weights = custom_weights["global_schedule"].get("weights", {})
+        w1 = gs_weights.get("distance", 0.5)
+        w2 = gs_weights.get("time", 0.3)
+        w3 = gs_weights.get("package_count", 0.2)
+    else:
+        config = _load_config()
+        weights = config["global_schedule_weights"]
+        w1 = weights["w1_distance"]
+        w2 = weights["w2_time"]
+        w3 = weights["w3_packages"]
+
+    # ── 1. 查询订单 ──
+    # order_codes 显式提供：信任调用方，按编码查询（不限状态，支持 AI 权重重规划）
+    # order_codes 为空：按状态自动筛选
+    if order_codes:
+        query = db.query(Order).filter(Order.order_code.in_(order_codes))
+    elif is_replan:
+        query = db.query(Order).filter(Order.status == "exception")
+    else:
+        query = db.query(Order).filter(Order.status == "unassigned")
+    orders = query.all()
+
+    if not orders:
+        raise ValueError("没有找到符合条件的订单（请确认订单存在且状态为 unassigned/exception，或提供了有效的 order_codes）")
+
+    # ── 2. 预加载 L1 节点（含 sorting_center 属性） ──
+    l1_nodes = (
+        db.query(Node)
+        .join(SortingCenter, Node.id == SortingCenter.node_id)
+        .filter(
+            Node.node_type == "sorting_center",
+            SortingCenter.level == 1,
+        )
+        .all()
+    )
+    if not l1_nodes:
+        raise ValueError("没有找到 1 级分拣中心（L1），请先初始化演示数据")
+
+    # 为每个 L1 节点附加 sorting_center 属性便于访问
+    l1_node_map = {}
+    for node in l1_nodes:
+        sc = db.query(SortingCenter).filter(SortingCenter.node_id == node.id).first()
+        l1_node_map[node.id] = sc
+
+    # ── 3. 生成候选方案（T2-2）：默认画像 + 备选画像，至少 3 份 ──
+    objectives_config = _load_objectives_config()
+    candidate_specs = []
+    for profile, (pw1, pw2, pw3) in _CANDIDATE_PROFILES.items():
+        cand_schedule, cand_metrics = _build_schedule(
+            db, orders, l1_nodes, l1_node_map, pw1, pw2, pw3, excluded_nodes
+        )
+        candidate_specs.append({
+            "profile": profile,
+            "schedule": cand_schedule,
+            "metrics": cand_metrics,
+        })
+
+    # ── 4. 多目标评分排序（综合分高者优先） ──
+    ranked = scoring.rank_candidates(candidate_specs, objectives_config)
+    best = ranked[0]
+
+    # 4a. 生成正式方案编号（仅主方案落库）
+    schedule_code = _generate_schedule_code(db)
+    result = dict(best["schedule"])
+    result["schedule_code"] = schedule_code
+
+    # 4b. 附加多目标评分输出（T2-2）
+    result["objective_scores"] = best["objective_scores"]
+    result["score_breakdown"] = scoring.score_breakdown(best["metrics"], objectives_config)
+    result["composite_score"] = best["overall_score"]
+    result["alternatives"] = [
+        {
+            "profile": r["profile"],
+            "overall_score": r["overall_score"],
+            "objective_scores": r["objective_scores"],
+            "metrics": r["metrics"],
+            "total_distance": r["schedule"]["total_distance"],
+            "total_time": r["schedule"]["total_time"],
+            "total_goods": r["schedule"]["total_goods"],
+        }
+        for r in ranked[1:]
+    ]
+
+    return result
 
 
 class GreedyGlobalScheduleStrategy(SchedulingStrategy):

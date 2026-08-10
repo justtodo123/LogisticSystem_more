@@ -190,6 +190,11 @@ class ScheduleService:
                 "version": 1,
                 "is_replan": is_replan,
                 "status": "draft",  # 新增
+                # T2-2 多目标评分
+                "composite_score": schedule_result.get("composite_score"),
+                "objective_scores": schedule_result.get("objective_scores"),
+                "score_breakdown": schedule_result.get("score_breakdown"),
+                "alternatives": schedule_result.get("alternatives", []),
             })
             
         except ValueError as e:
