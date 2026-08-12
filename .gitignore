@@ -18,7 +18,13 @@ ehthumbs.db
 *.swp
 *.swo
 *~
-.codebuddy
+.codebuddy/
+.claude/
+!.claude/
+.claude/*
+!.claude/CLAUDE.md
+!.claude/skills/
+!.claude/skills/**
 
 # ==============================
 # 环境变量与密钥（含 DeepSeek / 地图 API Key）
