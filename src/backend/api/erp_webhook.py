@@ -53,6 +53,8 @@ async def verify_erp_auth(
         payload = jwt.decode(credentials.credentials, settings.JWT_SECRET, algorithms=["HS256"])
         if not payload.get("sub"):
             raise HTTPException(status_code=401, detail="未登录或 Token 无效")
+        if payload.get("role") not in ("dispatcher", "admin"):
+            raise HTTPException(status_code=403, detail="无权限推送订单（仅 dispatcher/admin）")
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token 已过期，请重新登录")
     except jwt.InvalidTokenError:

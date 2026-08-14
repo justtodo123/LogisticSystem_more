@@ -8,11 +8,11 @@ ERP 对接 Webhook 测试（T5-1）
 import pytest
 
 from config.settings import settings
+from tests.api.conftest import create_jwt_token
 
 
 @pytest.fixture
 def dispatcher_token():
-    from tests.api.conftest import create_jwt_token
     return create_jwt_token("dispatcher", "dispatcher")
 
 
@@ -105,3 +105,23 @@ class TestErpPushOrders:
         )
         assert resp.status_code == 201
         assert resp.json()["data"]["order_code"].startswith("O")
+
+    def test_push_order_rejects_viewer_role(self, client, test_nodes):
+        """JWT 回退模式：viewer 角色 → 403"""
+        viewer_token = create_jwt_token("viewer", "viewer")
+        response = client.post(
+            "/api/erp/orders",
+            json=_payload(),
+            headers={"Authorization": f"Bearer {viewer_token}"},
+        )
+        assert response.status_code == 403
+
+    def test_push_order_admin_role_allowed(self, client, test_nodes):
+        """JWT 回退模式：admin 角色 → 201"""
+        admin_token = create_jwt_token("admin", "admin")
+        response = client.post(
+            "/api/erp/orders",
+            json=_payload(),
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert response.status_code == 201

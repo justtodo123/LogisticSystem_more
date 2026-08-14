@@ -13,6 +13,8 @@ from schemas.arrival_confirm import (
 )
 from core.error_codes import CODE_SUCCESS, CODE_INTERNAL_ERROR, CODE_PACKAGE_NOT_FOUND
 from config.database import get_db
+from api.dependencies import require_dispatcher
+from models.user import User
 
 router = APIRouter(prefix="/api/simulation", tags=["simulation"])
 
@@ -20,7 +22,8 @@ router = APIRouter(prefix="/api/simulation", tags=["simulation"])
 @router.post("/confirm-arrival")
 async def confirm_arrival(
     request: ArrivalConfirmRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher),
 ) -> Dict[str, Any]:
     """
     单个到货确认
@@ -52,7 +55,8 @@ async def confirm_arrival(
 @router.post("/confirm-arrival-batch")
 async def confirm_arrival_batch(
     request: BatchArrivalConfirmRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher),
 ) -> Dict[str, Any]:
     """
     批量到货确认（事务性，任一失败则全部回滚）
@@ -88,7 +92,8 @@ async def confirm_arrival_batch(
 async def get_arrival_packages(
     schedule_code: str,
     node_code: str = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_dispatcher),
 ) -> Dict[str, Any]:
     """
     查询到站包裹（状态为 in_transit 或 delivered 的包裹）
