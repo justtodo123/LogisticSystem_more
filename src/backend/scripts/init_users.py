@@ -1,6 +1,6 @@
 """
 初始化种子账号脚本
-创建dispatcher和manager账号，密码bcrypt哈希存储
+创建dispatcher、manager和admin账号，密码bcrypt哈希存储
 """
 import sys
 from pathlib import Path
@@ -49,6 +49,19 @@ def init_users():
             )
             db.add(manager)
             print("创建manager账号")
+
+        # 检查admin账号是否存在
+        admin = db.query(User).filter(User.username == "admin").first()
+        if not admin:
+            admin = User(
+                username="admin",
+                password_hash=get_password_hash("123456"),
+                role="admin",
+                display_name="管理员",
+                is_active=True,
+            )
+            db.add(admin)
+            print("创建admin账号")
 
         db.commit()
         print("种子账号初始化完成")
