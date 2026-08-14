@@ -20,6 +20,7 @@ proced_problem/
 | 序号 | 标题 | 日期 | 标签 |
 | --- | --- | --- | --- |
 | 001 | [种子脚本缺失 admin 用户，文档声明的 admin/123456 登录失败](001-seed-users-missing-admin.md) | 2026-08-12 | seed-data, init-script, docs-drift, silent-failure, auth |
+| 002 | [CD 工作流绕过 CI 直接推送镜像，未通过测试的代码也会发布](002-cd-pushes-image-without-ci-gate.md) | 2026-08-14 | ci-cd, github-actions, workflow, supply-chain, silent-gate |
 
 ## 如何新增记录
 
