@@ -86,6 +86,20 @@ class Settings(BaseSettings):
             object.__setattr__(self, "JWT_EXPIRE_SECONDS", self.JWT_EXPIRE_HOURS * 3600)
         return self
 
+    @model_validator(mode="after")
+    def _validate_jwt_secret(self) -> "Settings":
+        """非 dev 环境（staging/prod）拒绝弱 JWT_SECRET，fail-fast 而非静默运行"""
+        if self.ENV == "dev":
+            return self
+        weak_secrets = {"default-secret-key-change-in-env", "change-me-in-prod"}
+        if self.JWT_SECRET in weak_secrets or len(self.JWT_SECRET) < 32:
+            raise ValueError(
+                "生产环境（ENV=prod/staging）必须设置强 JWT_SECRET："
+                "至少 32 位随机字符串，且不得使用默认占位值 "
+                f"（当前长度 {len(self.JWT_SECRET)}）。"
+            )
+        return self
+
     # pydantic v2 配置风格
     model_config = SettingsConfigDict(
         env_file=f".env.{os.getenv('ENV', 'dev')}" if os.path.exists(

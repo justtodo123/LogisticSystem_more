@@ -21,6 +21,7 @@ proced_problem/
 | --- | --- | --- | --- |
 | 001 | [种子脚本缺失 admin 用户，文档声明的 admin/123456 登录失败](001-seed-users-missing-admin.md) | 2026-08-12 | seed-data, init-script, docs-drift, silent-failure, auth |
 | 002 | [CD 工作流绕过 CI 直接推送镜像，未通过测试的代码也会发布](002-cd-pushes-image-without-ci-gate.md) | 2026-08-14 | ci-cd, github-actions, workflow, supply-chain, silent-gate |
+| 003 | [生产环境可用弱 JWT_SECRET 静默启动，JWT 可被伪造](003-prod-accepts-weak-jwt-secret.md) | 2026-08-14 | security, jwt, config, silent-failure, fail-fast |
 
 ## 如何新增记录
 
