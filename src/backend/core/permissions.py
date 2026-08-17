@@ -37,6 +37,13 @@ PERMISSIONS: dict[str, str] = {
 
 # ── 角色-权限映射 ──
 
+# 仓库管理员（warehouse_operator）与 manager 等价，共用同一权限集，避免两处漂移
+WAREHOUSE_OPERATOR_PERMISSIONS: List[str] = [
+    "orders:read", "orders:write", "orders:import",
+    "packages:read", "nodes:read",
+    "vehicles:read", "drivers:read",
+]
+
 ROLE_PERMISSIONS: dict[str, List[str]] = {
     "admin": list(PERMISSIONS.keys()),
     "dispatcher": [
@@ -57,11 +64,8 @@ ROLE_PERMISSIONS: dict[str, List[str]] = {
         "nodes:read", "packages:read",
         "exceptions:read",
     ],
-    "warehouse_operator": [
-        "orders:read", "orders:write", "orders:import",
-        "packages:read", "nodes:read",
-        "vehicles:read", "drivers:read",
-    ],
+    "warehouse_operator": WAREHOUSE_OPERATOR_PERMISSIONS,
+    "manager": WAREHOUSE_OPERATOR_PERMISSIONS,
 }
 
 

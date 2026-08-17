@@ -337,7 +337,7 @@ async def _create_orders_and_goods(db: Session):
                 order_code=order_code,
                 destination_node_id=dest_node.id,
                 time_window="9:00-18:00",
-                status="pending"
+                status="unassigned"
             )
             db.add(order)
             db.flush()

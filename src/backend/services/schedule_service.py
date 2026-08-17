@@ -11,6 +11,7 @@
 | F007完成 | pending → delivering | pending_pack (不变)     | - (不涉及)            |
 | F021完成 | delivering (不变)   | pending_pack → packed  | pending_pack → packed |
 """
+import logging
 from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import Session
@@ -30,6 +31,11 @@ from services.state_machine import (
     update_goods_after_f021,
     transition_global_schedule_status,
 )
+
+logger = logging.getLogger(__name__)
+
+# 外部可选的调度算法（阶段3仅实现 traditional；deepseek 预留未实现）
+SUPPORTED_ALGORITHMS = ("traditional",)
 
 
 # ── Score 归一化：内存缓存历史最大 score ──
@@ -129,7 +135,14 @@ class ScheduleService:
         """
         if not preview:
             return error_response(code=40000, message="P1-2 已移除直接落库功能，请先预览再确认")
-        
+
+        # 参数校验：algorithm 必须是已实现的算法，未知算法尽早返回参数错误而非业务错误
+        if algorithm not in SUPPORTED_ALGORITHMS:
+            return error_response(
+                code=40000,
+                message=f"不支持的算法: {algorithm}，当前支持: {', '.join(SUPPORTED_ALGORITHMS)}",
+            )
+
         try:
             # 1. 检查是否已有 active 方案（避免重复调度）
             #    重规划（is_replan=True）跳过此检查：重规划本身就是为同一批订单创建新方案
@@ -314,9 +327,6 @@ class ScheduleService:
             max_possible = _refresh_max_score(db)
             raw_score = float(gs.score)
             score_display = _calc_score_display(raw_score, max_possible)
-            
-            print(f"[DEBUG] gs.id={gs.id}, gs.score={gs.score}, raw_score={raw_score}, max_possible={max_possible}, score_display={score_display}")
-            print(f"[DEBUG] gs.goods_schedules type={type(gs.goods_schedules)}, len={len(gs.goods_schedules) if isinstance(gs.goods_schedules, list) else 'N/A'}")
 
             # 查询关联 packages
             packages = (
@@ -422,9 +432,7 @@ class ScheduleService:
                 "created_at": gs.created_at.isoformat() if gs.created_at else None,
             })
         except Exception as e:
-            print(f"[ERROR] get_global_schedule failed: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error("get_global_schedule failed: %s", e, exc_info=True)
             return error_response(code=50000, message=f"获取调度方案详情失败: {str(e)}")
 
 
