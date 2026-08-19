@@ -29,6 +29,7 @@ proced_problem/
 | 008 | [algorithm="deepseek" 未实现，策略工厂仅注册 greedy/dummy](008-deepseek-algorithm-not-implemented.md) | 2026-08-14 | algorithm, strategy-pattern, factory, docs-drift, ai |
 | 009 | [schedule_service 残留 DEBUG/ERROR print 语句，内部状态泄漏到 stdout](009-residual-debug-print.md) | 2026-08-14 | logging, code-hygiene, print, observability |
 | 010 | [已送达货物在 AI 重规划中被打回 pending_pack](010-delivered-goods-reset-on-replan.md) | 2026-08-19 | state-machine, replan, delivered, data-integrity |
+| 011 | [CI 空仓库下 SQLite 无法打开 data/logistics.db](011-sqlite-missing-data-dir-breaks-ci.md) | 2026-08-19 | ci, sqlite, test-isolation, startup |
 
 ## 如何新增记录
 
