@@ -296,6 +296,12 @@ class TestMarkExceptionStatuses:
         mark_exception_statuses(self.db, "GS002")
         assert goods.status == "exception"
 
+    def test_mark_exception_skips_delivered_goods(self):
+        from services.state_machine import mark_exception_statuses
+        goods = _create_test_goods(self.db, code="G_DEL", status="delivered", order_id=self.order.id, node=self.node)
+        mark_exception_statuses(self.db, "GS002")
+        assert goods.status == "delivered"
+
 
 class TestResetGoodsForReplan:
     """测试 reset_goods_for_replan() 重规划重置"""
@@ -320,7 +326,75 @@ class TestResetGoodsForReplan:
         from services.state_machine import reset_goods_for_replan
         goods = _create_test_goods(self.db, code="G002", status="delivered", order_id=self.order.id, node=self.node)
         reset_goods_for_replan(self.db, ["O001"])
+        assert goods.status == "delivered"
+
+    def test_reset_in_transit_goods(self):
+        from services.state_machine import reset_goods_for_replan
+        goods = _create_test_goods(self.db, code="G003", status="in_transit", order_id=self.order.id, node=self.node)
+        reset_goods_for_replan(self.db, ["O001"])
         assert goods.status == "pending_pack"
+
+    def test_reset_exception_goods_unchanged(self):
+        from services.state_machine import reset_goods_for_replan
+        goods = _create_test_goods(self.db, code="G004", status="exception", order_id=self.order.id, node=self.node)
+        reset_goods_for_replan(self.db, ["O001"])
+        assert goods.status == "exception"
+
+    def test_reset_unknown_order_noop(self):
+        from services.state_machine import reset_goods_for_replan
+        goods = _create_test_goods(self.db, code="G005", status="packed", order_id=self.order.id, node=self.node)
+        reset_goods_for_replan(self.db, ["ORDER_NOT_EXIST"])
+        assert goods.status == "packed"
+
+    def test_reset_mixed_order_keeps_delivered(self):
+        from services.state_machine import reset_goods_for_replan
+        delivered = _create_test_goods(self.db, code="G_DEL", status="delivered", order_id=self.order.id, node=self.node)
+        packed = _create_test_goods(self.db, code="G_PK", status="packed", order_id=self.order.id, node=self.node)
+        reset_goods_for_replan(self.db, ["O001"])
+        assert delivered.status == "delivered"
+        assert packed.status == "pending_pack"
+
+    def test_reset_rollback_restores_non_terminal_only(self):
+        from services.state_machine import reset_goods_for_replan
+        packed = _create_test_goods(self.db, code="G_RB_P", status="packed", order_id=self.order.id, node=self.node)
+        delivered = _create_test_goods(self.db, code="G_RB_D", status="delivered", order_id=self.order.id, node=self.node)
+        self.db.commit()
+        reset_goods_for_replan(self.db, ["O001"])
+        assert packed.status == "pending_pack"
+        assert delivered.status == "delivered"
+        self.db.rollback()
+        self.db.refresh(packed)
+        self.db.refresh(delivered)
+        assert packed.status == "packed"
+        assert delivered.status == "delivered"
+
+
+class TestCheckAndUpdateOrderStatus:
+    """混合订单中旧 delivered 不导致重复推进"""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, request):
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        Session = sessionmaker(bind=engine)
+        self.db = Session()
+        request.addfinalizer(lambda: (self.db.close(), Base.metadata.drop_all(engine)))
+        self.node = _create_test_node(self.db)
+        self.order = _create_test_order(self.db, code="O_MIX", dest_node=self.node, status="in_transit")
+
+    def test_signs_once_when_remaining_goods_complete(self):
+        from services.state_machine import check_and_update_order_status
+        delivered = _create_test_goods(self.db, code="G_OLD", status="delivered", order_id=self.order.id, node=self.node)
+        remaining = _create_test_goods(self.db, code="G_NEW", status="in_transit", order_id=self.order.id, node=self.node)
+        check_and_update_order_status(self.db, "O_MIX")
+        assert self.order.status == "in_transit"
+        remaining.status = "delivered"
+        self.db.flush()
+        check_and_update_order_status(self.db, "O_MIX")
+        assert self.order.status == "signed"
+        check_and_update_order_status(self.db, "O_MIX")
+        assert self.order.status == "signed"
+        assert delivered.status == "delivered"
 
 
 # ══════════════════════════════════════════════════════════════════

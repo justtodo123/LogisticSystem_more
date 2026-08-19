@@ -258,3 +258,38 @@ class TestGlobalScheduleGreedySelection:
         # 数据库中没有任何 pending 订单
         with pytest.raises(ValueError, match="没有找到符合条件的订单"):
             global_schedule(order_codes=None, algorithm="traditional", db=db_session)
+
+
+class TestGlobalScheduleSkipsDelivered:
+    """delivered 货物不进入 F007 goods_schedules"""
+
+    @pytest.mark.unit
+    def test_skips_delivered_goods(self, db_session, test_nodes, test_orders, test_goods):
+        delivered = test_goods["G001"]
+        delivered.status = "delivered"
+        db_session.commit()
+
+        result = global_schedule(
+            order_codes=["O001"],
+            algorithm="traditional",
+            db=db_session,
+        )
+
+        codes = [gs["goods_code"] for gs in result["goods_schedules"]]
+        assert "G001" not in codes
+        assert "G002" in codes
+        assert result["total_goods"] == 1
+
+    @pytest.mark.unit
+    def test_all_delivered_raises(self, db_session, test_nodes, test_orders, test_goods):
+        test_goods["G001"].status = "delivered"
+        test_goods["G002"].status = "delivered"
+        db_session.commit()
+
+        with pytest.raises(ValueError, match="delivered"):
+            global_schedule(
+                order_codes=["O001"],
+                algorithm="traditional",
+                db=db_session,
+            )
+

@@ -738,14 +738,23 @@ def mark_exception_statuses(
     db.flush()
 
 
+# packed / in_transit 可回退：尚未到达终态，重规划必须召回后重新打包。
+# delivered 为终态：任何重规划都不得再次履约。
+REPLAN_RESETTABLE_GOODS_STATUSES = ("packed", "in_transit")
+
+
 def reset_goods_for_replan(
     db: Session,
     order_codes: List[str],
 ) -> None:
     """
-    AI 重规划时重置货物状态，使其重新参与 F007 调度。
+    AI 重规划时重置未终态货物，使其重新参与 F007 调度。
 
-    Goods: packed / in_transit / delivered → pending_pack
+    状态矩阵：
+    - packed / in_transit → pending_pack（允许回退；尚未签收）
+    - delivered：保持不变（终态，禁止回退）
+    - pending_pack / exception：不在本函数处理
+    - draft_only 路径不得调用本函数
 
     Args:
         db: 数据库会话
@@ -757,7 +766,7 @@ def reset_goods_for_replan(
             continue
         goods_list = db.query(Goods).filter(
             Goods.order_id == order.id,
-            Goods.status.in_(["packed", "in_transit", "delivered"]),
+            Goods.status.in_(list(REPLAN_RESETTABLE_GOODS_STATUSES)),
         ).all()
         for goods in goods_list:
             transition_goods_status(db, goods, "pending_pack", force=True)

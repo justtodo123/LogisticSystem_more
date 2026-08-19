@@ -186,3 +186,51 @@ class TestScheduleTransaction:
         for order_code in ["O001", "O002", "O003"]:
             order = db_session.query(Order).filter(Order.order_code == order_code).first()
             assert order.status == "unassigned"
+
+
+class TestSchedulePipelineDeliveredIntegrity:
+    """混合状态订单：已送达货物不进入新方案"""
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_pipeline_excludes_delivered_goods(
+        self, db_session, test_nodes, test_orders, test_goods, test_vehicles, test_drivers
+    ):
+        test_goods["G001"].status = "delivered"
+        db_session.commit()
+
+        schedule_result = await ScheduleService.create_global_schedule(
+            order_codes=["O001"],
+            algorithm="traditional",
+            db=db_session,
+            preview=True,
+            is_replan=True,
+        )
+        assert schedule_result["code"] == 0
+        codes = [gs["goods_code"] for gs in schedule_result["data"].get("goods_schedules", [])]
+        # preview 响应可能不带 goods_schedules，改查库
+        gs = db_session.query(GlobalSchedule).filter(
+            GlobalSchedule.schedule_code == schedule_result["data"]["schedule_code"]
+        ).first()
+        scheduled = [item["goods_code"] for item in gs.goods_schedules]
+        assert "G001" not in scheduled
+        assert "G002" in scheduled
+
+        confirm_result = await ScheduleService.confirm_schedule(
+            schedule_code=schedule_result["data"]["schedule_code"],
+            db=db_session,
+        )
+        assert confirm_result["code"] == 0
+
+        db_session.refresh(test_goods["G001"])
+        assert test_goods["G001"].status == "delivered"
+
+        packages = db_session.query(Package).filter(Package.schedule_id == gs.id).all()
+        packed_codes = []
+        for pkg in packages:
+            items = pkg.goods_items or []
+            for item in items:
+                packed_codes.append(item.get("goods_code"))
+        assert "G001" not in packed_codes
+        assert "G002" in packed_codes
+

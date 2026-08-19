@@ -28,6 +28,7 @@ proced_problem/
 | 007 | [OrderCreate schema 未校验 time_window 合法性，非法时间窗直接入库](007-ordercreate-time-window-unvalidated.md) | 2026-08-14 | validation, pydantic, schema, boundary, scheduling |
 | 008 | [algorithm="deepseek" 未实现，策略工厂仅注册 greedy/dummy](008-deepseek-algorithm-not-implemented.md) | 2026-08-14 | algorithm, strategy-pattern, factory, docs-drift, ai |
 | 009 | [schedule_service 残留 DEBUG/ERROR print 语句，内部状态泄漏到 stdout](009-residual-debug-print.md) | 2026-08-14 | logging, code-hygiene, print, observability |
+| 010 | [已送达货物在 AI 重规划中被打回 pending_pack](010-delivered-goods-reset-on-replan.md) | 2026-08-19 | state-machine, replan, delivered, data-integrity |
 
 ## 如何新增记录
 

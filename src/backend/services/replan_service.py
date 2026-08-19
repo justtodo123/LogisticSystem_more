@@ -199,11 +199,10 @@ class ReplanService:
                             if v and v.vehicle_code not in excluded_vehicles:
                                 excluded_vehicles.append(v.vehicle_code)
 
-            # 4.5 AI重规划（无异常事件）：重置货物状态为 pending_pack
-            #     packaging(is_replan=False) 只查 pending_pack 的货物，
-            #     但原方案已将货物推进到 packed/in_transit/delivered，
-            #     需要全部回退才能重新打包。
-            #    draft_only=True 时不重置（仅生成草案，不改变现有状态）
+            # 4.5 AI重规划（无异常事件）：仅重置 packed/in_transit
+            #     packaging(is_replan=False) 只查 pending_pack 的货物。
+            #     delivered 为终态，不回退、不再入包。
+            #     draft_only=True 时不重置（仅生成草案，不改变现有状态）
             if not has_event and not draft_only:
                 # AI 重规划：重置货物状态，使其重新参与 F007 调度
                 reset_goods_for_replan(db, order_codes)

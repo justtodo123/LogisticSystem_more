@@ -102,9 +102,11 @@ def packaging(
     all_goods_codes = [gs["goods_code"] for gs in goods_schedules]
     goods_map: Dict[str, Goods] = {}
     for gc in all_goods_codes:
+        # delivered 终态货物不入包；仅收 pending_pack / exception
         goods = db.query(Goods).filter(
             Goods.goods_code == gc,
-            Goods.status == ("exception" if is_replan else "pending_pack")
+            Goods.status == ("exception" if is_replan else "pending_pack"),
+            Goods.status != "delivered",
         ).first()
         if goods:
             goods_map[gc] = goods
