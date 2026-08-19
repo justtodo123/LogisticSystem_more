@@ -1,7 +1,7 @@
 # 智能物流调度平台
 
 > LogisticSystem — FastAPI + Vue 3 全栈物流调度与路径优化平台  
-> T0-T6 优化完成 · 626 测试全绿 · 83 个 API 端点
+> T0-T6 优化周期已完成 · 当前测试基线 2026-08-19：`src/backend` `python -m pytest -q -p no:cacheprovider` → 645 passed, 196 warnings（此前 635，T0-T6 历史 626） · 约 83 个 API 端点
 
 ## 快速开始
 
@@ -11,6 +11,8 @@ docker compose up -d
 docker exec -it logistics-backend python scripts/init_demo_data.py
 # 访问 http://localhost:8080 · 登录 admin / 123456
 ```
+
+> Docker 验证级别（2026-08-19）：仓库含 Compose/镜像文件与 CI 构建配置；本机无 Docker，Compose 启动与全新种子库业务 smoke **未验证**，见 [plan 02](My_doc/plan_todo/02-docker-seed-e2e.md)。
 
 ```bash
 # 本地开发

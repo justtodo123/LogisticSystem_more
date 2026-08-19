@@ -1,6 +1,6 @@
 # Git 协作规范
 
-> 最后更新：2026-08-11（T0-T6 优化后刷新）
+> 最后更新：2026-08-19（实时状态改指 plan_todo）
 
 ## 远程仓库
 
@@ -36,7 +36,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 1. 从 `main` 拉取最新代码
 2. 创建任务分支：`git checkout -b feat/Tx-x`
 3. 开发和测试（保证已有测试不回归）
-4. 更新 [TASK_TRACKER.md](../My_doc/TASK_TRACKER.md) 中的任务状态
+4. 更新 [plan_todo/README.md](../My_doc/plan_todo/README.md) 与对应计划卡状态
 5. 提交并推送分支
 6. 合并到 `main` 后删除分支
 
@@ -51,5 +51,5 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ## 文档维护
 
 - 功能变更后同步更新 `docs/` 下对应文档
-- 任务进度实时记录到 `My_doc/TASK_TRACKER.md`
+- 任务进度实时记录到 `My_doc/plan_todo/README.md` 与对应计划卡；已完成的旧计划只保留在 `My_doc/post_plan/`
 - 历史文档归档到 `docs/history/`，不在 `docs/` 根目录分散
