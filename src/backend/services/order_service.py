@@ -23,6 +23,7 @@ from core.order_status import (
     is_known_order_status,
     unknown_order_status_message,
 )
+from core.validators import normalize_time_window_requirement
 
 
 class OrderService:
@@ -351,6 +352,9 @@ class OrderService:
                     # 校验必填字段
                     if not all([destination_node_code, time_window, goods_name, goods_type, weight, volume]):
                         raise ValueError("必填字段不能为空")
+                    time_window, tw_error = normalize_time_window_requirement(time_window)
+                    if tw_error:
+                        raise ValueError(tw_error)
 
                     # 校验目的地节点是否存在
                     dest_node = db.query(Node).filter(Node.node_code == destination_node_code).first()

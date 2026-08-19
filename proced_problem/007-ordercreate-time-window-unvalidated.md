@@ -4,7 +4,7 @@ slug: ordercreate-time-window-unvalidated
 date: 2026-08-14
 tags: [validation, pydantic, schema, boundary, scheduling]
 severity: minor
-status: open
+status: fixed
 related_files:
   - src/backend/schemas/order.py
   - src/backend/services/order_service.py
@@ -45,7 +45,10 @@ related_pr: ""
 
 ## 5. 解决方案
 
-**状态：open（待澄清，暂缓）**。
+**状态：fixed（2026-08-19，plan 04 方案 A）**。
+
+书面决策：保留自由文本「时效要求」，只做 strip / 非空 / 控制字符 / 长度≤32。不启用 `HH:MM-HH:MM` 正则，不拆 start/end。
+
 
 ISSUE-004 建议给 `time_window` 加严格 `HH:MM-HH:MM` 正则校验，但**该建议与代码库实际契约冲突**，直接落地会引入回归：
 
@@ -54,14 +57,24 @@ ISSUE-004 建议给 `time_window` 加严格 `HH:MM-HH:MM` 正则校验，但**�
 - 全链路无人解析 `time_window` 的起止时间做 ETA/SLA 计算（`deepseek_service.py:98` 仅作字符串拼进 AI prompt），因此"非法时间窗影响 ETA/SLA"的顾虑在当前实现中不成立。
 - 代码库已有 `core/validators.py:64` 的 `validate_time_window`，但它是**死代码**（grep 全仓无调用点），且其正则同样假设 `HH:MM-HH:MM`。
 
-**待决策**：若确实要校验，需先明确 `time_window` 的规范（是自由文本、还是拆成 `time_window_start/end` 两个 TIME 字段——后者已在 `database.py:68-69` 预留）。当前不改动 schema，避免破坏性回归。
+**已决策（2026-08-19）**：选方案 A。不启用严格时间正则，不拆 `time_window_start/end`。调度真正消费时间窗时再考虑 C。
 
 ## 6. 验证
 
-暂不修改代码，无回归风险。若后续决定引入校验，需同步更新 `tests/conftest.py` / `test_orders.py` 等用 `"全天"`、`"2026-06-15 全天"` 的用例。
+- 定向：`tests/unit/core/test_time_window.py` + `tests/api/test_orders.py` + `tests/api/test_orders_import.py` + `tests/unit/services/test_order_service.py` → 48 passed
+- 全量：`python -m pytest -q -p no:cacheprovider` → 678 passed, 209 warnings
+- 前端：`npm run build`（`vue-tsc -b && vite build`）通过
+- 现有 `全天` / `2026-06-15 全天` 样本继续合法；空串与超长 33 字符创建返回 HTTP 422
 
 ## 7. 通用经验
 
 1. **给字段加校验前，先摸清该字段的真实取值分布**：`time_window` 的合法值远不止 `HH:MM-HH:MM`，先 `grep` 全仓所有 `time_window=` 的赋值，再决定校验规则，否则严格正则会误杀"全天"这类合法值。
 2. **测试报告的建议不等于可直接落地**：ISSUE-004 的正则示例与代码库契约不符，落地前要对着现有测试/种子数据核对。
 3. **已存在但未被调用的校验函数是"校验意图与实现脱节"的信号**：`core/validators.py:validate_time_window` 无人调用，说明"想校验"和"实际没校验"长期并存，需先决定要不要启用。
+
+
+## 8. 决策落地（2026-08-19）
+
+- 方案 A：展示性时效要求，不参与计算。
+- `normalize_time_window_requirement` 用于创建、更新、导入。
+- `validate_time_window` 旧名改为同一套自由文本规则，避免再被当成严格时间窗。

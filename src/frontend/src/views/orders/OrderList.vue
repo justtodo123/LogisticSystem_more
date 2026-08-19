@@ -354,7 +354,12 @@ async function handleClose(row: Order): Promise<void> {
           </el-select>
         </el-form-item>
         <el-form-item label="时效要求" prop="time_window">
-          <el-input v-model="form.time_window" placeholder="如 09:00-12:00" />
+          <el-input
+            v-model="form.time_window"
+            maxlength="32"
+            show-word-limit
+            placeholder="如 全天 或 09:00-12:00"
+          />
         </el-form-item>
         <template v-if="dialogMode === 'create'">
           <el-divider content-position="left">货物明细（至少 1 条）</el-divider>

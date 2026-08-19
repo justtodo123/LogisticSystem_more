@@ -662,3 +662,70 @@ class TestOrderStatusContract:
         response = client.post("/api/orders/O_in_transit/close", headers=headers)
         assert response.status_code == 200
         assert response.json()["code"] != 0
+
+class TestOrderTimeWindowContract:
+    """plan 04 A：时效要求自由文本，只做最小约束"""
+
+    def _headers_and_nodes(self, client, db_session):
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        node = Node(
+            node_code="SO001",
+            name="测试节点",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="sorting_center",
+        )
+        db_session.add(node)
+        db_session.flush()
+        db_session.add(SortingCenter(node_id=node.id, level=0))
+        storage_node = Node(
+            node_code="SC001",
+            name="存储中心",
+            location="测试",
+            latitude=30.6,
+            longitude=114.4,
+            node_type="storage_center",
+        )
+        db_session.add(storage_node)
+        db_session.flush()
+        db_session.add(StorageCenter(node_id=storage_node.id, capacity=1000.0))
+        db_session.commit()
+        token = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        ).json()["data"]["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    def _payload(self, time_window):
+        return {
+            "destination_node_code": "SO001",
+            "time_window": time_window,
+            "goods": [
+                {"goods_name": "测试货物", "goods_type": "普通", "weight": 1.0, "volume": 0.5}
+            ],
+        }
+
+    @pytest.mark.api
+    def test_create_strips_and_keeps_all_day(self, client, db_session):
+        headers = self._headers_and_nodes(client, db_session)
+        response = client.post("/api/orders", json=self._payload("  全天  "), headers=headers)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0
+        assert body["data"]["time_window"] == "全天"
+
+    @pytest.mark.api
+    def test_create_rejects_empty_and_too_long(self, client, db_session):
+        headers = self._headers_and_nodes(client, db_session)
+        empty = client.post("/api/orders", json=self._payload("   "), headers=headers)
+        assert empty.status_code == 422
+        too_long = client.post("/api/orders", json=self._payload("x" * 33), headers=headers)
+        assert too_long.status_code == 422
