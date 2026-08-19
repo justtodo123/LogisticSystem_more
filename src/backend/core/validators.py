@@ -61,17 +61,31 @@ def validate_page_params(page: int, page_size: int) -> List[str]:
     return errors
 
 
+TIME_WINDOW_MAX_LEN = 32
+
+
+def normalize_time_window_requirement(value) -> Tuple[Optional[str], Optional[str]]:
+    """时效要求：自由文本最小约束，不解析起止时间。
+
+    允许「全天」、带日期前缀、``9:00-18:00`` 等展示文本。
+    只做 strip、非空、控制字符和长度（对齐 orders.time_window VARCHAR(32)）。
+    """
+    if value is None:
+        return None, "时效要求不能为空"
+    text = str(value).strip()
+    if not text:
+        return None, "时效要求不能为空"
+    if any(ord(ch) < 32 for ch in text):
+        return None, "时效要求不能包含控制字符"
+    if len(text) > TIME_WINDOW_MAX_LEN:
+        return None, f"时效要求不能超过 {TIME_WINDOW_MAX_LEN} 个字符"
+    return text, None
+
+
 def validate_time_window(time_window: str) -> Tuple[bool, Optional[str]]:
-    """校验时间窗口格式（如 '08:00-12:00'）"""
-    if not time_window:
-        return True, None
-    parts = time_window.split("-")
-    if len(parts) != 2:
-        return False, f"时间窗口 '{time_window}' 格式无效，应为 HH:MM-HH:MM"
-    time_pattern = re.compile(r"^\d{2}:\d{2}$")
-    if not (time_pattern.match(parts[0]) and time_pattern.match(parts[1])):
-        return False, f"时间窗口 '{time_window}' 格式无效，应为 HH:MM-HH:MM"
-    return True, None
+    """兼容旧名。订单时效要求按自由文本校验，不再要求 HH:MM-HH:MM。"""
+    _, error = normalize_time_window_requirement(time_window)
+    return error is None, error
 
 
 def validate_idempotency_key(key: str) -> Tuple[bool, Optional[str]]:

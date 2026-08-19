@@ -23,6 +23,7 @@ from models.node_dispatch import NodeDispatch
 from models.route import Route
 from models.exception_event import ExceptionEvent
 from models.log_event import LogEvent
+from core.order_status import ORDER_UNASSIGNED
 
 
 async def init_demo_data(db: Session):
@@ -71,14 +72,14 @@ async def _cleanup_old_data(db: Session):
     db.query(SortingCenter).delete()
     db.query(StorageCenter).delete()
     db.query(Node).delete()
-    db.query(User).filter(User.username.in_(["dispatcher", "manager"])).delete()
+    db.query(User).filter(User.username.in_(["dispatcher", "manager", "admin"])).delete()
     
     db.commit()
     print("旧数据清理完成")
 
 
 async def _create_users(db: Session):
-    """创建用户（dispatcher、manager）"""
+    """创建用户（dispatcher、manager、admin）"""
     # 创建dispatcher用户
     dispatcher = db.query(User).filter(User.username == "dispatcher").first()
     if not dispatcher:
@@ -100,6 +101,17 @@ async def _create_users(db: Session):
             role="manager"
         )
         db.add(manager)
+    
+    # 创建admin用户
+    admin = db.query(User).filter(User.username == "admin").first()
+    if not admin:
+        password_hash = bcrypt.hashpw("123456".encode(), bcrypt.gensalt()).decode()
+        admin = User(
+            username="admin",
+            password_hash=password_hash,
+            role="admin"
+        )
+        db.add(admin)
     
     db.commit()
     print("用户创建完成")
@@ -326,7 +338,7 @@ async def _create_orders_and_goods(db: Session):
                 order_code=order_code,
                 destination_node_id=dest_node.id,
                 time_window="9:00-18:00",
-                status="pending"
+                status=ORDER_UNASSIGNED
             )
             db.add(order)
             db.flush()

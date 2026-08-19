@@ -18,24 +18,43 @@ from models.base import Base
 @pytest.fixture(scope="function")
 def client(test_db):
     """创建 FastAPI TestClient，覆盖数据库依赖"""
+    from sqlalchemy.pool import StaticPool
+    from sqlalchemy.orm import sessionmaker
+
     from main import app
-    from config.database import get_db
-    
-    engine, TestingSessionLocal = test_db
-    
+    from config import database as db_mod
+
+    _engine, TestingSessionLocal = test_db
+
     def override_get_db():
         session = TestingSessionLocal()
         try:
             yield session
         finally:
             session.close()
-    
-    app.dependency_overrides[get_db] = override_get_db
-    
-    with TestClient(app) as c:
-        yield c
-    
-    app.dependency_overrides.clear()
+
+    # TestClient 会跑 startup/init_db。请求走内存 test_db，
+    # 启动建表也必须走内存库，不能依赖仓库里是否已有 data/。
+    startup_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    previous_engine = db_mod.engine
+    previous_session = db_mod.SessionLocal
+    db_mod.engine = startup_engine
+    db_mod.SessionLocal = sessionmaker(
+        autocommit=False, autoflush=False, bind=startup_engine
+    )
+    app.dependency_overrides[db_mod.get_db] = override_get_db
+    try:
+        with TestClient(app) as c:
+            yield c
+    finally:
+        app.dependency_overrides.clear()
+        db_mod.engine = previous_engine
+        db_mod.SessionLocal = previous_session
+        startup_engine.dispose()
 
 
 @pytest.fixture(scope="function")

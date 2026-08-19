@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import DetailDescriptions from '@/components/detail/DetailDescriptions.vue'
-import { ORDER_STATUS_MAP } from '@/constants/status'
-import type { OrderDetail, OrderStatus } from '@/types/order'
+import { resolveOrderStatusView } from '@/constants/status'
+import type { OrderDetail } from '@/types/order'
 import { formatDateTime } from '@/utils/format'
 
 defineProps<{
   data: OrderDetail
 }>()
 
-function statusLabel(status: OrderStatus): string {
-  return ORDER_STATUS_MAP[status]?.label ?? status
+function statusLabel(status: string): string {
+  return resolveOrderStatusView(status).label
 }
 </script>
 

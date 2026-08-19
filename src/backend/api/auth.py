@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
-from config.database import get_db
+from config.database import get_db, settings
 from schemas.user import UserLoginRequest, UserLoginResponse, UserResponse
 from services.auth_service import (
     create_access_token,
@@ -56,7 +56,7 @@ async def login(credentials: UserLoginRequest, request: Request, db: Session = D
         "data": {
             "access_token": access_token,
             "token_type": "bearer",
-            "expires_in": 86400,
+            "expires_in": settings.JWT_EXPIRE_SECONDS,
             "role": user.role,
             "display_name": user.display_name,
         },

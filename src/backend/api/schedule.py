@@ -32,11 +32,11 @@ class GlobalScheduleRequest(BaseModel):
     """全局调度请求体"""
     order_codes: Optional[List[str]] = Field(
         default=None,
-        description="订单编号列表，不传则处理所有 status=pending 的订单",
+        description="订单编号列表，不传则处理所有 status=unassigned 的订单",
     )
     algorithm: str = Field(
         ...,
-        description="算法类型：traditional / deepseek",
+        description="算法类型：traditional（deepseek 预留未实现）",
     )
     preview: bool = Field(
         default=True,

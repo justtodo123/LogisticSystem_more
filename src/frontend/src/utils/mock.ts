@@ -12,6 +12,8 @@ export function filterAndPaginate<T>(
   return {
     items: filtered.slice(start, start + pageSize),
     total: filtered.length,
+    page,
+    page_size: pageSize,
   }
 }
 

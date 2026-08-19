@@ -1,9 +1,11 @@
-# CD 工作流：main 分支通过（CI 为分支保护必检项）后自动构建并推送 Docker 镜像
+# CD 工作流：CI 在 main 分支成功完成后自动构建并推送 Docker 镜像
+# 通过 workflow_run 依赖 CI（代码层强制"未通过 CI 不推送"，不依赖仓库分支保护设置）
 name: CD
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -12,9 +14,12 @@ permissions:
 jobs:
   docker-build-push:
     name: 构建并推送 Docker 镜像
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       # GHCR 镜像名必须全小写，github.repository 可能含大写（如 LogisticSystem）
       - name: 计算小写镜像名
@@ -36,7 +41,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.vars.outputs.image }}-backend:latest
-            ${{ steps.vars.outputs.image }}-backend:${{ github.sha }}
+            ${{ steps.vars.outputs.image }}-backend:${{ github.event.workflow_run.head_sha }}
 
       - name: 构建并推送前端镜像
         uses: docker/build-push-action@v6
@@ -46,4 +51,4 @@ jobs:
           push: true
           tags: |
             ${{ steps.vars.outputs.image }}-frontend:latest
-            ${{ steps.vars.outputs.image }}-frontend:${{ github.sha }}
+            ${{ steps.vars.outputs.image }}-frontend:${{ github.event.workflow_run.head_sha }}

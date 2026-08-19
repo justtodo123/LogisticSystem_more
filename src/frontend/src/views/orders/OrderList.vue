@@ -8,6 +8,7 @@ import TablePagination from '@/components/crud/TablePagination.vue'
 import { usePagedList } from '@/composables/usePagedList'
 import { listLevel0SortingCenters } from '@/api/nodes'
 import {
+  closeOrder,
   createOrder,
   deleteOrder,
   getOrder,
@@ -18,10 +19,17 @@ import {
 import EntityDetailDrawer from '@/components/detail/EntityDetailDrawer.vue'
 import OrderDetailBody from '@/components/detail/OrderDetailBody.vue'
 import { useEntityDetail } from '@/composables/useEntityDetail'
-import { ORDER_STATUS_MAP, ORDER_STATUS_OPTIONS } from '@/constants/status'
+import { ORDER_STATUS_OPTIONS, resolveOrderStatusView } from '@/constants/status'
 import { useAuthStore } from '@/stores/auth'
 import type { NodeItem } from '@/types/node'
-import type { Order, OrderCreatePayload, OrderDetail, OrderGoodsCreateItem, OrderStatus } from '@/types/order'
+import {
+  canCloseOrder,
+  canMutateOrder,
+  type Order,
+  type OrderCreatePayload,
+  type OrderDetail,
+  type OrderGoodsCreateItem,
+} from '@/types/order'
 import { formatDateTime } from '@/utils/format'
 
 const authStore = useAuthStore()
@@ -125,7 +133,7 @@ function openCreate(): void {
 }
 
 function openEdit(row: Order): void {
-  if (row.status !== 'pending') return
+  if (!canMutateOrder(row.status)) return
   dialogMode.value = 'edit'
   editingCode.value = row.order_code
   form.order_code = row.order_code
@@ -202,12 +210,26 @@ async function handleImport(options: UploadRequestOptions): Promise<void> {
   }
 }
 
-function statusLabel(status: OrderStatus): string {
-  return ORDER_STATUS_MAP[status]?.label ?? status
+function statusLabel(status: string): string {
+  return resolveOrderStatusView(status).label
 }
 
-function statusTag(status: OrderStatus): string {
-  return ORDER_STATUS_MAP[status]?.tag ?? 'info'
+function statusTag(status: string): string {
+  return resolveOrderStatusView(status).tag
+}
+
+async function handleClose(row: Order): Promise<void> {
+  try {
+    await ElMessageBox.confirm(`确定关闭订单 ${row.order_code}？关闭后不可恢复。`, '确认关闭', {
+      type: 'warning',
+    })
+    await closeOrder(row.order_code)
+    ElMessage.success('已关闭')
+    await load()
+  } catch (e) {
+    if (e === 'cancel') return
+    ElMessage.error(e instanceof Error ? e.message : '关闭失败')
+  }
 }
 </script>
 
@@ -272,17 +294,25 @@ function statusTag(status: OrderStatus): string {
       </el-table-column>
       <el-table-column
         label="操作"
-        width="180"
+        width="220"
         fixed="right"
       >
         <template #default="{ row }">
           <el-button type="primary" link @click="openOrderDetail(row.order_code, `订单 · ${row.order_code}`)">
             查看
           </el-button>
-          <template v-if="authStore.isDispatcher && row.status === 'pending'">
+          <template v-if="authStore.isDispatcher && canMutateOrder(row.status)">
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
+          <el-button
+            v-if="authStore.isDispatcher && canCloseOrder(row.status)"
+            type="warning"
+            link
+            @click="handleClose(row)"
+          >
+            关闭
+          </el-button>
         </template>
       </el-table-column>
     </DataTable>
@@ -324,7 +354,12 @@ function statusTag(status: OrderStatus): string {
           </el-select>
         </el-form-item>
         <el-form-item label="时效要求" prop="time_window">
-          <el-input v-model="form.time_window" placeholder="如 09:00-12:00" />
+          <el-input
+            v-model="form.time_window"
+            maxlength="32"
+            show-word-limit
+            placeholder="如 全天 或 09:00-12:00"
+          />
         </el-form-item>
         <template v-if="dialogMode === 'create'">
           <el-divider content-position="left">货物明细（至少 1 条）</el-divider>

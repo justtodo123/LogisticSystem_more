@@ -1,9 +1,33 @@
+from pathlib import Path
+
 from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from config.settings import settings  # noqa: F401  # 向后兼容：其他模块通过 from config.database import settings 使用
 
+
+def sqlite_file_path(database_url: str) -> Path | None:
+    """解析 SQLite 文件路径；内存库返回 None。"""
+    if not database_url.startswith("sqlite:///"):
+        return None
+    raw = database_url[len("sqlite:///"):]
+    if raw.startswith(":memory:") or "mode=memory" in raw:
+        return None
+    return Path(raw)
+
+
+def ensure_sqlite_parent_dir(database_url: str) -> None:
+    """SQLite 不会自动创建父目录，空仓库首次启动前补齐。"""
+    path = sqlite_file_path(database_url)
+    if path is None:
+        return
+    parent = path.parent
+    if parent and str(parent) != ".":
+        parent.mkdir(parents=True, exist_ok=True)
+
+
 # 创建SQLAlchemy引擎
+ensure_sqlite_parent_dir(settings.DATABASE_URL)
 engine = create_engine(
     settings.DATABASE_URL,
     connect_args={"check_same_thread": False}  # SQLite需要此配置
@@ -27,6 +51,7 @@ def get_db():
 
 def init_db():
     """初始化数据库，创建所有表"""
+    ensure_sqlite_parent_dir(str(engine.url))
     # 导入所有模型以确保它们被注册到Base.metadata
     from models import (  # noqa: F401
         User, LogEvent, Node, StorageCenter, SortingCenter,

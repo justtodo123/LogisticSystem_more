@@ -7,9 +7,11 @@
 
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import func
 
 from algorithms.route_planning import run_route_planning
+from core.error_codes import CODE_PARAM_ERROR
+from core.validators import validate_page_params
 from models.route import Route
 from models.dispatch_batch import DispatchBatch
 from models.node_dispatch import NodeDispatch
@@ -146,41 +148,38 @@ class RouteService:
         Returns:
             统一响应格式 dict
         """
-        # 1. 构建查询
-        query = db.query(Route).join(NodeDispatch, Route.dispatch_id == NodeDispatch.id)
-        
-        # 2. 按 batch_code 筛选（可选）
+        errors = validate_page_params(page, page_size)
+        if errors:
+            return error_response(code=CODE_PARAM_ERROR, message="; ".join(errors))
+
+        # 一次 join 取出列表所需字段，避免循环内再查 NodeDispatch/Batch/Vehicle
+        query = (
+            db.query(
+                Route,
+                NodeDispatch.dispatch_code,
+                DispatchBatch.batch_code,
+                Vehicle.vehicle_code,
+            )
+            .join(NodeDispatch, Route.dispatch_id == NodeDispatch.id)
+            .join(DispatchBatch, NodeDispatch.dispatch_batch_id == DispatchBatch.id)
+            .join(Vehicle, Route.vehicle_id == Vehicle.id)
+        )
+
         if batch_code:
-            query = query.join(DispatchBatch, NodeDispatch.dispatch_batch_id == DispatchBatch.id)
             query = query.filter(DispatchBatch.batch_code == batch_code)
-        
-        # 3. 按 vehicle_code 筛选（可选，需JOIN vehicles表）
         if vehicle_code:
-            query = query.join(Vehicle, Route.vehicle_id == Vehicle.id)
             query = query.filter(Vehicle.vehicle_code == vehicle_code)
-        
-        # 4. 分页查询
-        total = query.count()
-        routes = query.offset((page - 1) * page_size).limit(page_size).all()
-        
-        # 5. 构建响应
+
+        total = query.order_by(None).with_entities(func.count(Route.id)).scalar() or 0
+        rows = (
+            query.order_by(Route.created_at.desc(), Route.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+
         items = []
-        for route in routes:
-            # 获取 batch_code
-            dispatch = db.query(NodeDispatch).filter(NodeDispatch.id == route.dispatch_id).first()
-            batch_code_value = None
-            if dispatch:
-                batch = db.query(DispatchBatch).filter(DispatchBatch.id == dispatch.dispatch_batch_id).first()
-                if batch:
-                    batch_code_value = batch.batch_code
-            
-            # 获取 dispatch_code
-            dispatch_code_value = dispatch.dispatch_code if dispatch else None
-            
-            # 获取 vehicle_code
-            vehicle = db.query(Vehicle).filter(Vehicle.id == route.vehicle_id).first()
-            vehicle_code_value = vehicle.vehicle_code if vehicle else None
-            
+        for route, dispatch_code_value, batch_code_value, vehicle_code_value in rows:
             items.append({
                 "route_code": route.route_code,
                 "batch_code": batch_code_value,
@@ -191,10 +190,12 @@ class RouteService:
                 "total_emission": float(route.total_emission),
                 "created_at": route.created_at.isoformat() if route.created_at else None
             })
-        
+
         return success_response(data={
             "items": items,
-            "total": total
+            "total": total,
+            "page": page,
+            "page_size": page_size,
         })
     
     @staticmethod

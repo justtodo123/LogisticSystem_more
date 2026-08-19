@@ -90,7 +90,7 @@ export async function createOrder(payload: OrderCreatePayload): Promise<Order> {
       destination_node_code: payload.destination_node_code,
       destination_node_name: dest.name,
       time_window: payload.time_window,
-      status: 'pending',
+      status: 'unassigned',
       created_at: new Date().toISOString(),
     }
     orders.unshift(order)
@@ -112,8 +112,8 @@ export async function updateOrder(
     const orders = await getMockOrders()
     const idx = orders.findIndex((o) => o.order_code === orderCode)
     if (idx < 0) throw new Error('订单不存在')
-    if (orders[idx].status !== 'pending') {
-      throw new Error('仅待分配订单可编辑')
+    if (orders[idx].status !== 'unassigned' && orders[idx].status !== 'assigned') {
+      throw new Error('仅待分配/已分配订单可编辑')
     }
     if (payload.destination_node_code) {
       const nodes = await getMockNodes()
@@ -137,8 +137,8 @@ export async function deleteOrder(orderCode: string): Promise<void> {
     const orders = await getMockOrders()
     const idx = orders.findIndex((o) => o.order_code === orderCode)
     if (idx < 0) throw new Error('订单不存在')
-    if (orders[idx].status !== 'pending') {
-      throw new Error('配送中或已完成的订单不可删除')
+    if (orders[idx].status !== 'unassigned' && orders[idx].status !== 'assigned') {
+      throw new Error('仅待分配/已分配订单可删除')
     }
     orders.splice(idx, 1)
     return
@@ -169,4 +169,19 @@ export async function importOrders(file: File): Promise<OrderImportResult> {
     fail_count: data.failed_count,
     errors: data.failed_rows?.map((row) => JSON.stringify(row)),
   }
+}
+
+export async function closeOrder(orderCode: string): Promise<Order> {
+  if (useMockBasicData()) {
+    const orders = await getMockOrders()
+    const idx = orders.findIndex((o) => o.order_code === orderCode)
+    if (idx < 0) throw new Error('订单不存在')
+    if (orders[idx].status !== 'unassigned' && orders[idx].status !== 'assigned') {
+      throw new Error('仅待分配/已分配订单可关闭')
+    }
+    orders[idx] = { ...orders[idx], status: 'closed' }
+    return orders[idx]
+  }
+  const { data } = await request.post<Order>(`/orders/${encodeURIComponent(orderCode)}/close`)
+  return data
 }

@@ -217,7 +217,7 @@ async def _build_context(
     from services.vehicle_service import VehicleService
     from services.node_service import NodeService
 
-    orders_result = await OrderService.get_orders(page=1, page_size=1000, status="pending", db=db)
+    orders_result = await OrderService.get_orders(page=1, page_size=1000, status="unassigned", db=db)
     vehicles_result = await VehicleService.get_vehicles(page=1, page_size=1000, status="idle", db=db)
     nodes_result = await NodeService.get_nodes(page=1, page_size=1000, db=db)
 

@@ -8,7 +8,7 @@
 
 | 归档目录 | 原路径 | 份数 | 为什么归档 |
 |----------|--------|------|------------|
-| `开发计划/` | `docs/MVP开发计划*.md` + `docs/pre-optimization/P1开发计划*.md` | 6 | 原计划已全部执行完毕，当前进度见根目录 [TASK_TRACKER.md](../../My_doc/TASK_TRACKER.md) |
+| `开发计划/` | `docs/MVP开发计划*.md` + `docs/pre-optimization/P1开发计划*.md` | 6 | 原计划已全部执行完毕，当前进度见 [plan_todo/README.md](../../My_doc/plan_todo/README.md) |
 | `PRD/` | `docs/prds/*.md` | 2 | 产品需求文档 V2.7+V2.8，功能已超出 PRD 范围（含 T0-T6 新增） |
 | `架构/` | `docs/architecture/*.md` | 2 | V1.0+V1.1，未反映 T4-3 Redis、T5-2 地图、T6 AI 加固等优化 |
 | `规范与流程/` | `docs/*规范*.md` | 4 | 已全面重写为当前有效版（`docs/` 下同名文件） |

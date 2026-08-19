@@ -165,6 +165,9 @@ def _build_schedule(
 
     for order in orders:
         for goods in order.goods:
+            # delivered 为终态：不再进入新方案的 goods_schedules
+            if goods.status == "delivered":
+                continue
             # 2a. 获取 L0 节点（货物所在存储中心）
             l0_node = db.query(Node).filter(Node.id == goods.node_id).first()
             if not l0_node:
@@ -267,6 +270,9 @@ def _build_schedule(
                 on_time_ok += 1
 
     # ── 4. 计算结果 ──
+    if not goods_schedules:
+        raise ValueError("没有可重排的未终态货物（delivered 货物不参与重规划）")
+
     goods_count = len(goods_schedules)
     # 整体评分：所有货物评分之和（保持既有 lower-better 语义）
     overall_score = round(total_distance * w1 + total_time * w2 + goods_count * w3, 4)

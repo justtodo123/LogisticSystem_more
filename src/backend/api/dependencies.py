@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ security = HTTPBearer()
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
@@ -31,6 +32,8 @@ async def get_current_user(
         user = get_user_by_username(db, username)
         if user is None or not user.is_active:
             raise HTTPException(status_code=401, detail="未登录或 Token 无效")
+        # 供审计中间件（middleware/audit_log.py）读取，记录操作者
+        request.state.current_user = user
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token 已过期，请重新登录")

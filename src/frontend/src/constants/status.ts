@@ -1,7 +1,7 @@
 import type { DriverStatus } from '@/types/driver'
 import type { GoodsStatus } from '@/types/goods'
 import type { PackageStatus } from '@/types/package'
-import type { OrderStatus } from '@/types/order'
+import { isOrderStatus, type OrderStatus } from '@/types/order'
 import type { VehicleStatus } from '@/types/vehicle'
 
 type TagType = 'primary' | 'success' | 'warning' | 'info' | 'danger'
@@ -10,10 +10,23 @@ export const ORDER_STATUS_MAP: Record<
   OrderStatus,
   { label: string; tag: TagType }
 > = {
-  pending: { label: '待分配', tag: 'info' },
-  delivering: { label: '配送中', tag: 'primary' },
-  completed: { label: '已完成', tag: 'success' },
+  unassigned: { label: '待分配', tag: 'info' },
+  assigned: { label: '已分配', tag: 'primary' },
+  in_transit: { label: '运输中', tag: 'warning' },
+  signed: { label: '已签收', tag: 'success' },
   exception: { label: '异常', tag: 'danger' },
+  closed: { label: '已关闭', tag: 'info' },
+}
+
+export function resolveOrderStatusView(status: string): {
+  label: string
+  tag: TagType
+  known: boolean
+} {
+  if (isOrderStatus(status)) {
+    return { ...ORDER_STATUS_MAP[status], known: true }
+  }
+  return { label: `未知状态（${status}）`, tag: 'warning', known: false }
 }
 
 export const ORDER_STATUS_OPTIONS = Object.entries(ORDER_STATUS_MAP).map(

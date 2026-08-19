@@ -187,7 +187,7 @@ function handleExplainClick(): void {
 
       <el-form-item label="执行目标">
         <el-radio-group v-model="targetMode" :disabled="loading">
-          <el-radio value="new">新建调度（全部 pending 订单）</el-radio>
+          <el-radio value="new">新建调度（全部待分配订单）</el-radio>
           <el-radio value="current" :disabled="!canUseCurrentReplan">
             重规划当前方案
           </el-radio>

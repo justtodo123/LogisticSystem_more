@@ -7,16 +7,12 @@
 - 响应内容正确（status: "ok"）
 """
 import pytest
-from fastapi.testclient import TestClient
-from main import app
-
-client = TestClient(app)
 
 
 class TestHealthCheck:
     """健康检查接口测试类"""
 
-    def test_health_check_success(self):
+    def test_health_check_success(self, client):
         """测试健康检查接口成功响应"""
         response = client.get("/api/health")
         
@@ -37,7 +33,7 @@ class TestHealthCheck:
         assert data["meta"]["degraded"] == False
         assert data["meta"]["degraded_reason"] is None
 
-    def test_health_check_response_structure(self):
+    def test_health_check_response_structure(self, client):
         """测试健康检查响应结构完整性"""
         response = client.get("/api/health")
         data = response.json()
@@ -52,7 +48,7 @@ class TestHealthCheck:
         assert "degraded" in data["meta"]
         assert "degraded_reason" in data["meta"]
 
-    def test_health_check_no_auth_required(self):
+    def test_health_check_no_auth_required(self, client):
         """测试健康检查接口不需要认证"""
         # 不带Token访问
         response = client.get("/api/health")

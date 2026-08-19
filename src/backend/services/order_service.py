@@ -16,6 +16,14 @@ from schemas.order import OrderCreate, OrderUpdate, OrderResponse, OrderImportRe
 from core.error_codes import (CODE_SUCCESS, CODE_PARAM_ERROR, CODE_INTERNAL_ERROR,
                              CODE_ORDER_NOT_FOUND, CODE_ORDER_STATUS_NOT_ALLOWED,
                              CODE_NODE_NOT_FOUND, CODE_ORDER_IMPORT_FAILED)
+from core.order_status import (
+    ORDER_CLOSABLE_STATUSES,
+    ORDER_MUTABLE_STATUSES,
+    ORDER_UNASSIGNED,
+    is_known_order_status,
+    unknown_order_status_message,
+)
+from core.validators import normalize_time_window_requirement
 
 
 class OrderService:
@@ -65,7 +73,7 @@ class OrderService:
                 order_code=order_code,
                 destination_node_id=dest_node.id,
                 time_window=order_create.time_window,
-                status="unassigned"
+                status=ORDER_UNASSIGNED
             )
             db.add(order)
             db.flush()  # 获取order.id
@@ -118,6 +126,12 @@ class OrderService:
                 joinedload(Order.goods)
             )
             if status:
+                if not is_known_order_status(status):
+                    return {
+                        "code": CODE_PARAM_ERROR,
+                        "message": unknown_order_status_message(status),
+                        "data": None,
+                    }
                 query = query.filter(Order.status == status)
 
             # 2. 分页
@@ -205,8 +219,8 @@ class OrderService:
             if not order:
                 return {"code": CODE_ORDER_NOT_FOUND, "message": "订单不存在", "data": None}
 
-            # 2. 校验订单状态（in_transit/signed/exception不可修改）
-            if order.status in ["in_transit", "signed", "exception"]:
+            # 2. 校验订单状态（仅 unassigned/assigned 可修改）
+            if order.status not in ORDER_MUTABLE_STATUSES:
                 return {"code": CODE_ORDER_STATUS_NOT_ALLOWED, "message": "订单状态不允许修改", "data": None}
 
             # 3. 更新字段
@@ -250,8 +264,8 @@ class OrderService:
             if not order:
                 return {"code": CODE_ORDER_NOT_FOUND, "message": "订单不存在", "data": None}
 
-            # 2. 校验订单状态（in_transit/signed/exception不可删除）
-            if order.status in ["in_transit", "signed", "exception"]:
+            # 2. 校验订单状态（仅 unassigned/assigned 可删除）
+            if order.status not in ORDER_MUTABLE_STATUSES:
                 return {"code": CODE_ORDER_STATUS_NOT_ALLOWED, "message": "订单状态不允许删除", "data": None}
 
             # 3. 先删除关联的goods（避免NOT NULL约束错误）
@@ -338,6 +352,9 @@ class OrderService:
                     # 校验必填字段
                     if not all([destination_node_code, time_window, goods_name, goods_type, weight, volume]):
                         raise ValueError("必填字段不能为空")
+                    time_window, tw_error = normalize_time_window_requirement(time_window)
+                    if tw_error:
+                        raise ValueError(tw_error)
 
                     # 校验目的地节点是否存在
                     dest_node = db.query(Node).filter(Node.node_code == destination_node_code).first()
@@ -365,7 +382,7 @@ class OrderService:
                         order_code=order_code,
                         destination_node_id=dest_node.id,
                         time_window=time_window,
-                        status="unassigned"
+                        status=ORDER_UNASSIGNED
                     )
                     db.add(order)
                     db.flush()
@@ -436,7 +453,7 @@ class OrderService:
                 return {"code": CODE_ORDER_NOT_FOUND, "message": "订单不存在", "data": None}
 
             # 2. 校验状态：仅 unassigned / assigned 可关闭
-            if order.status not in ("unassigned", "assigned"):
+            if order.status not in ORDER_CLOSABLE_STATUSES:
                 return {
                     "code": CODE_ORDER_STATUS_NOT_ALLOWED,
                     "message": f"订单状态 '{order.status}' 不允许关闭（仅 unassigned/assigned 可关闭）",
@@ -449,11 +466,21 @@ class OrderService:
             except ValueError as e:
                 return {"code": CODE_ORDER_STATUS_NOT_ALLOWED, "message": str(e), "data": None}
 
+            order.updated_at = datetime.now()
             db.commit()
+            dest_node = db.query(Node).filter(Node.id == order.destination_node_id).first()
             return {
                 "code": CODE_SUCCESS,
                 "message": "订单已关闭",
-                "data": {"order_code": order.order_code, "status": order.status}
+                "data": {
+                    "order_code": order.order_code,
+                    "destination_node_code": dest_node.node_code if dest_node else "",
+                    "destination_node_name": dest_node.name if dest_node else "",
+                    "time_window": order.time_window,
+                    "status": order.status,
+                    "created_at": order.created_at.isoformat(),
+                    "updated_at": order.updated_at.isoformat(),
+                }
             }
         except Exception as e:
             db.rollback()
