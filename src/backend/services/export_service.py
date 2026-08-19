@@ -18,15 +18,7 @@ from models.node import Node
 from models.order import Order
 from models.package import Package
 
-# 订单状态 → 中文文案
-ORDER_STATUS_TEXT = {
-    "unassigned": "待分配",
-    "assigned": "已分配",
-    "in_transit": "运输中",
-    "signed": "已签收",
-    "exception": "异常",
-    "closed": "已关闭",
-}
+from core.order_status import ORDER_STATUS_LABELS as ORDER_STATUS_TEXT
 
 # 订单报表列定义
 ORDER_HEADERS = [

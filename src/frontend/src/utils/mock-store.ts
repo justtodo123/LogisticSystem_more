@@ -3,6 +3,7 @@ import type { Goods } from '@/types/goods'
 import type { NodeItem } from '@/types/node'
 import type { PackageItem } from '@/types/package'
 import type { Order } from '@/types/order'
+import { migrateLegacyOrderStatusValue } from '@/types/order'
 import type {
   GlobalScheduleDetail,
   GlobalScheduleSummary,
@@ -86,7 +87,11 @@ export async function getMockNodes(): Promise<NodeItem[]> {
 
 export async function getMockOrders(): Promise<Order[]> {
   if (!ordersData) {
-    ordersData = await loadJson<Order>('/mock/orders.json')
+    const loaded = await loadJson<Order>('/mock/orders.json')
+    ordersData = loaded.map((order) => ({
+      ...order,
+      status: migrateLegacyOrderStatusValue(order.status) as Order['status'],
+    }))
   }
   return ordersData
 }
@@ -223,10 +228,10 @@ async function resolvePreviewOrderCodes(orderCodes?: string[]): Promise<string[]
   const orders = await getMockOrders()
   if (orderCodes?.length) {
     return orderCodes.filter((code) =>
-      orders.some((o) => o.order_code === code && o.status === 'pending'),
+      orders.some((o) => o.order_code === code && o.status === 'unassigned'),
     )
   }
-  return orders.filter((o) => o.status === 'pending').map((o) => o.order_code)
+  return orders.filter((o) => o.status === 'unassigned').map((o) => o.order_code)
 }
 
 export async function previewMockSchedule(
@@ -247,7 +252,7 @@ export async function previewMockSchedule(
 
   const resolvedOrders = await resolvePreviewOrderCodes(orderCodes)
   if (!resolvedOrders.length && !options?.baseDetail) {
-    throw new Error('没有可预览的 pending 订单')
+    throw new Error('没有可预览的待分配订单')
   }
 
   const code = nextCode('GS', allMockScheduleCodes())
@@ -329,7 +334,7 @@ export async function confirmMockSchedule(
   const orders = await getMockOrders()
   for (const orderCode of activeDetail.order_codes ?? []) {
     const order = orders.find((o) => o.order_code === orderCode)
-    if (order) order.status = 'delivering'
+    if (order) order.status = 'assigned'
   }
 
   return summary

@@ -19,7 +19,7 @@ const filters = reactive<{
   status: OrderStatus | ''
   destination_node_code: string
 }>({
-  status: 'pending',
+  status: 'unassigned',
   destination_node_code: '',
 })
 
@@ -74,7 +74,7 @@ watch(filters, () => {
           已选 {{ selectedRows.length }}
         </el-tag>
         <el-tag v-else size="small" type="warning" class="panel-count">
-          未选则预览全部 pending
+          未选则预览全部待分配
         </el-tag>
       </template>
 

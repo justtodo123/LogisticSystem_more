@@ -72,3 +72,12 @@ status="unassigned"  # 原 "pending"
 2. **"自动化测试全绿"无法覆盖"种子数据漂移"**：测试夹具注入的是符合枚举的临时数据，真实种子脚本是另一条写入路径。应补一条"针对真实种子数据的冒烟测试"。
 3. **"列表查得到、引擎找不到"是枚举漂移的典型信号**：当某个实体列表能查到、但按状态过滤/调度却为空时，先对比两处的状态枚举。
 4. **状态枚举按实体区分，不能混用**：订单状态（`unassigned`）和货物/包裹状态（`pending_pack`）是两套枚举，排查时要分别对照各自的 `*_TRANSITIONS` 起点，避免"订单该用 unassigned"被误套到货物上。
+
+
+## 8. 后续（2026-08-19，plan 03）
+
+种子脚本漂移已在 2026-08-17 修复。03 继续收口剩余契约面：
+
+- `init_demo_data.py` 改为引用 `core.order_status.ORDER_UNASSIGNED`，不再手写六态字面量。
+- 前端/Mock 从旧四态改为同一组六态；未知状态显示为「未知状态（raw）」而不是映射成合法态。
+- 本地 `src/backend/data/logistics.db` 仍有 100 条历史 `pending`，已用 `scripts/migrate_legacy_order_status.py` 回填为 `unassigned`（106=106，二次 dry-run 无计划项）。

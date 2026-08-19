@@ -569,3 +569,96 @@ class TestUpdateOrder:
         body = response.json()
         assert body["code"] != 0
         assert "不允许更新" in body["message"] or "状态" in body["message"]
+
+class TestOrderStatusContract:
+    """六态筛选、未知状态拒绝、关闭权限"""
+
+    def _prepare(self, client, db_session, statuses=None):
+        user = User(
+            username="testuser",
+            password_hash=get_password_hash("123456"),
+            role="dispatcher",
+            display_name="测试用户",
+            is_active=True,
+        )
+        db_session.add(user)
+        node = Node(
+            node_code="SO001",
+            name="测试节点",
+            location="测试",
+            latitude=30.5,
+            longitude=114.3,
+            node_type="sorting_center",
+        )
+        db_session.add(node)
+        db_session.flush()
+        db_session.add(SortingCenter(node_id=node.id, level=0))
+        from models.order import Order
+        from core.order_status import ORDER_STATUSES
+
+        created = {}
+        for status in (statuses or ORDER_STATUSES):
+            order = Order(
+                order_code=f"O_{status}",
+                destination_node_id=node.id,
+                time_window="全天",
+                status=status,
+            )
+            db_session.add(order)
+            created[status] = order
+        db_session.commit()
+        token = client.post(
+            "/api/auth/login",
+            json={"username": "testuser", "password": "123456"},
+        ).json()["data"]["access_token"]
+        return {"Authorization": f"Bearer {token}"}, created
+
+    @pytest.mark.api
+    def test_filter_each_six_state(self, client, db_session):
+        from core.order_status import ORDER_STATUSES
+
+        headers, _ = self._prepare(client, db_session)
+        for status in ORDER_STATUSES:
+            response = client.get("/api/orders", params={"status": status}, headers=headers)
+            assert response.status_code == 200
+            body = response.json()
+            assert body["code"] == 0
+            assert body["data"]["total"] == 1
+            assert body["data"]["items"][0]["status"] == status
+
+    @pytest.mark.api
+    def test_filter_unknown_status_rejected(self, client, db_session):
+        headers, _ = self._prepare(client, db_session, statuses=["unassigned"])
+        response = client.get("/api/orders", params={"status": "pending"}, headers=headers)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 40000
+        assert "pending" in body["message"]
+        assert "unassigned" in body["message"]
+
+    @pytest.mark.api
+    def test_closed_order_cannot_be_updated(self, client, db_session):
+        headers, _ = self._prepare(client, db_session, statuses=["closed"])
+        response = client.put(
+            "/api/orders/O_closed",
+            json={"time_window": "09:00-18:00"},
+            headers=headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["code"] != 0
+
+    @pytest.mark.api
+    def test_close_unassigned_order(self, client, db_session):
+        headers, _ = self._prepare(client, db_session, statuses=["unassigned"])
+        response = client.post("/api/orders/O_unassigned/close", headers=headers)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0
+        assert body["data"]["status"] == "closed"
+
+    @pytest.mark.api
+    def test_close_in_transit_rejected(self, client, db_session):
+        headers, _ = self._prepare(client, db_session, statuses=["in_transit"])
+        response = client.post("/api/orders/O_in_transit/close", headers=headers)
+        assert response.status_code == 200
+        assert response.json()["code"] != 0

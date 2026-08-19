@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from core.order_status import ORDER_STATUSES
 
 
 class GoodsCreate(BaseModel):
@@ -25,7 +27,7 @@ class OrderResponse(BaseModel):
     destination_node_code: str
     destination_node_name: str
     time_window: str
-    status: str
+    status: str = Field(description="订单六态之一: " + "/".join(ORDER_STATUSES))
     goods_count: int
     created_at: datetime
     updated_at: datetime

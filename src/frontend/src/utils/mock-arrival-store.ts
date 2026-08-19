@@ -266,7 +266,7 @@ export async function initMockArrivalDemoState(
   const orders = await getMockOrders()
   const order = orders.find((o) => o.order_code === ARRIVAL_DEMO_PACKAGES.order)
   if (order) {
-    order.status = 'delivering'
+    order.status = 'in_transit'
   }
 
   await syncScheduleDetailPackages(scheduleCode)
@@ -441,7 +441,7 @@ export async function confirmArrivalMock(
 
       for (const gi of pkg.goods_items) {
         const order = orders.find((o) => o.order_code === gi.order_code)
-        if (order && order.status === 'delivering') {
+        if (order && order.status === 'in_transit') {
           order.status = 'exception'
           updatedOrders.push({
             order_code: order.order_code,

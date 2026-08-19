@@ -23,6 +23,7 @@ from models.node_dispatch import NodeDispatch
 from models.route import Route
 from models.exception_event import ExceptionEvent
 from models.log_event import LogEvent
+from core.order_status import ORDER_UNASSIGNED
 
 
 async def init_demo_data(db: Session):
@@ -337,7 +338,7 @@ async def _create_orders_and_goods(db: Session):
                 order_code=order_code,
                 destination_node_id=dest_node.id,
                 time_window="9:00-18:00",
-                status="unassigned"
+                status=ORDER_UNASSIGNED
             )
             db.add(order)
             db.flush()

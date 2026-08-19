@@ -33,6 +33,7 @@ from models import Order, Goods, Package, Vehicle, Driver, DispatchBatch, NodeDi
 from models.global_schedule import GlobalSchedule
 from models.package import Package
 from algorithms.packaging import packaging
+from core.order_status import ORDER_STATUSES as CONTRACT_ORDER_STATUSES
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -47,6 +48,12 @@ ORDER_TRANSITIONS = {
     "exception":   ["assigned", "in_transit", "closed"],  # 重规划重新分配 / 回到运输中 / 关闭
     "closed":      [],
 }
+
+if set(ORDER_TRANSITIONS) != set(CONTRACT_ORDER_STATUSES):
+    raise RuntimeError(
+        "ORDER_TRANSITIONS keys drifted from core.order_status.ORDER_STATUSES: "
+        f"{sorted(set(ORDER_TRANSITIONS))} vs {list(CONTRACT_ORDER_STATUSES)}"
+    )
 
 GOODS_TRANSITIONS = {
     "pending_pack": ["packed", "exception"],
