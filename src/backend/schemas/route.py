@@ -36,7 +36,9 @@ class RouteItem(BaseModel):
 class RouteListResponse(BaseModel):
     """路线列表响应"""
     items: List[RouteItem] = Field(..., description="路线列表")
-    total: int = Field(..., description="总数量")
+    total: int = Field(..., description="筛选后的唯一路线数")
+    page: int = Field(..., description="当前页，从 1 开始")
+    page_size: int = Field(..., description="每页数量，默认 20，最大 200")
 
 
 class RouteDetailResponse(BaseModel):

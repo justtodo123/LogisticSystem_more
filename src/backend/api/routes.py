@@ -58,8 +58,8 @@ async def plan_routes(
 async def get_routes(
     batch_code: Optional[str] = Query(None, description="批次编码"),
     vehicle_code: Optional[str] = Query(None, description="车辆编码"),
-    page: int = Query(1, description="页码"),
-    page_size: int = Query(20, description="每页数量"),
+    page: int = Query(1, description="页码，从 1 开始"),
+    page_size: int = Query(20, description="每页数量，默认 20，最大 200"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

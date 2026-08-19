@@ -17,6 +17,8 @@ let staticMockCache: Record<string, RouteCoordinates> | null = null
 interface RouteListResponse {
   items: RouteListItem[]
   total: number
+  page?: number
+  page_size?: number
 }
 
 async function loadStaticMockCache(): Promise<Record<string, RouteCoordinates>> {

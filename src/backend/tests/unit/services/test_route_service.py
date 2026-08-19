@@ -368,3 +368,115 @@ class TestGetRouteDetail:
         
         assert result["code"] != 0
         assert "路线" in result["message"] or "不存在" in result["message"]
+
+class TestGetRoutesQueryBudget:
+    """分页查询次数不随 page_size 线性增长"""
+
+    def _seed_many_routes(self, db_session, test_vehicles, count):
+        from models.route import Route
+        from models.node_dispatch import NodeDispatch
+        from models.dispatch_batch import DispatchBatch
+        from models.global_schedule import GlobalSchedule
+        import json
+
+        schedule = GlobalSchedule(
+            schedule_code="GS_QCOUNT",
+            order_codes=json.dumps([]),
+            total_distance=0.0,
+            total_time=0.0,
+            total_goods=0,
+            score=0.0,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+            goods_schedules=json.dumps([]),
+        )
+        db_session.add(schedule)
+        db_session.flush()
+        batch = DispatchBatch(
+            batch_code="BATCH_QCOUNT",
+            global_schedule_id=schedule.id,
+            status="pending",
+        )
+        db_session.add(batch)
+        db_session.flush()
+        vehicle = test_vehicles["VEH001"]
+        for i in range(count):
+            dispatch = NodeDispatch(
+                dispatch_code=f"ND_QCOUNT_{i}",
+                dispatch_batch_id=batch.id,
+                vehicle_id=vehicle.id,
+                driver_id=1,
+                level_phase=0,
+                tasks=json.dumps([]),
+                total_distance=10.0,
+                total_time=30.0,
+            )
+            db_session.add(dispatch)
+            db_session.flush()
+            db_session.add(Route(
+                route_code=f"RT_QCOUNT_{i:03d}",
+                dispatch_id=dispatch.id,
+                vehicle_id=vehicle.id,
+                total_distance=15.5,
+                total_time=45.0,
+                total_emission=3.1,
+                route_segments=json.dumps([{"road_name": "测试路段", "start_lng": 114.28, "start_lat": 30.52, "end_lng": 114.29, "end_lat": 30.51}]),
+                algorithm_type="traditional",
+            ))
+        db_session.commit()
+
+    @staticmethod
+    def _count_selects(db_session):
+        from sqlalchemy import event
+
+        engine = db_session.get_bind()
+        statements = []
+
+        def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", before_cursor_execute)
+        return statements, lambda: event.remove(engine, "before_cursor_execute", before_cursor_execute)
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_query_count_constant_for_page_size_20_and_100(self, db_session, test_vehicles):
+        self._seed_many_routes(db_session, test_vehicles, 25)
+        statements, stop = self._count_selects(db_session)
+        try:
+            result20 = await RouteService.get_routes(
+                batch_code=None, vehicle_code=None, page=1, page_size=20, db=db_session
+            )
+            count20 = len(statements)
+            statements.clear()
+            result100 = await RouteService.get_routes(
+                batch_code=None, vehicle_code=None, page=1, page_size=100, db=db_session
+            )
+            count100 = len(statements)
+        finally:
+            stop()
+
+        assert result20["code"] == 0
+        assert result20["data"]["page"] == 1
+        assert result20["data"]["page_size"] == 20
+        assert len(result20["data"]["items"]) == 20
+        assert result20["data"]["total"] == 25
+        assert result100["data"]["total"] == 25
+        assert len(result100["data"]["items"]) == 25
+        assert count20 <= 3
+        assert count100 <= 3
+        assert count20 == count100
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_get_routes_includes_page_fields(self, db_session, test_vehicles):
+        result = await RouteService.get_routes(
+            batch_code=None, vehicle_code=None, page=1, page_size=20, db=db_session
+        )
+        assert result["code"] == 0
+        assert result["data"]["items"] == []
+        assert result["data"]["total"] == 0
+        assert result["data"]["page"] == 1
+        assert result["data"]["page_size"] == 20

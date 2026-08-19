@@ -6,7 +6,7 @@
 
 | 项 | 2026-08-19 既有证据 | 限制 |
 |------|----------------------|------|
-| 后端测试 | 在 `src/backend` 执行 `python -m pytest -q -p no:cacheprovider`：656 passed、201 warnings | 2026-08-19 03 本轮实测；01 为 645，此前 635，T0-T6 历史 626 |
+| 后端测试 | 在 `src/backend` 执行 `python -m pytest -q -p no:cacheprovider`：664 passed、207 warnings | 2026-08-19 05 本轮实测；03 为 656，01 为 645，此前 635，T0-T6 历史 626 |
 | 前端 | `npm run build`（含类型检查）通过 | 无运行时测试套件 |
 | Docker E2E | 配置/镜像文件存在 | 本机无 Docker，**未验收** |
 
