@@ -1,0 +1,180 @@
+# 智能物流调度平台 — 系统功能测试用例设计
+
+> **阶段**：第二阶段（测试用例设计）
+> **生成时间**：2026-08-14
+> **依据**：第一阶段对代码、配置、docs/ 的完整理解；后端 83 个 API 端点、7 实体状态机、RBAC 权限模型、DeepSeek AI 降级链路、幂等/审计/缓存中间件、前后端联调。
+> **字段说明**：
+> - 测试用例编号：TC-XXX
+> - 所属功能模块：按后端业务域划分
+> - 场景描述：正常/异常(非法输入、边界、极端)/容错(网络中断、数据冲突、服务不可用)/安全(权限、数据校验)
+> - 输入数据 / 预期输出 / 优先级(P0=阻断部署演示,P1=重要,P2=一般)
+
+---
+
+## 模块 1：认证与授权（auth / dependencies / permissions）
+
+| 编号 | 模块 | 场景 | 输入数据 | 预期输出/行为 | 优先级 |
+|------|------|------|----------|--------------|--------|
+| TC-001 | 认证 | 正常登录 admin 账号 | POST /api/auth/login `{username:"admin",password:"123456"}` | code=0，data 含 token，payload `role=admin` | P0 |
+| TC-002 | 认证 | 正常登录 dispatcher 账号 | `{username:"dispatcher",password:"123456"}` | code=0，payload `role=dispatcher` | P0 |
+| TC-003 | 认证 | 异常：错误密码 | `{username:"admin",password:"wrong"}` | code=40100，无 token | P0 |
+| TC-004 | 认证 | 异常：不存在的用户 | `{username:"ghost",password:"x"}` | code=40100 | P1 |
+| TC-005 | 认证 | 异常：停用账号登录 | 先禁用 user 再登录 | code=40100（is_active=False 拒绝） | P1 |
+| TC-006 | 认证 | 异常：非法请求体/缺字段 | `{}` / `{"username":"a"}` | code=40000（Pydantic 校验失败） | P1 |
+| TC-007 | 认证 | Token 过期失效 | 用过期 JWT 访问受保护端点 | code=40101 或 40100 | P0 |
+| TC-008 | 认证 | 无效/篡改 Token | 伪造/篡改 Token | code=40100 | P0 |
+| TC-009 | 认证 | /me 返回当前用户 | 带合法 token GET /api/auth/me | code=0，返回该用户信息 | P1 |
+| TC-010 | 授权 | admin 访问仅 dispatcher 端点 | admin token → arrival-confirm | 放行（require_dispatcher 含 admin） | P1 |
+| TC-011 | 授权 | viewer 访问写端点 | viewer token → 创建订单 | code=40300 or 403 | P0 |
+| TC-012 | 授权 | manager 角色权限映射 | manager token → 需要 warehouse 权限端点 | **预期暴露**：manager 无权限（permissions.py 无 manager 角色键） | P0 |
+| TC-013 | 授权 | 无 Token 访问受保护端点 | GET 订单列表不带 Authorization | 401 | P0 |
+| TC-014 | 授权 | 权限位精确校验 | 缺 `orders:write` 用户写订单 | 403 提示缺少权限 | P1 |
+
+---
+
+## 模块 2：订单管理（orders / order_service）
+
+| 编号 | 模块 | 场景 | 输入数据 | 预期输出 | 优先级 |
+|------|------|------|----------|----------|--------|
+| TC-020 | 订单 | 正常创建订单 | 目的节点为 level=0 分拣中心、时间窗合法 | code=0，status=unassigned，自动分配 storage_center | P0 |
+| TC-021 | 订单 | 异常：目标非分拣中心/节点不存在 | destination_node_id=不存在 | code=40400 或 40000 | P1 |
+| TC-022 | 订单 | 边界：时间窗非法（结束早于开始） | time_window 倒置 | code=40000 | P1 |
+| TC-023 | 订单 | 异常：更新 in_transit 订单 | 对 in_transit 订单 PATCH | 应拒绝（业务规则块 update） | P1 |
+| TC-024 | 订单 | 异常：删除 signed/exception 订单 | DELETE 已签收订单 | 应拒绝（物理删除但受状态块） | P1 |
+| TC-025 | 订单 | 容错：批量导入带跳过错误 | import_orders skip_errors=true + 混杂非法行 | 合法行入库，非法行跳过并返回统计 | P1 |
+| TC-026 | 订单 | 异常：导入列映射错误 | column_mapping 指向不存在列 | 报错或按空处理 | P2 |
+| TC-027 | 订单 | 关闭订单 | 对 unassigned/assigned 订单 close | code=0，status=closed | P1 |
+| TC-028 | 订单 | 分页/排序 | page/page_size/非默认排序 | 返回 items/total 符合分页 | P2 |
+| TC-029 | 订单 | **数据一致性**：种子订单状态与代码枚举 | 查询 demo 数据订单 | **预期暴露**：DB 中 100 条订单 status='pending'，而代码/状态机使用 'unassigned'，按 status 过滤不命中 | P0 |
+
+---
+
+## 模块 3：库存与节点（nodes / goods / packages）
+
+| 编号 | 模块 | 场景 | 输入数据 | 预期输出 | 优先级 |
+|------|------|------|----------|----------|--------|
+| TC-030 | 节点 | 正常创建分拣中心/仓储中心 | 合法 code/level/坐标 | code=0 | P1 |
+| TC-031 | 节点 | 异常：重复节点 code | 重复 code 创建 | code=40400(业务冲突) | P1 |
+| TC-032 | 节点 | 缓存一致性 | 创建节点后立即查列表 | cache 失效，返回新节点 | P1 |
+| TC-033 | 包裹 | 正常查看包裹列表/详情 | GET /api/packages | code=0 | P1 |
+| TC-034 | 包裹 | 异常：repack 不存在包裹 | POST /{code}/repack 不存在 code | 404 或错误响应 | P2 |
+| TC-035 | 货物 | goods 与订单归属一致性 | 创建订单后查 goods | goods 关联正确 | P2 |
+
+---
+
+## 模块 4：调度引擎（schedule / dispatch / route / replan）
+
+| 编号 | 模块 | 场景 | 输入数据 | 预期输出 | 优先级 |
+|------|------|------|----------|----------|--------|
+| TC-040 | 调度 | 正常生成全局方案(草稿) | POST /api/schedule/global `{algorithm:"traditional"}` | code=0，返回 draft schedule_code | P0 |
+| TC-041 | 调度 | 异常：algorithm=deepseek 未实现 | `{algorithm:"deepseek"}` | **预期暴露**：策略工厂未注册 deepseek → 报错或降级 | P0 |
+| TC-042 | 调度 | 异常：preview=false 直接落库 | 传 preview=false | **预期暴露**：返回错误（P1-2 已移除直接落库） | P1 |
+| TC-043 | 调度 | 正常确认方案 | POST /confirm/{code} | draft→active，触发 F021 打包+状态推进 | P0 |
+| TC-044 | 调度 | 节点派单 | POST /node-dispatch | 生成 dispatch | P1 |
+| TC-045 | 调度 | 查看 batches/dispatches | GET /batches、/dispatches/{code} | code=0 | P1 |
+| TC-046 | 调度 | 异常重新规划 | POST /exceptions/{code}/replan | 生成版本化 replan draft | P1 |
+| TC-047 | 调度 | 删除草稿 | DELETE /schedules/draft/{code} | 草稿删除成功 | P2 |
+| TC-048 | 调度 | 2-opt 优化 stub | 触发 TwoOpt 策略 | **预期暴露**：2-opt 不执行实际交换，仅贪心初始解 | P2 |
+| TC-049 | 调度 | 负载率恒定 | 候选车辆评估 | **预期暴露**：load_rate 恒 0.5，跨候选不变 | P2 |
+
+---
+
+## 模块 5：AI 助手（ai / ai_confirmation / deepseek）
+
+| 编号 | 模块 | 场景 | 输入数据 | 预期输出 | 优先级 |
+|------|------|------|----------|----------|--------|
+| TC-050 | AI | 正常 dry-run 解析 | POST /api/ai/parse `{message:"...",execute:"dry-run"}` | code=0，返回 algorithm_params，不落库 | P1 |
+| TC-051 | AI | 无 message 无 weights 默认模式 | `{}` | mode=default，返回默认参数 | P1 |
+| TC-052 | AI | 手动权重模式 | `{weights:{global_schedule:{...}}}` | mode=manual | P1 |
+| TC-053 | AI | **容错：DeepSeek 服务不可用降级** | 无/空 API Key | code=0，meta.degraded=true | P0 |
+| TC-054 | AI | **数据一致性：上下文待调度订单** | 存在 unassigned 订单时 parse | ctx.order_count > 0；若种子数据为 pending → 0 | P0 |
+| TC-055 | AI | 方案解释降级 | POST /explain 无 key | code=0，data 为降级文案 | P1 |
+| TC-056 | AI | 方案审查降级 | POST /review 无 key | code=0，risks=[] | P1 |
+| TC-057 | AI | 异常分析降级 | POST /analyze-exception | code=0，降级文案 | P1 |
+| TC-058 | AI | 建议确认/拒绝 | POST /ai/suggestions/{id}/confirm | suggestion pending→applied | P2 |
+| TC-059 | AI | 权限：建议需调度员确认 | viewer 调 confirm | 403 | P2 |
+
+---
+
+## 模块 6：ERP 对接与到货确认（erp_webhook / arrival_confirm）
+
+| 编号 | 模块 | 场景 | 输入数据 | 预期输出 | 优先级 |
+|------|------|------|----------|----------|--------|
+| TC-060 | ERP | 带正确 API Key 推送订单 | Header `X-API-Key` 正确 | code=0，创建订单 | P1 |
+| TC-061 | ERP | 错误 API Key | Header 错误 | 401 | P1 |
+| TC-062 | ERP | JWT 回退 + admin 角色 | ERP_API_KEY 空 + admin token | code=0 | P1 |
+| TC-063 | ERP | 安全：JWT 回退无角色 | dispatcher 以外角色/viewer token | **预期暴露**：仅 dispatcher/admin 放行，其余 403 | P0 |
+| TC-064 | 到货 | 确认到货 | POST arrival/confirm-arrival（dispatcher） | code=0，状态推进 | P1 |
+| TC-065 | 到货 | 批量到货 | POST confirm-arrival-batch | code=0 | P1 |
+| TC-066 | 到货 | 安全：无鉴权访问 | 不带 token confirm-arrival | 401 | P0 |
+| TC-067 | 到货 | 领取包裹列表 | GET arrival-packages | code=0 | P2 |
+
+---
+
+## 模块 7：报表 / 通知 / 导出 / 审计（reports / notifications / export / audit）
+
+| 编号 | 模块 | 场景 | 输入数据 | 预期输出 | 优先级 |
+|------|------|------|----------|----------|--------|
+| TC-070 | 报表 | SLA 达成率 | GET /sla | code=0，含统计 | P1 |
+| TC-071 | 报表 | 成本 / 能力 / 异常 / 概览 | GET /cost /capacity /exceptions /overview | code=0 | P1 |
+| TC-072 | 通知 | 获取/更新配置 | GET/PUT /notifications/config | code=0 | P2 |
+| TC-073 | 通知 | 发送测试 | POST /notifications/test | code=0（console 通道打印） | P2 |
+| TC-074 | 导出 | 导出订单/方案 | POST /export/orders（dispatcher） | code=0，返回文件流信息 | P1 |
+| TC-075 | 导出 | 安全：viewer 导出 | viewer token | 403 | P1 |
+| TC-076 | 审计 | 查询审计日志 | GET /audit-logs（admin/dispatcher） | code=0 | P1 |
+| TC-077 | 审计 | 安全：viewer 查审计 | viewer token | 403 | P1 |
+| TC-078 | 审计 | **数据一致性：操作者记录** | 触发作弊后查日志 user 字段 | 日志含 current_user（近期已修复） | P2 |
+
+---
+
+## 模块 8：车辆与司机管理（vehicles / drivers）
+
+| 编号 | 模块 | 场景 | 输入数据 | 预期输出 | 优先级 |
+|------|------|------|----------|----------|--------|
+| TC-080 | 车辆 | 正常 CRUD | 创建/更新/删除车辆 | code=0，缓存正确失效 | P1 |
+| TC-081 | 车辆 | 异常：重复车牌/code | 重复 code | 冲突报错 | P1 |
+| TC-082 | 司机 | 正常 CRUD | 创建司机 | code=0 | P1 |
+| TC-083 | 车辆 | 缓存一致性 | 快速重复查询 | 命中缓存 + 失效正确 | P2 |
+
+---
+
+## 模块 9：基础设施与容错（idempotency / cache / timeout / health）
+
+| 编号 | 模块 | 场景 | 输入数据 | 预期输出 | 优先级 |
+|------|------|------|----------|----------|--------|
+| TC-090 | 幂等 | 重复 POST 同一幂等键 | 相同 Idempotency-Key 两次 POST | 第二次返回缓存响应，不重复执行 | P1 |
+| TC-091 | 幂等 | 无幂等键 | 不带 Idempotency-Key | 不幂等，正常执行 | P2 |
+| TC-092 | 缓存 | Redis 缺失自动降级 | REDIS_ENABLED=false | 进程内存缓存生效 | P1 |
+| TC-093 | 超时 | 慢请求超时 | 构造慢接口 | 504 或超时兜底 | P2 |
+| TC-094 | 健康 | 健康检查 | GET /api/health | code=0，含 db/ai/cache 状态 | P0 |
+| TC-095 | 配置 | 非 dev 弱密钥 fail-fast | ENV=prod + 弱 JWT_SECRET | 启动抛 ValueError | P1 |
+
+---
+
+## 测试覆盖范围统计
+
+| 维度 | 数量 |
+|------|------|
+| 认证授权 | TC-001~TC-014（14） |
+| 订单管理 | TC-020~TC-029（10） |
+| 库存节点 | TC-030~TC-035（6） |
+| 调度引擎 | TC-040~TC-049（10） |
+| AI 助手 | TC-050~TC-059（10） |
+| ERP/到货 | TC-060~TC-067（8） |
+| 报表/通知/导出/审计 | TC-070~TC-078（9） |
+| 车辆/司机 | TC-080~TC-083（4） |
+| 基础设施 | TC-090~TC-095（6） |
+| **合计** | **77 个用例** |
+
+### 优先级分布
+- P0：TC-001/002/003/007/008/011/012/013/020/029/040/041/043/053/054/063/066/094（18 个，阻断部署/演示或安全）
+- P1：其余主体
+- P2：边界与一般
+
+### 预期暴露的核心问题（为第三阶段验证目标）
+1. **角色映射缺口**：`manager` 角色在 permissions.py 中无映射 → 空权限（TC-012）。
+2. **订单状态枚举漂移**：种子数据 `pending` vs 代码 `unassigned` → AI 上下文/状态过滤不命中（TC-029、TC-054）。
+3. **`algorithm="deepseek"` 未实现**：策略工厂仅注册 greedy/dummy（TC-041）。
+4. **auth.py `expires_in` 硬编码 86400**：与实际 JWT_EXPIRE_SECONDS 不一致（TC-007 关联）。
+5. **schedule_service 残留 DEBUG print**（TC-048 关联观测）。
+6. **算法级边界**：2-opt stub、load_rate 恒 0.5、L1 容量检查维度（TC-048/049）。

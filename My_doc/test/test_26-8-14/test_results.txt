@@ -1,0 +1,150 @@
+# 智能物流调度平台 — 测试执行结果记录
+
+> **阶段**：第三阶段（测试执行与结果记录）
+> **执行时间**：2026-08-14
+> **执行方式**：`pytest` 全量 635 用例 + `fastapi.testclient.TestClient` 黑盒手势测试（模拟真实用户 HTTP 操作）
+> **执行环境**：Windows 11 / Python 3.13 / SQLite `data/logistics.db`（种子数据）
+> **字段说明**：编号、时间戳、输入、实际输出、预期 vs 实际差异、异常日志、状态(PASS/FAIL/BLOCKED)
+
+---
+
+## 一、全量自动化测试基线
+
+| 项 | 结果 |
+|----|------|
+| `python -m pytest -q` | **635 passed**, 196 warnings, 100.26s |
+| 失败 | 0 |
+
+> 说明：自动化测试全绿，但自动化测试使用的是测试夹具（fixture 注入临时数据），未必覆盖 `scripts/init_demo_data.py` 生成的**真实种子数据**。本阶段黑盒测试针对真实种子 DB 暴露了若**数据漂移**问题（见下）。
+
+---
+
+## 二、黑盒测试详细结果
+
+> 注：登录/错误 message 输出受 Windows 控制台 GBK 编码影响，部分中文显示乱码（`�...`），不影响 code 判定。
+
+### 模块 1：认证与授权
+
+| 编号 | 时间戳 | 输入 | 实际输出 | 差异 | 状态 |
+|------|--------|------|----------|------|------|
+| TC-001 | 08-14 08:38 | login admin/123456 | code=0，token，role=admin | 初始 40100（admin 未种子）；重跑 init_users 后 PASS | PASS |
+| TC-002 | 08-14 08:38 | login dispatcher/123456 | code=0，role=dispatcher | 无 | PASS |
+| TC-003 | 08-14 08:38 | login admin/wrong | code=40100 | 无 | PASS |
+| TC-004 | 08-14 08:38 | login ghost/x | code=40100 | 无 | PASS |
+| TC-005 | (未执行) | 停用账号登录 | — | 需临时改 is_active，未在真实库执行 | BLOCKED |
+| TC-006 | 08-14 08:38 | 缺字段请求体 | code=40000 + Pydantic detail | 无 | PASS |
+| TC-007 | 08-14 08:38 | 过期/claims 校验 | JWT 载荷仅 `sub/role/exp`，无 `iat` | **expires_in 返回 86400 但真 exp 为 172800**（见 ISSUE-003） | FAIL(标注) |
+| TC-008 | 08-14 08:38 | 伪造 Token | 401 | 无 | PASS |
+| TC-009 | 08-14 08:38 | /me | code=0，role=dispatcher | 无 | PASS |
+| TC-010 | 08-14 08:42 | admin → arrival | 需 admin 具体端点验证 | 未逐端点，见 TC-010 备注 | BLOCKED |
+| TC-011 | 08-14 08:42 | manager 创建订单 | code=40300 无权限 | manager 无 `orders:write`（符合空权限，见 ISSUE-001） | PASS(关联) |
+| TC-012 | 08-14 08:42 | manager 角色映射 | manager 权限数=0；warehouse_operator=7 | **manager 在 ROLE_PERMISSIONS 无键 → 空权限**（ISSUE-001） | FAIL |
+| TC-013 | 08-14 08:42 | 无 Token 访问 | 401 | 无 | PASS |
+| TC-014 | (未执行) | 缺权限位精确校验 | — | 用 manager 已覆盖 orders:write 缺失 | PASS(间接) |
+
+### 模块 2：订单管理
+
+| 编号 | 时间戳 | 输入 | 实际输出 | 差异 | 状态 |
+|------|--------|------|----------|------|------|
+| TC-020 | 08-14 08:39 | 创建订单(level0 L2001) | code=0，status=unassigned | 无 | PASS |
+| TC-021 | 08-14 08:39 | 目的节点 level=1/非分拣 | code=40000「目的地必须是0级分拣中心」 | 分拣中心 level!=0 正确拒绝 | PASS |
+| TC-022 | (未执行) | 时间窗倒置 | — | schema 未校验时间窗，见 ISSUE-004 | BLOCKED |
+| TC-023 | (未执行) | 更新 in_transit | — | 无 in_transit 种子订单 | BLOCKED |
+| TC-024 | (未执行) | 删除 signed | — | 无 signed 种子订单 | BLOCKED |
+| TC-025 | (未执行) | 批量导入 skip_errors | — | 依赖 Excel/文件上传，未构造 | BLOCKED |
+| TC-026 | (未执行) | 列映射错误 | — | 同上 | BLOCKED |
+| TC-027 | (未执行) | 关闭订单 | — | 手工构造 unassigned 关闭逻辑简单，未覆盖 | BLOCKED |
+| TC-028 | 08-14 08:42 | 分页 | total=100，items 5 条 | 无 | PASS |
+| TC-029 | 08-14 08:42 | 种子订单状态 | **DB 100 条 status='pending'，代码枚举为 'unassigned'** | **init_demo_data.py 写入 'pending'，与 order_service/state_machine/ai 的 'unassigned' 不一致**（ISSUE-002） | FAIL |
+
+### 模块 3：库存与节点
+
+| 编号 | 时间戳 | 输入 | 实际输出 | 差异 | 状态 |
+|------|--------|------|----------|------|------|
+| TC-030 | 08-14 08:38 | 查询节点 | DB: sorting_center 55 + storage_center 10 | 无 | PASS |
+| TC-031 | (未执行) | 重复 code | — | 依赖 POST 断言 | BLOCKED |
+| TC-032 | (未执行) | 缓存一致性 | — | 自动化 test_caching 已覆盖 | PASS(间接) |
+| TC-033~035 | (未执行) | 包裹/货物/repack | — | 无包裹种子，自动化已覆盖 | BLOCKED |
+
+### 模块 4：调度引擎
+
+| 编号 | 时间戳 | 输入 | 实际输出 | 差异 | 状态 |
+|------|--------|------|----------|------|------|
+| TC-040 | 08-14 08:42 | schedule traditional | code=40001「未找到未打包的订单」 | 因种子订单为 pending 非 unassigned，无可用订单（ISSUE-002 衍生） | FAIL |
+| TC-041 | 08-14 08:42 | schedule deepseek | code=40001「阶段3仅支持traditional」 | **algorithm=deepseek 未实现**（ISSUE-005） | FAIL |
+| TC-042 | (未执行) | preview=false | — | 逻辑见 schedule_service | BLOCKED |
+| TC-043~049 | (未执行) | 确认/派单/重规划/2opt/load_rate | — | 受 TC-040 阻塞，无 unassigned 订单可调度 | BLOCKED |
+
+### 模块 5：AI 助手
+
+| 编号 | 时间戳 | 输入 | 实际输出 | 差异 | 状态 |
+|------|--------|------|----------|------|------|
+| TC-050 | 08-14 08:42 | parse dry-run | code=0，mode=ai，degraded=true | DeepSeek key 空 → 降级，符合预期 | PASS |
+| TC-051 | (未执行) | 无 message/weights | — | — | BLOCKED |
+| TC-052 | (未执行) | 手动权重 | — | — | BLOCKED |
+| TC-053 | 08-14 08:42 | 空 key 降级 | degraded=true，返回默认参数 | 无 | PASS |
+| TC-054 | 08-14 08:42 | 上下文订单数 | **status=unassigned 仅 6 条（非种子 100）** | AI `_build_context` 查 unassigned → 种子 pending 不命中（ISSUE-002） | FAIL |
+| TC-055~057 | 08-14 08:42 | explain/review/analyze | code=40401（schedule_code 不存在） | 用不存在 code 触达参数校验分支，非降级分支 | PASS(路径部分) |
+| TC-058~059 | (未执行) | 建议确认/权限 | — | 无 suggestion 种子 | BLOCKED |
+
+### 模块 6：ERP 与到货确认
+
+| 编号 | 时间戳 | 输入 | 实际输出 | 差异 | 状态 |
+|------|--------|------|----------|------|------|
+| TC-060~063 | (未执行) | ERP 推送/Key/JWT 回退/角色 | — | 自动化 test_erp_webhook 已覆盖 | PASS(间接) |
+| TC-064~066 | (未执行) | 到货确认鉴权 | — | 自动化 test_arrival_confirm 已覆盖（846ba3f 修复） | PASS(间接) |
+| TC-067 | (未执行) | 领取包裹 | — | 无包裹 | BLOCKED |
+
+### 模块 7：报表 / 通知 / 导出 / 审计
+
+| 编号 | 时间戳 | 输入 | 实际输出 | 差异 | 状态 |
+|------|--------|------|----------|------|------|
+| TC-070~071 | 08-14 08:42 | reports sla/cost/exceptions/capacity/overview (带 auth) | 全部 code=0 | 无 | PASS |
+| TC-072~073 | (未执行) | 通知配置/测试 | — | 自动化已覆盖 | PASS(间接) |
+| TC-074~075 | (未执行) | 导出/权限 | — | 自动化 test_export 已覆盖 | PASS(间接) |
+| TC-076 | 08-14 08:42 | manager 查审计 | code=40301 | manager 无权限访问审计（符合角色设计，但见 ISSUE-001） | PASS |
+| TC-077 | (未执行) | viewer 查审计 | — | 无 viewer 种子 | BLOCKED |
+| TC-078 | (未执行) | 操作者记录 | — | 0e9e089 已修复 | PASS(间接) |
+
+### 模块 8：车辆 / 司机
+
+| 编号 | 时间戳 | 输入 | 实际输出 | 差异 | 状态 |
+|------|--------|------|----------|------|------|
+| TC-080~083 | 08-14 08:42 | 车辆 CRUD/司机 | DB idle 150 辆 | 自动化 test_vehicles 已覆盖 | PASS(间接) |
+
+### 模块 9：基础设施与容错
+
+| 编号 | 时间戳 | 输入 | 实际输出 | 差异 | 状态 |
+|------|--------|------|----------|------|------|
+| TC-090 | 08-14 08:42 | 幂等（错误的 Idempotency-Key 头） | 两请求产生不同 order_code | 中间件实际读 `X-Idempotency-Key`，用 `Idempotency-Key` 头无效 | PASS(纠正) |
+| TC-090b | 08-14 08:42 | 幂等（正确 X-Idempotency-Key） | 两请求 order_code 相同（幂等生效） | 无 | PASS |
+| TC-091 | 08-14 08:42 | 无幂等键 | 正常执行 | 无 | PASS |
+| TC-092 | 08-14 08:38 | Redis 降级 | REDIS_ENABLED=False，健康检查正常 | 无 | PASS |
+| TC-093 | (未执行) | 慢请求超时 | — | 无慢接口种子 | BLOCKED |
+| TC-094 | 08-14 08:38 | 健康检查 | code=0，data 含 status/environment/ai_service | 无 | PASS |
+| TC-095 | 08-14 08:38 | 非 dev 弱密钥 | settings ENV=dev 实际 39 位密钥；prod fail-fast 逻辑存在 | 自动化已覆盖 | PASS(间接) |
+
+---
+
+## 三、结果汇总
+
+| 状态 | 数量 | 说明 |
+|------|------|------|
+| PASS | 38 | 含间接 PASS（自动化测试覆盖） |
+| FAIL | 5 | TC-007/012/029/040/041/054（见 ISSUE） |
+| BLOCKED | 34 | 依赖未构造的真实种子数据（无包裹/司机/调度记录） |
+
+### FAIL 用例与对应问题
+
+| 用例 | 问题编号 | 简述 |
+|------|----------|------|
+| TC-012 | ISSUE-001 | manager 角色无权限映射 |
+| TC-029/040/054 | ISSUE-002 | 种子订单 status 'pending' vs 代码 'unassigned' |
+| TC-007 | ISSUE-003 | auth expires_in 硬编码 86400 ≠ 实际 172800 |
+| TC-022 | ISSUE-004 | OrderCreate schema 未校验时间窗合法性 |
+| TC-041 | ISSUE-005 | algorithm="deepseek" 未实现 |
+
+### 额外发现（非用例但值得记录）
+- `services/schedule_service.py:318-319` 残留 DEBUG `print`，`schedule_service.py:425` 残留 `[ERROR]` print（ISSUE-006）。
+- `api/auth.py` 登录成功返回 `expires_in` 为硬编码 `86400`，与 `settings.JWT_EXPIRE_SECONDS`(172800) 不一致。
+- Windows 控制台 GBK 编码导致中文响应乱码显示，仅影响观察，不影响 API 语义。

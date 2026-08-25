@@ -1,0 +1,23 @@
+# My_doc 本地与实验产物
+
+# 可再生成的文档预览
+*.preview.txt
+
+# 历史命令/运行日志（无扩展名的已知本地产物）
+reference/*_log_*
+
+# 可由源码重新生成的历史演示输出；保留脚本、清单和大纲
+pre-optimization/ppt/*.pptx
+pre-optimization/mermaid_*.svg
+
+# 含未完成脱敏/元数据审查的历史 Office 二进制；仅在清理并复核后定向放行
+pre-optimization/*.xlsx
+pre-optimization/doc/*.docx
+
+# 历史 CI 原始输出；结论应写入脱敏摘要
+reference/*-frontend.txt
+
+# 实验大产物与临时目录；报告、模板和小型脱敏摘要仍可追踪
+plan_todo/experiments/**/artifacts/
+plan_todo/experiments/**/raw/
+plan_todo/experiments/**/tmp/

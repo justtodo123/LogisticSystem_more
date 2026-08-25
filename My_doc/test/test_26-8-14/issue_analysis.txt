@@ -1,0 +1,233 @@
+# 智能物流调度平台 — 测试问题分析与修复建议
+
+> **阶段**：第四阶段（问题分析与修复建议）
+> **生成时间**：2026-08-14
+> **字段说明**：问题编号、关联用例、问题描述与复现步骤、根本原因、修复建议(含代码示例)、优先级评估、影响范围分析
+
+---
+
+## ISSUE-001 manager 角色无权限映射
+
+| 项 | 内容 |
+|----|------|
+| 关联测试用例 | TC-012、TC-011、TC-076 |
+| 优先级 | **P0**（演示/部署角色权限失效） |
+
+**问题描述与复现步骤**
+1. `python scripts/init_users.py` 会创建 `manager` 角色账号（role="manager"）。
+2. 前端演示账号表/dosc 声称 `manager` 可执行仓库相关操作。
+3. 但用 manager 登录后调用任何 `require_permission` 保护的写端点，均返回 403。
+
+**根本原因**
+`core/permissions.py` 的 `ROLE_PERMISSIONS` 键为 `{admin, dispatcher, viewer, warehouse_operator}`，**没有 `manager` 键**。`get_user_permissions` 走 `ROLE_PERMISSIONS.get(user.role, [])`，manager 命中默认空列表 → 0 权限。
+
+实测：
+```
+ROLE_PERMISSIONS keys = ['admin','dispatcher','viewer','warehouse_operator']
+'manager' in keys -> False
+manager perms (get_user_permissions) -> 0
+warehouse_operator perms -> 7
+```
+
+**修复建议**
+方案 A（推荐）：manager 应为 `warehouse_operator` 的别名，或将种子账号角色改为 `warehouse_operator`：
+
+```python
+# core/permissions.py
+ROLE_PERMISSIONS = {
+    "admin": [...],
+    "dispatcher": [...],
+    "viewer": [...],
+    "warehouse_operator": [...],
+    # 新增：manager 与 warehouse_operator 等价（仓库管理员）
+    "manager": WAREHOUSE_OPERATOR_PERMISSIONS,
+}
+```
+
+方案 B：修改 `scripts/init_users.py`，把 `manager` 分支的 `role="manager"` 改为 `role="warehouse_operator"`。但需同步改前端 demo 账号、README、docs。
+
+**影响范围**：所有依赖角色权限的仓库操作（节点/货物/包裹/到货确认）对 manager 账号全部 403；审计日志查询对 manager 也被拒（cycle 到 40301）。
+
+---
+
+## ISSUE-002 种子订单状态枚举漂移（pending vs unassigned）
+
+| 项 | 内容 |
+|----|------|
+| 关联测试用例 | TC-029、TC-040、TC-054 |
+| 优先级 | **P0**（核心调度链路在演示数据上完全不可用） |
+
+**问题描述与复现步骤**
+1. `python scripts/init_demo_data.py` 生成 100 条订单，`status="pending"`，货物 `status="pending_pack"`（第 340、358 行）。
+2. 但业务代码用 `unassigned`：`order_service.create_order` 设 `status="unassigned"`；`state_machine.py` 的 `ORDER_TRANSITIONS` 起点为 `unassigned`；`ai._build_context` 查 `status="unassigned"`。
+3. 复现：
+   - `GET /api/orders` 返回 100 条，列表 status 全为 `pending`。
+   - `_build_context` 查 unassigned 仅命中 6 条（测试中新建的），非种子 100 条。
+   - `POST /api/schedule/global`（traditional）返回 `40001 没有找到未打包的订单...请确认订单状态为 unassigned/exception`。
+
+**根本原因**
+`init_demo_data.py` 写入的种子状态 `pending`/`pending_pack` 从未进入状态机正式枚举。状态机订单合法状态为 `unassigned/assigned/in_transit/signed/exception/closed`，无 `pending`。造成「演示数据与调度引擎脱节」。
+
+**修复建议**
+将 `init_demo_data.py` 的种子状态改为业务枚举：
+
+```python
+# scripts/init_demo_data.py
+order = Order(
+    order_code=order_code,
+    destination_node_id=dest_node.id,
+    time_window="9:00-18:00",
+    status="unassigned",      # 原 "pending"
+)
+...
+goods = Goods(
+    ...
+    status="unassigned",      # 原 "pending_pack"
+)
+```
+
+> 注意：若历史库中已有 `pending` 数据，需一并做数据回填 SQL：
+> `UPDATE orders SET status='unassigned' WHERE status='pending';`
+
+**影响范围**：AI 上下文（待调度订单计数）、全局调度（F007 找不到可调度订单）、后续打包/派单/路径全链路阻塞。
+
+---
+
+## ISSUE-003 auth 返回 expires_in 硬编码 86400 ≠ 实际 172800
+
+| 项 | 内容 |
+|----|------|
+| 关联测试用例 | TC-007 |
+| 优先级 | **P1**（前端 Token 过期倒计时错误，早刷新/晚过期不一致） |
+
+**问题描述与复现步骤**
+1. 登录返回 `data.expires_in = 86400`（api/auth.py 第 59 行硬编码）。
+2. 但 JWT 实际 exp 由 `settings.JWT_EXPIRE_SECONDS` 计算，dev `.env.dev` 下为 `172800`（48h）。
+3. 解码 JWT payload 仅含 `sub/role/exp`，无 iat；实测 `exp` 距签发为 172800s。
+
+**根本原因**
+`api/auth.py` 返回的 `expires_in` 未从 `settings.JWT_EXPIRE_SECONDS` 读取，而是字面量 `86400`。前端据此做提前刷新/过期提示会与实际有效期错位 2 倍。
+
+**修复建议**
+```python
+# api/auth.py
+"expires_in": settings.JWT_EXPIRE_SECONDS,   # 原 86400
+```
+（需已在文件顶部 `from config.settings import settings` 或经 `config.database import settings` 引用。）
+
+**影响范围**：前端登录态过期时间显示/自动刷新时机错误；文档若声称 24h 有效期也与实际 48h 不符。
+
+---
+
+## ISSUE-004 OrderCreate schema 未校验 time_window 合法性
+
+| 项 | 内容 |
+|----|------|
+| 关联测试用例 | TC-022 |
+| 优先级 | **P2**（边界/健壮性） |
+
+**问题描述与复现步骤**
+1. `schemas/order.py` 的 `OrderCreate.time_window: str` 无任何 regex/validator。
+2. `order_service.create_order` 直接透传 `time_window` 入库，不解析、不校验起止时间。
+3. 传入 `"18:00-9:00"`（起晚于止）或 `"abc"` 均被接受。
+
+**根本原因**
+缺少 Pydantic v2 字段级 `field_validator` 校验时间窗格式与起止先后。
+
+**修复建议**
+```python
+from pydantic import field_validator
+import re
+
+class OrderCreate(BaseModel):
+    time_window: str
+
+    @field_validator("time_window")
+    @classmethod
+    def check_window(cls, v: str) -> str:
+        m = re.fullmatch(r"(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})", v or "")
+        if not m:
+            raise ValueError("time_window 格式应为 HH:MM-HH:MM")
+        h1, m1, h2, m2 = map(int, m.groups())
+        if (h1, m1) >= (h2, m2):
+            raise ValueError("时间窗开始时间必须早于结束时间")
+        return v
+```
+
+**影响范围**：非法时间窗进入调度，可能影响 ETA/SLA 计算与路线规划。
+
+---
+
+## ISSUE-005 algorithm="deepseek" 未实现
+
+| 项 | 内容 |
+|----|------|
+| 关联测试用例 | TC-041 |
+| 优先级 | **P1**（功能清单声称但不可用） |
+
+**问题描述与复现步骤**
+1. `POST /api/schedule/global` 传 `{"algorithm":"deepseek"}`。
+2. 返回 `40001 全局调度失败: 阶段3仅支持 traditional 算法，收到: deepseek`。
+
+**根本原因**
+`algorithms/global_schedule.py` 的入口明确仅接受 `traditional`；`algorithms/factory.py` 的策略注册表 `_GLOBAL_STRATEGIES` 只注册 `greedy`/`dummy`（虽然 greedy 对应 traditional 引擎，但无 deepseek）。docs/功能清单将 `deepseek` 列为可选算法，实际未落地。
+
+**修复建议**
+二选一：
+- （短期）前端/文档剔除 `deepseek` 选项，接口对未知算法返回更清晰的 `40000` 参数错误码并附支持列表。
+- （正确实现）注册 `DeepSeekScheduleStrategy`（继承 `SchedulingStrategy`，调用 `DeepSeekService` 生成方案结构），并在 `_GLOBAL_STRATEGIES` 登记 `deepseek`。
+
+```python
+# algorithms/factory.py
+_GLOBAL_STRATEGIES = {
+    "greedy": GreedyGlobalScheduleStrategy(),
+    "dummy": DummyStrategy(),
+    # "deepseek": DeepSeekScheduleStrategy(),  # 待实现
+}
+```
+
+**影响范围**：用户选择 deepseek 算法时调度失败；与 AI 助手（deepseek 解析）的能力边界不一致。
+
+---
+
+## ISSUE-006 残留 DEBUG/ERROR print 语句
+
+| 项 | 内容 |
+|----|------|
+| 关联测试用例 | TC-048 关联 |
+| 优先级 | **P2**（代码卫生/日志规范） |
+
+**问题描述与复现步骤**
+`services/schedule_service.py`：
+- 第 318-319 行：`print(f"[DEBUG] gs.id=...")`、`print(f"[DEBUG] gs.goods_schedules type=...")`
+- 第 425 行：`print(f"[ERROR] get_global_schedule failed: {str(e)}")`
+
+在真实调度请求时会把内部状态打印到 stdout，泄漏内部结构且未走统一 logging。
+
+**根本原因**
+开发期调试残留，未清理；`[ERROR]` 分支未用 `logger.error`。
+
+**修复建议**
+```python
+# 删除 318-319 行 DEBUG print
+# 第 425 行改为：
+logger.error("get_global_schedule failed: %s", e)
+```
+（模块顶部需 `import logging; logger = logging.getLogger(__name__)`。）
+
+**影响范围**：生产日志污染、少量性能损耗、可能打印敏感内部数据。
+
+---
+
+## 问题优先级总览
+
+| 编号 | 简述 | 优先级 |
+|------|------|--------|
+| ISSUE-001 | manager 角色无权限映射 | P0 |
+| ISSUE-002 | 种子订单状态 pending vs unassigned | P0 |
+| ISSUE-003 | auth expires_in 硬编码 | P1 |
+| ISSUE-004 | time_window 未校验 | P2 |
+| ISSUE-005 | algorithm=deepseek 未实现 | P1 |
+| ISSUE-006 | 残留 DEBUG print | P2 |
+
+> P0 两项（ISSUE-001/002）直接影响「按 docs 初始化后演示/部署」的真实可用性，建议优先修复并回到第三阶段回归。
