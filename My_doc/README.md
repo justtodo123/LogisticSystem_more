@@ -23,7 +23,8 @@
 
 ## 当前治理状态
 
-- `R2-00` 于 2026-08-25 重新打开，当前为 `in_progress`；独立文档分支的 commit/PR 尚不存在，完成记录不得提前填写。
+- `R2-00` 已于 2026-08-25 完成：治理提交经 [PR #3](https://github.com/justtodo123/LogisticSystem_more/pull/3) 合并到 `main`，合并提交为 `8e19aa1fa65e2fb4e6e079ed1e1925c1989a2f6a`，前端构建、后端测试和镜像构建 Checks 均成功。
+- 当前并行入口为 `R2-00A` 与 `R2-04A`；两者完成前不得进入 `R2-01`。
 - `R2-00A` 建立 Alembic 单 head、fresh/legacy SQLite 和 schema parity 前置；不在本轮文档修订中生成 revision 或执行数据库升级。
 - `R2-04A` 建立错误 registry、`DomainError`、统一 envelope、旧 `detail` 兼容和 `get_db` rollback 前置。
 - 原 R2-04 已拆为 [R2-04B](plan_todo/04B-rbac-jwt-and-frontend.md)，只负责 RBAC、JWT 撤权和前端权限。

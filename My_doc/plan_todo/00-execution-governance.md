@@ -1,7 +1,7 @@
 ---
 plan_id: "R2-00"
 title: 第二轮执行治理与证据基线
-status: in_progress
+status: done
 priority: P0
 owner: justtodo123
 created: 2026-08-25
@@ -15,8 +15,8 @@ depends_on: []
 
 - 第一轮已建立计划状态、历史归档和证据规则，原文见[第一轮执行治理](../post_plan/第一轮优化计划/00-execution-governance.md)。
 - 2026-08-25 评审：原第二轮卡片把 PostgreSQL/Docker/多 worker 写进 P0 验收，但本机无 Docker/WSL/PostgreSQL/Redis，第一轮 02B 仍为 `mitigated`。按原卡执行会立刻 `blocked`。
-- 协议决策见 [decisions.md](./decisions.md)；本轮治理修订正在把该文件与实验模板正式纳入 Git 追踪。
-- 当前工作位于独立文档分支 `feat/docs-r2-governance`。分支创建时已有 00～06 与本 README 共 8 个未提交修改，均原样保留；不得写成“工作区干净”或“已提交”。
+- 协议决策见 [decisions.md](./decisions.md)；治理增补 `v2026-08-25-r2-governance`、实验模板和 `My_doc/` 追踪边界已通过 PR [#3](https://github.com/justtodo123/LogisticSystem_more/pull/3) 合并到 `main`。
+- 治理实现分支为 `feat/docs-r2-governance`。分支创建时已有 00～06 与本 README 共 8 个未提交修改，实施期间均原样保留并纳入经审查的治理提交。
 
 ## 问题与目标
 
@@ -84,15 +84,27 @@ git check-ignore -v My_doc/README.md.preview.txt My_doc/pre-optimization/ppt/nod
 - 日期：2026-08-25
 - 负责人：justtodo123
 - 起始基线：`main` @ `85938d72e8a5951e55863795733e7a4355325c46`
-- 工作分支：`feat/docs-r2-governance`
-- 分支创建时工作区：00～06 与计划 README 共 8 个未提交修改；已保留
+- 实施分支：`feat/docs-r2-governance`
+- 分支创建时工作区：00～06 与计划 README 共 8 个未提交修改；已原样保留并纳入审查
 - 本机：Win11 家庭版，Ryzen 7 7840H 8C/16T，16GB；Python 3.13.3；Node v24.12.0；Git 2.49
 - 缺口：Docker / Compose / WSL / PostgreSQL / Redis / k6 / Locust 均未安装；内存空闲曾约 1.6GB
-- 当前决策基线：`v2026-08-25-r2-freeze`；治理增补版本待本次文档变更完成
-- Commit/PR：尚无；不得提前填写
-- 下一动作：完成治理 diff 与验证；之后 R2-00A、R2-04A 可并行实施
+- 决策基线：`v2026-08-25-r2-freeze`；治理增补：`v2026-08-25-r2-governance`
+- 分批提交：
+  - `77e3b8b44642759935e2b3b388cbf4226c868259` — 正式追踪 `My_doc` 文档基线
+  - `7ff88823e1a453897e27151437d6b438f4b3ffa0` — 重开 R2-00 并完善证据治理
+  - `8db716120b36ae988f3d356c675c4c131704d45c` — 增补 R2 基础前置与依赖计划
+- 发布 PR：[#3](https://github.com/justtodo123/LogisticSystem_more/pull/3)，`feat/docs-r2-governance` → `main`
+- 合并提交：`8e19aa1fa65e2fb4e6e079ed1e1925c1989a2f6a`
+- 合并时间：`2026-08-25 14:37:26 +08:00`
+- GitHub Checks：
+  - [前端类型检查 + 构建](https://github.com/justtodo123/LogisticSystem_more/actions/runs/32817784494/job/97709465837)：`success`
+  - [后端测试 (pytest)](https://github.com/justtodo123/LogisticSystem_more/actions/runs/32817784494/job/97709465642)：`success`
+  - [构建并推送 Docker 镜像](https://github.com/justtodo123/LogisticSystem_more/actions/runs/32818030675/job/97710183917)：`success`
+- Commit Status API：未上报独立 status context（`total_count=0`）；不将其误写为失败，验收依据为上述三个 completed/success check run。
 
 ## 完成记录
 
-- 状态：`in_progress`
-- 关闭条件：独立 docs 分支的真实 commit/PR、追踪边界验证和计划一致性验证均已回填后，另行把本卡改为 `done`。
+- 状态：`done`
+- 完成日期：2026-08-25
+- 验证结论：`My_doc/` 追踪边界、版本化决策、实验模板、9 张计划卡和无环依赖已纳入 `main`；PR 与 CI 证据均为真实可访问记录。
+- 后续入口：R2-00A 与 R2-04A 可从最新 `main` 并行启动；R2-01 仍须等待两者完成。
