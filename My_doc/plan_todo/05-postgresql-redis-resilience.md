@@ -1,76 +1,87 @@
 ---
 plan_id: "R2-05"
 title: PostgreSQL、Redis 与故障韧性验证
-status: pending
+status: blocked
 priority: P1
-owner: 待认领
+owner: justtodo123
 created: 2026-08-25
 updated: 2026-08-25
-depends_on: ["R2-01", "R2-02", "R2-03"]
+depends_on: ["R2-00A", "R2-01", "R2-02", "R2-03"]
 ---
 
 # R2-05 — PostgreSQL、Redis 与故障韧性验证
 
 ## 来源证据与当前行为
 
-开发默认 SQLite，Redis 失败时回退进程内缓存，第一轮 Docker 计划区分了本地 smoke 与真实 Docker E2E。参考路线图要求 PostgreSQL + Redis + 多 worker 作为生产验收基线，并关注连接池、事务隔离、锁等待、缓存击穿和降级一致性。
+开发默认 SQLite；Redis 失败回退进程内缓存。Compose 当前是 SQLite + 单 worker，**不是**本卡目标拓扑。本机 2026-08-25：无 Docker / WSL / PostgreSQL / Redis。第一轮 02B 仍为 `mitigated`。
+
+**blocked 原因**：P1 环境三条路径均未就绪（见 [D-R2-ENV](./decisions.md)）。解阻条件：GitHub Actions 加上 Postgres/Redis services，或 Linux VM/云主机 Docker Engine 可用。
 
 ## 问题与目标
 
-建立可重复的生产近似拓扑和集成测试，证明数据库并发、缓存降级、迁移、重启和连接资源行为，而不是仅证明配置文件能启动。
+在**生产近似拓扑**上复跑 P0 协议，证明数据库并发、缓存降级、迁移、重启和连接资源行为。
 
-## 范围
+## 范围（P1）
 
-- PostgreSQL schema/migration、连接池、隔离级别、deadlock/serialization failure 有限重试。
-- Redis cache-aside、写后失效、singleflight/锁、TTL 抖动、空值短 TTL、熔断窗口和指标。
-- Uvicorn 多 worker、Compose/Testcontainers、健康检查、备份恢复和 Docker 业务 smoke。
+- PostgreSQL schema/Alembic、连接池、隔离级别、deadlock/serialization 有限重试。
+- 复跑 R2-01～03：CAS、幂等、号段 10 万、Saga/outbox、worker 重启。
+- Redis cache-aside、写后失效、单飞/锁、TTL 抖动、空值短 TTL、熔断与降级可见性。
+- 多 worker；Compose 或 GHA service；健康检查；备份恢复。
+- 给 backend 增加 PostgreSQL 驱动依赖；Compose 增加 postgres 服务（不再把 SQLite 当本卡栈）。
 
 ## 非目标
 
-- 不在没有瓶颈数据时引入分库分表、微服务或 Kafka。
-- 不把 SQLite 结果外推为生产容量；不把内存缓存当强一致存储。
+- 不分库分表、不上 Kafka、不装 Windows Docker Desktop。
+- 不把 SQLite P0 结果外推为生产容量。
+- 不把第一轮 02A smoke 或当前 SQLite compose 启动写成 P1 通过。
 
 ## 依赖与进入条件
 
-- R2-01～03 的并发、幂等和恢复协议已可在目标库运行。
-- 准备独立测试库/Redis 和专用 volume；不得清理开发库。
+- R2-00A 已完成单 head、fresh/legacy SQLite migration 基线；本卡只负责在 PostgreSQL 上复跑和验证，不再处理历史双 head。
+- R2-01～03 协议已在本机 `done`（或至少代码已合入、P0 测试绿）。
+- P1 环境三条之一可用；使用专用数据库/volume，不得清理开发库。
 
 ## 有序实施步骤
 
-1. 固定 PostgreSQL、Redis、worker、CPU/内存、连接池和数据规模，建立 Compose 或 Testcontainers 环境。
-2. 执行 Alembic 从旧版本升级、双 head 处理、回滚/备份恢复和索引/EXPLAIN 检查。
-3. 在独立连接下复跑并发状态、幂等、Saga/outbox 和多 worker smoke。
-4. 改造/验证缓存失效顺序、热点并发回源、Redis 中断恢复和降级熔断。
-5. 注入数据库断连、锁冲突、Redis 故障、worker 重启和网络短暂超时，记录 RTO/RPO 或适用边界。
-6. 将目标环境接入 CI 的可选/必选门禁，并保存镜像、迁移和 smoke 产物。
+1. 选定并记录环境（GHA 首选）：Postgres 版本、Redis、worker、CPU/内存、连接池、数据规模。
+2. 从 R2-00A 的唯一 head 在 PostgreSQL fresh 库执行升级，并从已登记旧 revision 升级；完成备份/恢复 dry-run。
+3. 独立连接复跑并发状态、幂等、Saga/outbox、多 worker smoke。
+4. 验证缓存失效、热点回源、Redis 中断与降级熔断。
+5. 注入断连、锁冲突、worker 重启、短暂超时，记录边界（能测 RTO/RPO 则测，否则写适用边界）。
+6. 将 PG/Redis 测试接入 CI（GHA services）；保存镜像/日志/实验记录。
 
-## 验收标准
+## 验收标准（P1）
 
 - PostgreSQL + Redis + 多 worker 的核心 HTTP smoke、迁移和重启通过；业务编码重启后可查。
-- 并发冲突、死锁/序列化失败和连接池耗尽有稳定处理，不产生重复副作用。
-- Redis 故障时降级可见、缓存不承诺强一致，恢复后不会无界回源或击穿。
-- 备份恢复和迁移 dry-run 有原始日志；Docker 未执行时保持 `blocked`。
+- 并发冲突、死锁/序列化失败、连接池耗尽有稳定处理，无重复副作用。
+- Redis 故障时降级可见、不承诺强一致；恢复后无无界回源。
+- 备份恢复或迁移 dry-run 有原始日志。
+- **Docker/GHA 未执行时本卡保持 `blocked`。**
 
 ## 验证命令
 
+环境就绪后按实际拓扑记录。**当前仓库 `docker compose up` 仍是 SQLite，不能当本卡命令。** 示例（GHA 或 Linux）：
+
 ```bash
-docker compose config
-docker compose -p logistics-r2 up -d --build
+# 仅在 P1 环境执行
+docker compose -f docker-compose.yml -f docker-compose.p1.yml -p logistics-r2 up -d --build
 cd src/backend
 python scripts/smoke_local.py --base-url http://127.0.0.1:8000
 python -m pytest -q -p no:cacheprovider
 ```
 
-若本机无 Docker，必须在 Linux VM/授权测试主机执行并记录 `docker version`、compose ps、镜像 ID 和退出码；本地 SQLite 测试只能作为补充。
+记录 `docker version` 或 GHA run URL、compose ps、镜像 ID、退出码。
 
 ## 文档与问题记录同步
 
-更新环境配置、启动说明、迁移 runbook、缓存一致性边界、第一轮 02 的状态链接和第二轮 README。
+更新环境配置、启动说明、迁移 runbook、缓存一致性边界、第一轮 02 状态链接和第二轮 README。
 
 ## 回滚与恢复
 
-所有实验使用专用 project/volume；清理前确认名称。迁移先备份，故障按恢复 runbook 操作，不删除未知环境数据。
+实验使用专用 project/volume；清理前确认名称。迁移先备份。
 
 ## 完成记录
 
-- 尚未开始。完成时填写拓扑、版本、数据量、故障矩阵、恢复结果、Commit/PR 和外部环境限制。
+- 状态：`blocked`（2026-08-25）
+- 阻塞：本机无 Docker/WSL/PostgreSQL/Redis；未配置 GHA Postgres service；第一轮 02B 未完成
+- 解阻后填写：拓扑、版本、数据量、故障矩阵、Commit/PR

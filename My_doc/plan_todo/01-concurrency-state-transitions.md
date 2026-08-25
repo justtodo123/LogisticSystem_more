@@ -3,72 +3,79 @@ plan_id: "R2-01"
 title: 关键状态转移并发控制
 status: pending
 priority: P0
-owner: 待认领
+owner: justtodo123
 created: 2026-08-25
 updated: 2026-08-25
-depends_on: ["R2-00"]
+depends_on: ["R2-00A", "R2-04A"]
 ---
 
 # R2-01 — 关键状态转移并发控制
 
 ## 来源证据与当前行为
 
-参考路线图指出调度确认、到货确认和 AI 建议仍存在“读取→判断→修改→提交”的竞态窗口，重点位置为 `src/backend/services/schedule_service.py`、`arrival_confirm_service.py`、`ai_suggestion_service.py`。第一轮只收口了 delivered 终态和订单六态，不等于并发安全。
+`schedule_service.confirm_schedule`、`arrival_confirm_service`、`ai_suggestion_service` 仍是读取→判断→修改→提交。重点文件：`src/backend/services/schedule_service.py`、`arrival_confirm_service.py`、`ai_suggestion_service.py`。第一轮只收口了 delivered 终态和订单六态，不等于并发安全。
+
+冲突与幂等语义已冻结：[D-R2-CONFLICT](./decisions.md)、[D-R2-IDEM](./decisions.md)。迁移从 [R2-00A](./00A-alembic-migration-baseline.md) 的唯一 head 派生，`40901` 使用 [R2-04A](./04A-error-contract-and-db-session.md) 的错误 registry 与统一 envelope。
 
 ## 问题与目标
 
-让关键状态转移在独立数据库 Session/连接下具备明确的 CAS/乐观锁语义；并发失败返回稳定冲突结果，不产生重复包裹、事件、批次或通知。
+让关键状态转移在**独立数据库 Session** 下具备 CAS/条件更新语义；并发失败者得到稳定 `40901`，不产生重复包裹、事件、批次或通知。
 
-## 范围
+## 范围（P0）
 
 - draft 确认、到货确认、AI 建议确认/拒绝及其副作用。
-- version 字段或条件更新、唯一约束、冲突业务码和审计记录。
-- SQLite 行为与 PostgreSQL 行为差异及独立 Session 并发测试。
+- 条件更新（`UPDATE ... WHERE status = :expected`）或 `version` 字段；冲突业务码 `40901` 和审计。
+- 独立 Session 的 20/100 并发测试（SQLite 可跑，报告必须写写锁限制）。
+- 引擎创建改为方言安全，避免 P1 切换 PostgreSQL 时 `check_same_thread` 炸。
 
 ## 非目标
 
-- 不在本卡实现 Saga、outbox 或完整压测；相关工作由 R2-03/R2-06 承担。
-- 不在未确定冲突产品语义前擅自把所有冲突变成成功幂等。
+- 不在本卡实现 Saga、outbox、完整压测（R2-03 / R2-06）。
+- **不**把 PostgreSQL 锁等待、多 worker 复跑当作本卡 `done` 条件（那是 R2-05）。
+- 不把所有冲突变成成功幂等（无 key 的第二次确认必须 409）。
 
 ## 依赖与进入条件
 
-- R2-00 完成；第一轮订单/货物状态契约保持不变。
-- 明确每个状态转移的允许前置状态和冲突响应语义。
+- R2-00A 与 R2-04A 已完成：迁移单 head、错误码和数据库会话契约可用。
+- 第一轮订单/货物状态契约保持不变。
 
 ## 有序实施步骤
 
-1. 盘点服务、路由、模型、迁移和现有状态测试，绘制状态转移与副作用时序。
-2. 优先用条件更新/CAS 抢占状态；必要时增加 `version` 和迁移，避免持锁调用外部服务。
-3. 将副作用放在成功抢占之后，并为重复请求定义稳定响应和审计事件。
-4. 用独立 Session、真实并发任务测试 20/100 请求确认同一 draft；补到货和 AI 建议边界。
-5. 在 PostgreSQL 下复跑，覆盖锁等待、唯一冲突、事务取消和连接断开。
-6. 更新 API/错误码/文档，记录实现前后副作用计数。
+1. 盘点服务、路由、模型、迁移和现有状态测试，画出状态转移与副作用时序（确认流程里打包算法在 CAS 之前还是之后）。
+2. 用条件更新抢占状态；必要时加 `version` 与 Alembic。**先 CAS 再跑 CPU 打包**，避免持锁跑外部 HTTP；本地 packing 若必须在事务内，保持短事务并记录锁持有点。
+3. 副作用只在抢占成功之后发生；无幂等键的重复确认返回 `409` + `40901`。
+4. 用独立 Session、真实并发任务测 20/100 请求确认同一 draft；补到货和 AI 建议。禁止共享同一个测试事务伪造并发。
+5. 修复 `create_engine`：仅 SQLite 传 `check_same_thread`。不在本卡引入 psycopg 或 Compose。
+6. 更新 API/错误码/文档；把命令、副作用计数写入 `experiments/`。
 
-## 验收标准
+## 验收标准（P0）
 
-- 100 个独立并发确认请求最多一个成功，其余得到同一可识别冲突语义。
-- 不产生重复包裹、批次、事件、通知；delivered 仍受第一轮终态规则保护。
-- SQLite 与 PostgreSQL 均有测试，不能用同一测试事务伪造并发。
-- 进程取消/数据库异常不会留下“状态已改但副作用不可解释”的记录。
+- 100 个独立并发确认请求最多一个成功；其余为同一 `40901` 语义（SQLite 下若因写锁排队导致串行，仍必须零重复副作用，并在报告注明不能外推 PostgreSQL）。
+- 不产生重复包裹、批次、事件、通知；delivered 仍受第一轮终态保护。
+- CAS 事务内发生异常时状态与本地数据库副作用一并 rollback；进程崩溃后的跨步骤恢复由 R2-03 验收，不在本卡虚构 Saga 能力。
+- 方言安全：非 SQLite URL 不再带 `check_same_thread`。
+
+## P1 复跑（不阻塞本卡 done）
+
+在 R2-05 环境复跑：锁等待、唯一冲突、事务取消、连接断开。结果挂到 R2-05 实验记录并回链本卡。
 
 ## 验证命令
 
 ```bash
 cd src/backend
-python -m pytest -q tests/unit/services tests/api tests/integration
-python -m pytest -q -p no:cacheprovider
+python -m pytest -q tests/unit/services tests/api tests/integration -p no:cacheprovider
 ```
 
-PostgreSQL 并发命令、连接数、数据规模和原始输出须写入实验报告；前端契约变更时另行执行 `npx vue-tsc --noEmit && npm run build`。
+并发用例的文件名、数据规模、原始输出写入 `experiments/`。前端契约变更时另跑 `npx vue-tsc --noEmit && npm run build`。
 
 ## 文档与问题记录同步
 
-更新状态机、错误码、API 契约和第二轮 README；已有问题优先更新，不重复创建同一竞态记录。
+更新状态机、错误码、API 契约和第二轮 README；已有竞态问题优先更新，不重复建档。
 
 ## 回滚与恢复
 
-迁移必须可逆；若 CAS 改造导致合法串行流程失败，先回滚实现但保留失败并发测试，禁止恢复无保护的旧竞态作为最终状态。
+迁移必须可逆；若 CAS 导致合法串行流程失败，先回滚实现但保留失败并发测试，禁止恢复无保护的旧竞态作为最终状态。
 
 ## 完成记录
 
-- 尚未开始。完成时填写并发数据、数据库版本、测试结果、Commit/PR 和遗留冲突语义。
+- 尚未开始。完成时填写并发数据、SQLite 限制说明、测试结果、Commit/PR。

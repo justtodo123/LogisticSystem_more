@@ -1,50 +1,80 @@
 # 第二轮优化计划
 
 > **定位**：面向大厂后端校招 SP 的第二轮工程化优化路线；本目录是第二轮计划的唯一实时状态入口。
-> **参考依据**：[大厂后端SP标准差距与优化路线图](../reference/大厂后端SP标准差距与优化路线图.md)。
-> **第一轮归档**：[第一轮优化计划](../post_plan/第一轮优化计划/)。第一轮文档保留原文，仅用于追溯，不承担第二轮实时状态。
-> **建立日期**：2026-08-25。
+> **参考依据**：[大厂后端 SP 标准差距与优化路线图](../reference/大厂后端SP标准差距与优化路线图.md)。
+> **决策基线**：[decisions.md](./decisions.md)（协议冻结 `v2026-08-25-r2-freeze`；治理增补 `v2026-08-25-r2-governance`）。冲突时：代码与验证证据 > 版本化决策 > 本 README > 单卡正文。
+> **第一轮归档**：[第一轮优化计划](../post_plan/第一轮优化计划/)。第一轮文档只追溯，不承担第二轮实时状态。
+> **修订日期**：2026-08-25。当前先收尾 R2-00 治理，再并行实施迁移基线 R2-00A 与错误基座 R2-04A。
 
 ## 阅读与状态规则
 
-1. 先读本 README，再读对应计划卡；发生冲突时，以当前代码、实际验证证据和已批准决策为准。
+1. 先读本 README 和 [decisions.md](./decisions.md)，再读对应计划卡。
 2. 第二轮只做“可验证闭环”：每个能力必须同时有实现、测试、运行环境和可复现实验记录；配置文件存在不等于验收完成。
-3. 状态使用 `pending`、`in_progress`、`blocked`、`needs_decision`、`mitigated`、`done`；只有 `done` 计入完成，外部环境不可用不得用本地结果替代。
-4. 每张卡沿用第一轮的结构：来源证据、目标、范围/非目标、依赖、步骤、验收、命令、同步、回滚、完成记录。
-5. 计划阶段不虚构吞吐、P95/P99、并发成功率或生产拓扑结果；所有数字须附环境、数据规模、日期、命令和原始产物。
+3. 状态使用 `pending`、`in_progress`、`blocked`、`needs_decision`、`mitigated`、`done`；只有 `done` 计入完成。
+4. **P0 不得**因本机无 Docker / PostgreSQL / Redis 标 `blocked`。**P1** 在外部拓扑未就绪时必须标 `blocked`，不得用 SQLite 结果替代。
+5. 计划阶段不虚构吞吐、P95/P99、并发成功率、commit/PR 或生产拓扑结果；所有结果须附环境、数据规模、日期、命令和产物。
+6. 正式 schema 由 R2-00A 建立的 Alembic 单一 head 管理；错误响应由 R2-04A 的 registry / envelope 管理，后续业务卡不得各建一套。
 
-## 第二轮目标
+## 执行切分
 
-将第一轮已完成的契约治理、重规划终态保护、查询优化和本地 smoke，升级为可证明的：
+| 层级 | 何时开始 | 环境 | 包含 |
+|---|---|---|---|
+| **治理基线** | **现在** | Git + 文档审查 | `00` 收尾：My_doc 追踪、证据模板、计划依赖和真实发布记录 |
+| **P0 基础** | `00` done 后 | Windows + Python 3.13 + SQLite + pytest | `00A` 与 `04A` 并行：迁移单一真相源、错误/Session 基座 |
+| **P0 协议** | `00A` + `04A` done 后 | 同上 | `01 → 02 → 03`；`04B` 可与主链并行 |
+| **P1 外部拓扑** | P0 协议稳定，且 P1 环境三条路径之一就绪 | GHA Postgres/Redis（首选）或 Linux VM / 云主机 Docker Engine | `05`；随后 `06` |
+| **P2** | 不阻塞面试材料 | 同上 | soak、Grafana、镜像安全扫描 |
 
-> **并发正确性 → 事务与恢复 → 可靠消息 → 安全契约 → PostgreSQL/Redis 生产验证 → 可观测性与容量证据 → CI/CD 与面试材料**
+P0 证明的是：迁移/错误基座、状态抢占、幂等状态机、编号、Saga/outbox **协议正确**。
+
+P1 证明的是：同一协议在 PostgreSQL + Redis + 多 worker 下仍正确。
+
+SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 
 ## 计划总览
 
-| ID | 优先级 | 状态 | 计划 | 关键出口 |
-|---|---|---|---|---|
-| 00 | P0 | pending | [第二轮执行治理与证据基线](./00-execution-governance.md) | 任务、环境、证据和回滚规则统一 |
-| 01 | P0 | pending | [关键状态转移并发控制](./01-concurrency-state-transitions.md) | 并发确认最多一次成功且无重复副作用 |
-| 02 | P0 | pending | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | 跨进程重复请求一次执行、编码无重复 |
-| 03 | P0 | pending | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | 崩溃可恢复、通知不丢、重复消费可控 |
-| 04 | P1 | pending | [RBAC、JWT 与统一错误契约](./04-rbac-security-contracts.md) | 权限矩阵、token 生命周期、HTTP/业务错误一致 |
-| 05 | P1 | pending | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | 真实数据库/缓存/多 worker 集成证据 |
-| 06 | P1/P2 | pending | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | trace、指标、压测报告和发布门禁可复现 |
+| ID | 层级 | 优先级 | 状态 | 计划 | 关键出口 |
+|---|---|---|---|---|---|
+| 00 | 治理 | P0 | in_progress | [第二轮执行治理与证据基线](./00-execution-governance.md) | My_doc 追踪、证据和依赖经验证；真实 docs 证据回填 |
+| 00A | P0 基础 | P0 | pending | [Alembic 迁移基线与 Schema 真相源治理](./00A-alembic-migration-baseline.md) | fresh/legacy 可升级、单 head、schema parity |
+| 04A | P0 基础 | P0 | pending | [领域错误、统一响应契约与数据库会话回滚](./04A-error-contract-and-db-session.md) | 错误 registry/envelope、detail 兼容、rollback |
+| 01 | P0 | P0 | pending | [关键状态转移并发控制](./01-concurrency-state-transitions.md) | 并发确认最多一次成功且无重复副作用 |
+| 02 | P0 | P0 | pending | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | 同 key 一次执行、编码无 `max+1` 竞态 |
+| 03 | P0 | P0 | pending | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | 崩溃可恢复、通知进 outbox、重复消费可控 |
+| 04B | P0 并行 | P0 | pending | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | 权限矩阵、token version、前后端权限一致 |
+| 05 | P1 | P1 | blocked | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | 真实数据库/缓存/多 worker 集成证据 |
+| 06 | P1/P2 | P1 | pending | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | 最小观测 + load/spike；soak 为 P2 |
 
 ## 依赖主链
 
-`00 → 01 → 02 → 03 → 05 → 06`，`00 → 04`；04 可与 02/03 并行，但 05 的并发与恢复验证依赖 01～03 的协议稳定。第一轮归档中的 01、03、04、05 已作为业务契约基础；第一轮 02 的 Docker 远端验收若仍未完成，第二轮 05 需保留独立 blocked 记录，不得默认为通过。
+```text
+R2-00 (in_progress)
+├── R2-00A
+└── R2-04A
+
+R2-00A + R2-04A -> R2-01 -> R2-02 -> R2-03
+R2-00A + R2-04A -> R2-04B
+R2-00A + R2-01 + R2-02 + R2-03 -> R2-05
+R2-04B + R2-05 -> R2-06
+```
+
+当前下一动作：完成 **R2-00 治理收尾**。R2-00 只有在独立 docs 分支的真实 commit/PR 与验证证据回填后才能改为 `done`；随后 R2-00A 与 R2-04A 可并行开工。禁止现在直接进入 R2-01。
 
 ## 当前证据边界
 
 - 已有 SQLite、本地 HTTP smoke、单元/API/集成测试和路线查询次数回归；这些不等价于 PostgreSQL 多 worker 容量证明。
-- 参考路线图指出：状态更新、幂等、编号生成、重规划多次提交、后台通知、细粒度 RBAC、缓存击穿、可观测性和系统压测仍需闭环。
-- 当前默认环境为 SQLite，Redis 可降级，外部 AI 可降级；第二轮必须把“降级可用”和“生产一致性边界”分别写清楚。
+- 本机（2026-08-25）：Win11 家庭版，Ryzen 7 7840H，16GB（空闲曾约 1.6GB），Python 3.13.3，Node v24.12.0，Git 2.49；**无** Docker / WSL / PostgreSQL / Redis / k6 / Locust。
+- 仓库 `docker-compose.yml` 仍是 SQLite + 单 worker；`requirements.txt` 无 PostgreSQL 驱动；`config/database.py` 无条件 `check_same_thread`，启动仍依赖 `create_all()` 与手写 SQLite DDL；Alembic 当前仍为双 head。这些是 00A/01 的待办，不是已完成能力。
+- 第一轮 02B Docker E2E 仍未完成；P1 保留独立 `blocked`，不默认为通过。
+- `My_doc/` 正在正式纳入追踪；小型脱敏报告可入库，预览、依赖目录、数据库、日志、原始 CI 输出、待脱敏 Office 二进制、可再生成的历史演示输出与实验大产物继续忽略。
 
 ## 阶段出口与交付物
 
-- 01～03：并发/事务/消息协议设计图、故障注入测试、恢复记录。
-- 04～05：权限矩阵、错误契约、PostgreSQL + Redis + 多 worker 集成报告。
-- 06：load/stress/spike/soak 脚本与原始结果、Dashboard/告警说明、CI/CD 门禁、三份面试 STAR 证据卡。
+- 治理（00）：追踪边界、版本化 decisions、实验模板、无环依赖、真实 commit/PR 记录。
+- P0 基础（00A/04A）：Alembic fresh/legacy/parity 证据；错误 registry、兼容 envelope、rollback/脱敏测试。
+- P0 协议（01～03）：独立 Session 并发/故障注入测试、实验记录。
+- P0 并行（04B）：权限矩阵、`/me` 权限、token version 与前端 `can()` 测试。
+- P1（05）：PostgreSQL + Redis + 多 worker 集成报告（GHA 或 VM/云）。
+- P1/P2（06）：request/trace/task ID、load/spike 报告；STAR 故事引用真实验证。
 
-每次完成一个小目标，按 `docs/Git协作规范.md` 创建分支并独立提交；完成后回写本 README 和对应计划卡的真实完成记录。
+每次完成一个小目标，按 [Git 协作规范](../../docs/Git协作规范.md) 创建分支并独立提交；完成后回写本 README 和对应计划卡的真实完成记录。未经明确授权不自动 stage、commit、push 或创建 PR。
