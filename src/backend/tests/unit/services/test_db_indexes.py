@@ -1,7 +1,7 @@
 """
 T4-2 数据库索引优化测试
 
-验证 _run_phase4_migrations 创建的索引：
+验证 Alembic fresh upgrade 创建的索引：
 1. 7 个预期索引全部存在
 2. EXPLAIN QUERY PLAN 显示高频查询走索引而非全表扫描
 3. 1000 条数据规模下订单列表分页查询耗时达标（<100ms 安全阈值，本地实测远低于 50ms）
@@ -9,9 +9,13 @@ T4-2 数据库索引优化测试
 import time
 
 import pytest
-from sqlalchemy import text
+from alembic import command
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
-from config.database import _run_phase4_migrations
+from config.database_url import engine_connect_args
+from utils.schema_management import alembic_config, sqlite_database_url
+
 
 EXPECTED_INDEXES = {
     "ix_orders_status_dest": "orders",
@@ -22,6 +26,26 @@ EXPECTED_INDEXES = {
     "ix_node_dispatches_batch_phase": "node_dispatches",
     "ix_node_dispatches_vehicle_id": "node_dispatches",
 }
+
+
+@pytest.fixture(scope="function")
+def test_db(tmp_path):
+    """通过 Alembic 在临时文件数据库中构建正式 schema。"""
+    database_url = sqlite_database_url(tmp_path / "indexes.db")
+    command.upgrade(alembic_config(database_url), "head")
+    engine = create_engine(
+        database_url,
+        connect_args=engine_connect_args(database_url),
+    )
+    testing_session_local = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+    )
+    try:
+        yield engine, testing_session_local
+    finally:
+        engine.dispose()
 
 
 def _index_names(engine, table):
@@ -47,14 +71,12 @@ class TestPhase4Indexes:
     def test_all_expected_indexes_created(self, test_db):
         """7 个高频查询索引全部创建"""
         engine, _ = test_db
-        _run_phase4_migrations(engine)
         for index_name, table in EXPECTED_INDEXES.items():
             assert index_name in _index_names(engine, table), f"索引 {index_name}({table}) 未创建"
 
     def test_orders_filter_uses_index(self, test_db):
         """订单按状态+目的地过滤走复合索引"""
         engine, _ = test_db
-        _run_phase4_migrations(engine)
         _seed_orders(engine, 300)
         with engine.connect() as conn:
             plan = conn.execute(text(
@@ -67,7 +89,6 @@ class TestPhase4Indexes:
     def test_orders_sort_uses_index(self, test_db):
         """订单列表按创建时间排序走索引"""
         engine, _ = test_db
-        _run_phase4_migrations(engine)
         _seed_orders(engine, 300)
         with engine.connect() as conn:
             plan = conn.execute(text(
@@ -79,7 +100,6 @@ class TestPhase4Indexes:
     def test_goods_filter_uses_index(self, test_db, test_goods):
         """货物按订单+状态过滤走复合索引"""
         engine, _ = test_db
-        _run_phase4_migrations(engine)
         order_id = test_goods["G001"].order_id
         with engine.connect() as conn:
             plan = conn.execute(text(
@@ -92,7 +112,6 @@ class TestPhase4Indexes:
     def test_packages_route_uses_index(self, test_db):
         """包裹按起终点+状态过滤走复合索引"""
         engine, _ = test_db
-        _run_phase4_migrations(engine)
         with engine.connect() as conn:
             plan = conn.execute(text(
                 "EXPLAIN QUERY PLAN SELECT * FROM packages "
@@ -104,7 +123,6 @@ class TestPhase4Indexes:
     def test_packages_schedule_uses_index(self, test_db):
         """包裹按调度方案过滤走索引"""
         engine, _ = test_db
-        _run_phase4_migrations(engine)
         with engine.connect() as conn:
             plan = conn.execute(text(
                 "EXPLAIN QUERY PLAN SELECT * FROM packages WHERE schedule_id=10"
@@ -115,7 +133,6 @@ class TestPhase4Indexes:
     def test_node_dispatches_batch_phase_uses_index(self, test_db):
         """调度单按批次+层级过滤走复合索引"""
         engine, _ = test_db
-        _run_phase4_migrations(engine)
         with engine.connect() as conn:
             plan = conn.execute(text(
                 "EXPLAIN QUERY PLAN SELECT * FROM node_dispatches "
@@ -127,7 +144,6 @@ class TestPhase4Indexes:
     def test_node_dispatches_vehicle_uses_index(self, test_db):
         """调度单按车辆过滤走索引（模型无 status 列，退化为单列索引）"""
         engine, _ = test_db
-        _run_phase4_migrations(engine)
         with engine.connect() as conn:
             plan = conn.execute(text(
                 "EXPLAIN QUERY PLAN SELECT * FROM node_dispatches WHERE vehicle_id=1"
@@ -138,7 +154,6 @@ class TestPhase4Indexes:
     def test_order_list_pagination_1000_rows(self, test_db):
         """1000 条数据规模下订单分页查询走索引且耗时达标（<100ms）"""
         engine, _ = test_db
-        _run_phase4_migrations(engine)
         _seed_orders(engine, 1000)
         query = (
             "SELECT * FROM orders "
