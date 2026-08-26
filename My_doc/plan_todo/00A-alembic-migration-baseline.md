@@ -1,7 +1,7 @@
 ---
 plan_id: "R2-00A"
 title: Alembic 迁移基线与 Schema 真相源治理
-status: in_progress
+status: done
 priority: P0
 owner: justtodo123
 created: 2026-08-25
@@ -106,13 +106,14 @@ python -m pytest -q tests -p no:cacheprovider
 
 ## 完成记录
 
-- 本地实现与 P0 协议验证已完成并按治理边界分批提交，计划保持 `in_progress`，直至 PR、远程 CI 与合并证据齐备。
+- R2-00A 已完成并合并；P0 协议与发布边界验证均通过。
 - 唯一 head：`r2_00a_schema_convergence`；双父为 `c78f9b436833` 与 `phase7_exception_fields`。
 - 已覆盖 fresh、全部受支持 revision、known mixed、WAL、未知/漂移、多 version rows、孤立 sidecar、失败目标清理与发布门禁。
 - metadata parity 与临时数据库重启 smoke 已通过；完整后端结果为 718 passed、209 warnings。
-- Commit SHA：远程 head `d25da0b94ce11be73357547a9f8d60e07dacf2ba`；分批提交为 `71237cd`、`9952095`、`adb3cac`、`efe6d73`、`8e3c3c2`、`d25da0b`。
-- PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/5（OPEN，mergeable；已获 owner 明确合并授权）。
-- CI run：https://github.com/justtodo123/LogisticSystem_more/actions/runs/32931193029（SUCCESS）；数据库迁移基线、后端 pytest、前端类型检查与构建均通过。
+- 最终分支 head：`81db382ed61b8d279a4fef1f7964c29769989270`；分批提交为 `71237cd`、`9952095`、`adb3cac`、`efe6d73`、`8e3c3c2`、`d25da0b`、`81db382`。
+- PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/5（MERGED，2026-08-26 05:55:02 UTC）。
+- 最新 CI run：https://github.com/justtodo123/LogisticSystem_more/actions/runs/32932228092（SUCCESS）；数据库迁移基线、后端 pytest、前端类型检查与构建均通过。
+- Merge commit：`8431fd8d66905d548e62e27ffea21bb1949d5f48`（GitHub verified signature）；本地 `main` 已同步到该提交。
 - Docker runtime validation：未执行（本机 Docker CLI unavailable，退出码 127）。
 - PostgreSQL、Redis、多 worker 验证不在本卡 P0 本机协议范围内。
 - 详细命令、环境、退出码与限制见 [R2-00A 实验记录](./experiments/20260826-R2-00A-migration-verification.md)。

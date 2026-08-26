@@ -4,7 +4,7 @@
 > **参考依据**：[大厂后端 SP 标准差距与优化路线图](../reference/大厂后端SP标准差距与优化路线图.md)。
 > **决策基线**：[decisions.md](./decisions.md)（协议冻结 `v2026-08-25-r2-freeze`；治理增补 `v2026-08-25-r2-governance`）。冲突时：代码与验证证据 > 版本化决策 > 本 README > 单卡正文。
 > **第一轮归档**：[第一轮优化计划](../post_plan/第一轮优化计划/)。第一轮文档只追溯，不承担第二轮实时状态。
-> **修订日期**：2026-08-25。R2-00 治理已完成并合并；下一步并行实施迁移基线 R2-00A 与错误基座 R2-04A。
+> **修订日期**：2026-08-26。R2-00A 已完成并通过 PR #5 合并；当前优先完成 R2-04A，之后进入 R2-01。
 
 ## 阅读与状态规则
 
@@ -36,7 +36,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | ID | 层级 | 优先级 | 状态 | 计划 | 关键出口 |
 |---|---|---|---|---|---|
 | 00 | 治理 | P0 | done | [第二轮执行治理与证据基线](./00-execution-governance.md) | My_doc 追踪、证据和依赖已验证；PR #3 与 CI 证据已回填 |
-| 00A | P0 基础 | P0 | pending | [Alembic 迁移基线与 Schema 真相源治理](./00A-alembic-migration-baseline.md) | fresh/legacy 可升级、单 head、schema parity |
+| 00A | P0 基础 | P0 | done | [Alembic 迁移基线与 Schema 真相源治理](./00A-alembic-migration-baseline.md) | PR #5 / CI 通过并合并；fresh/legacy、单 head、schema parity 已验证 |
 | 04A | P0 基础 | P0 | pending | [领域错误、统一响应契约与数据库会话回滚](./04A-error-contract-and-db-session.md) | 错误 registry/envelope、detail 兼容、rollback |
 | 01 | P0 | P0 | pending | [关键状态转移并发控制](./01-concurrency-state-transitions.md) | 并发确认最多一次成功且无重复副作用 |
 | 02 | P0 | P0 | pending | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | 同 key 一次执行、编码无 `max+1` 竞态 |
@@ -58,7 +58,7 @@ R2-00A + R2-01 + R2-02 + R2-03 -> R2-05
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：从最新 `main` 并行启动 **R2-00A 迁移基线**与 **R2-04A 错误基座**；两者均完成后方可进入 R2-01。
+当前下一动作：从最新 `main` 完成 **R2-04A 错误基座**；R2-00A 与 R2-04A 均为 `done` 后进入 R2-01，R2-04B 可按依赖并行推进。
 
 ## 当前证据边界
 
