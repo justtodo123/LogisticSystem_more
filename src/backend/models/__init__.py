@@ -1,23 +1,49 @@
-from .user import User
-from .log_event import LogEvent
-from .node import Node
-from .storage_center import StorageCenter
-from .sorting_center import SortingCenter
-from .order import Order
-from .goods import Goods
-from .package import Package
-from .vehicle import Vehicle
-from .driver import Driver
-from .global_schedule import GlobalSchedule
-from .dispatch_batch import DispatchBatch
-from .node_dispatch import NodeDispatch
-from .route import Route
-from .exception_event import ExceptionEvent
-from .idempotency_record import IdempotencyRecord
-from .notification_config import NotificationConfig
-from .ai_suggestion import AiSuggestion
+from .base import Base
+from .registry import (
+    MODEL_REGISTRY,
+    MODEL_TABLE_NAMES,
+    AiSuggestion,
+    DispatchBatch,
+    Driver,
+    ExceptionEvent,
+    GlobalSchedule,
+    Goods,
+    IdempotencyRecord,
+    LogEvent,
+    Node,
+    NodeDispatch,
+    NotificationConfig,
+    Order,
+    Package,
+    Route,
+    SortingCenter,
+    StorageCenter,
+    User,
+    Vehicle,
+    import_all_models,
+)
 
-__all__ = ["User", "LogEvent", "Node", "StorageCenter", "SortingCenter",
-           "Order", "Goods", "Package", "Vehicle", "Driver", "GlobalSchedule",
-           "DispatchBatch", "NodeDispatch", "Route", "ExceptionEvent",
-           "IdempotencyRecord", "NotificationConfig", "AiSuggestion"]
+__all__ = [
+    "Base",
+    "MODEL_REGISTRY",
+    "MODEL_TABLE_NAMES",
+    "import_all_models",
+    "User",
+    "LogEvent",
+    "Node",
+    "StorageCenter",
+    "SortingCenter",
+    "Order",
+    "Goods",
+    "Package",
+    "Vehicle",
+    "Driver",
+    "GlobalSchedule",
+    "DispatchBatch",
+    "NodeDispatch",
+    "Route",
+    "ExceptionEvent",
+    "IdempotencyRecord",
+    "NotificationConfig",
+    "AiSuggestion",
+]
