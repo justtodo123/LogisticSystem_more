@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, DECIMAL, JSON, DateTime
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Index, String, DECIMAL, JSON, DateTime
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .base import Base
@@ -6,6 +6,10 @@ from .base import Base
 
 class Package(Base):
     __tablename__ = "packages"
+    __table_args__ = (
+        Index("ix_packages_from_to_status", "from_node_id", "to_node_id", "status"),
+        Index("ix_packages_schedule_id", "schedule_id"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     package_code = Column(String(64), unique=True, nullable=False, index=True)
