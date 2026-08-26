@@ -6,7 +6,10 @@
 """
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
+
+from core.error_codes import CODE_NOT_FOUND
+from core.errors import DomainError
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -58,8 +61,8 @@ async def export_schedule(
     """
     try:
         data = export_service.export_schedule(format, schedule_code, db)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError:
+        raise DomainError(CODE_NOT_FOUND)
     filename = f"schedule_{schedule_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format}"
     return Response(
         content=data,

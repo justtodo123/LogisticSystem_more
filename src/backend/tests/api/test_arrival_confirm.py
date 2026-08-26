@@ -134,4 +134,59 @@ class TestArrivalConfirmAuthorized:
             headers={"Authorization": f"Bearer {dispatcher_token}"},
         )
         assert response.status_code == 200
-        assert response.json()["code"] != 0  # 鉴权已过，业务报错属预期
+        body = response.json()
+        assert set(body) >= {"code", "message", "data"}
+        assert body["code"] == 50000
+        assert body["data"] is None
+        assert body["message"] == "到货确认失败"
+        assert "PKG001" not in response.text
+        assert "detail" not in body
+
+
+@pytest.mark.api
+class TestArrivalConfirmErrorSanitization:
+    """存量 HTTP 200 业务错误容器保留，但不再回传异常原文。"""
+
+    def test_batch_confirm_hides_exception_text(self, client, dispatcher_token, monkeypatch):
+        sentinel = "postgresql://user:secret@db"
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError(sentinel)
+
+        monkeypatch.setattr(
+            "api.arrival_confirm.ArrivalConfirmService.confirm_arrival_batch",
+            _boom,
+        )
+        response = client.post(
+            "/api/simulation/confirm-arrival-batch",
+            json=_batch_payload(),
+            headers={"Authorization": f"Bearer {dispatcher_token}"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 50000
+        assert body["data"] is None
+        assert body["message"] == "批量到货确认失败"
+        assert sentinel not in response.text
+
+    def test_arrival_packages_hides_exception_text(self, client, dispatcher_token, monkeypatch):
+        sentinel = "jwt.cookie.private-key"
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError(sentinel)
+
+        monkeypatch.setattr(
+            "api.arrival_confirm.ArrivalConfirmService.get_arrival_packages",
+            _boom,
+        )
+        response = client.get(
+            "/api/simulation/arrival-packages",
+            params={"schedule_code": "GS20260609001"},
+            headers={"Authorization": f"Bearer {dispatcher_token}"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 50000
+        assert body["data"] is None
+        assert body["message"] == "查询到站包裹失败"
+        assert sentinel not in response.text

@@ -11,11 +11,17 @@ def success_response(data: Any = None, meta: dict | None = None) -> dict:
     }
 
 
-def error_response(code: int, message: str, data: Any = None) -> dict:
-    """错误响应"""
+def error_response(
+    code: int,
+    message: str,
+    data: Any = None,
+    *,
+    meta: dict | None = None,
+) -> dict:
+    """错误响应；data 参数仅为旧调用方兼容，异常契约固定为 null。"""
     return {
         "code": code,
         "message": message,
-        "data": data,
-        "meta": {"degraded": False, "degraded_reason": None},
+        "data": None,
+        "meta": meta or {},
     }

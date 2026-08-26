@@ -147,12 +147,19 @@ class TestExportSchedule:
         assert "GS_EXPORT" in text
 
     def test_export_schedule_not_found(self, client, auth_headers):
-        """不存在的调度方案返回 404"""
+        """不存在的调度方案返回统一 404 envelope，且不回显方案编号"""
         response = client.post(
             "/api/export/schedule?schedule_code=GS_NOT_EXIST",
             headers=auth_headers,
         )
         assert response.status_code == 404
+        body = response.json()
+        assert set(body) == {"code", "message", "data", "meta"}
+        assert body["code"] == 40400
+        assert body["data"] is None
+        assert body["message"] == "资源不存在"
+        assert "detail" not in body
+        assert "GS_NOT_EXIST" not in response.text
 
     def test_export_schedule_missing_code(self, client, auth_headers):
         """缺少 schedule_code 返回 422"""

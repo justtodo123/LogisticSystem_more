@@ -8,11 +8,13 @@ AI 助手路由模块
 4. POST /api/ai/analyze-exception - 异常分析（F017，已实现 — 含 DeepSeek 降级策略）
 """
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
 
 from config.database import get_db
+from core.error_codes import CODE_INTERNAL_ERROR
+from core.errors import DomainError
 from schemas.ai import AiParseRequest, AiParseResponse, AiExplainRequest, AiReviewRequest, AiAnalyzeExceptionRequest
 from services.deepseek_service import DeepSeekService
 from services.log_service import LogService, build_deepseek_call_event_data
@@ -142,9 +144,9 @@ async def parse_natural_language(
                 "meta": {"degraded": degraded, "degraded_reason": degraded_reason},
             }
 
-    except Exception as e:
-        logger.error(f"AI 解析失败：{e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        logger.error("AI 解析失败: exception=%s", type(exc).__name__)
+        raise DomainError(CODE_INTERNAL_ERROR, cause=exc) from exc
 
 
 # ════════════════════════════════════════════════════════════
@@ -385,8 +387,8 @@ async def explain_schedule(
         # 4. 返回响应
         return success_response(data=result)
         
-    except Exception as e:
-        logger.error(f"方案解释失败：{e}")
+    except Exception as exc:
+        logger.error("方案解释失败: exception=%s", type(exc).__name__)
         # 降级响应
         return {
             "code": 0,
@@ -399,7 +401,7 @@ async def explain_schedule(
             },
             "meta": {
                 "degraded": True,
-                "degraded_reason": str(e)
+                "degraded_reason": "AI服务暂时不可用"
             }
         }
 
@@ -450,8 +452,8 @@ async def review_schedule(
         # 4. 返回响应
         return success_response(data=result)
         
-    except Exception as e:
-        logger.error(f"方案审查失败：{e}")
+    except Exception as exc:
+        logger.error("方案审查失败: exception=%s", type(exc).__name__)
         # 降级响应
         return {
             "code": 0,
@@ -459,7 +461,7 @@ async def review_schedule(
             "data": {"risks": []},
             "meta": {
                 "degraded": True,
-                "degraded_reason": str(e)
+                "degraded_reason": "AI服务暂时不可用"
             }
         }
 
@@ -497,8 +499,8 @@ async def analyze_exception(
         # 5. 返回响应
         return success_response(data=result)
         
-    except Exception as e:
-        logger.error(f"异常分析失败：{e}")
+    except Exception as exc:
+        logger.error("异常分析失败: exception=%s", type(exc).__name__)
         # 降级响应
         return {
             "code": 0,
@@ -510,6 +512,6 @@ async def analyze_exception(
             },
             "meta": {
                 "degraded": True,
-                "degraded_reason": str(e)
+                "degraded_reason": "AI服务暂时不可用"
             }
         }

@@ -11,6 +11,8 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import JSONResponse
 
 from config.settings import settings
+from core.error_codes import CODE_REQUEST_TIMEOUT, get_error_definition
+from utils.response import error_response
 
 logger = logging.getLogger(__name__)
 
@@ -42,15 +44,13 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
             )
         except asyncio.TimeoutError:
             logger.warning(
-                f"请求超时 ({self.timeout_seconds}s): "
-                f"{request.method} {request.url.path}"
+                "请求超时 (%ss): %s %s",
+                self.timeout_seconds,
+                request.method,
+                request.url.path,
             )
+            definition = get_error_definition(CODE_REQUEST_TIMEOUT)
             return JSONResponse(
-                status_code=504,
-                content={
-                    "code": 50400,
-                    "message": f"请求超时（>{self.timeout_seconds}s），请重试或缩小查询范围",
-                    "data": None,
-                    "meta": {"degraded": False, "degraded_reason": None},
-                },
+                status_code=definition.http_status,
+                content=error_response(definition.code, definition.message),
             )

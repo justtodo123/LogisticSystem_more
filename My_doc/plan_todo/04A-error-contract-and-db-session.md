@@ -106,4 +106,6 @@ python -m pytest -q tests/api tests/unit/core tests/unit -p no:cacheprovider
 
 ## 完成记录
 
-- 尚未开始。完成时填写错误码 registry 版本、兼容清单、rollback/脱敏测试结果、Commit/PR 与兼容层移除条件。
+- 状态仍为 pending，未经完整回归和审查前不改 status，不 commit / push / 开 PR。
+- 调用方迁移清单：[04A-error-migration-inventory.md](./04A-error-migration-inventory.md)。
+- 完成时补齐 registry 版本、rollback/脱敏测试结果、Commit/PR 与兼容层移除条件。
