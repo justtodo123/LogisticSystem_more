@@ -7,16 +7,16 @@
 
 ```bash
 # Docker 一键启动（无需安装 Python/Node）
-docker compose up -d
+docker compose up -d  # release_migrate 门禁成功后才启动 backend
 docker exec -it logistics-backend python scripts/init_demo_data.py
 # 访问 http://localhost:8080 · 登录 admin / 123456
 ```
 
-> Docker 验证级别（2026-08-19）：仓库含 Compose/镜像文件与 CI 构建配置；本机无 Docker，Compose 启动与全新种子库业务 smoke **未验证**，见 [plan 02](My_doc/plan_todo/02-docker-seed-e2e.md)。
+> Docker 验证级别（2026-08-26）：Compose 已配置一次性 `migrate` 服务作为 backend 启动闸门；本机未执行 Docker 业务 E2E，不能把配置检查写成容器验收，见 [plan 02](My_doc/plan_todo/02-docker-seed-e2e.md)。旧 SQLite 不应直接挂载试迁移，先按[后端迁移说明](src/backend/README.md#数据库迁移边界)分类并复制处理。
 
 ```bash
 # 本地开发
-cd src/backend && pip install -r requirements.txt && python scripts/init_demo_data.py && uvicorn main:app --reload --port 8000
+cd src/backend && pip install -r requirements.txt && python -m alembic -c alembic.ini upgrade head && python scripts/init_demo_data.py && uvicorn main:app --reload --port 8000
 cd src/frontend && npm install && npm run dev    # http://localhost:5173
 ```
 
