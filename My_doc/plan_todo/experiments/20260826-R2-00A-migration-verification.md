@@ -14,9 +14,9 @@ metadata:
 - 执行人：justtodo123
 - 层级：P0 本机协议
 - Git 分支：`feat/R2-00A-alembic-migration-baseline`
-- Commit SHA：`71237cd`（模型/URL 基座）、`9952095`（迁移收敛）、`adb3cac`（安全 SQLite 工作流）、`efe6d73`（发布门禁与 CI）；本记录所在文档提交见后续提交
-- PR URL：尚无
-- CI run URL：未执行
+- Commit SHA：远程 head `d25da0b94ce11be73357547a9f8d60e07dacf2ba`；分批提交为 `71237cd`、`9952095`、`adb3cac`、`efe6d73`、`8e3c3c2`、`d25da0b`
+- PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/5
+- CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/32931193029（SUCCESS）
 
 ## Schema 与数据来源
 
@@ -113,9 +113,9 @@ docker --version && docker compose version
 
 ## 结论
 
-- 状态：本机协议通过；Docker runtime/远程 CI blocked 或未执行
+- 状态：本机协议与 PR #5 远程 CI 通过；Docker runtime blocked
 - 结论：R2-00A 的 migration/parity/safety 及临时 SQLite smoke 证据均通过。源库保护覆盖普通文件、WAL、未知结构、漂移、孤立 sidecar 和失败目标清理。
-- 已知限制：SQLite 本机单 worker；未验证 PostgreSQL、Redis、多 worker、Docker Compose 和远程 CI。
-- 未通过/未执行：无本机测试失败；Docker runtime 与远程 CI 未执行。
+- 已知限制：SQLite 本机单 worker；未验证 PostgreSQL、Redis、多 worker 和 Docker Compose runtime。
+- 未通过/未执行：无本机或远程 CI 测试失败；Docker runtime 未执行。
 - 追踪内原始输出：本次会话临时 task output；未提交 raw/artifact 文件。
-- 下一步：审阅最终 diff 与计划状态；经授权后分批 commit、push、创建 PR，并以远程 CI/PR 证据更新本记录。
+- 下一步：推送本证据更新，复核最新远程 CI；随后按 owner 明确授权合并 PR #5，并从合并后的 `main` 补充 merge commit 与最终收尾证据。
