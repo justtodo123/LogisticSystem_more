@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from sqlalchemy.exc import SQLAlchemyError
 from pydantic import BaseModel
 import json
 import logging
@@ -27,6 +28,19 @@ from api.erp_webhook import router as erp_webhook_router
 from api.reports import router as reports_router
 from api.ai_confirmation import router as ai_confirmation_router
 from config.settings import settings
+from core.error_codes import (
+    CODE_DATABASE_ERROR,
+    CODE_INTERNAL_ERROR,
+    CODE_PARAM_ERROR,
+    get_error_definition,
+)
+from core.errors import DomainError
+from core.exception_mapping import (
+    request_log_context,
+    resolve_legacy_http_error,
+    safe_response_headers,
+    validation_error_meta,
+)
 from middleware.idempotency import IdempotencyMiddleware
 from middleware.timeout import TimeoutMiddleware
 from middleware.audit_log import AuditLogMiddleware
@@ -130,60 +144,74 @@ app.include_router(ai_confirmation_router)
 # 所有 HTTPException（包括 dependencies.py 抛出、FastAPI 内置校验、HTTPBearer 等）
 # 统一转为 {code, message, data, meta} 格式
 
+@app.exception_handler(DomainError)
+async def domain_exception_handler(request: Request, exc: DomainError):
+    """渲染登记过的领域错误。"""
+    if exc.cause is not None:
+        logger.error(
+            "领域操作失败: code=%s exception=%s context=%s",
+            exc.code,
+            type(exc.cause).__name__,
+            request_log_context(request),
+        )
+    return JSONResponse(
+        status_code=exc.http_status,
+        content=error_response(exc.code, exc.public_message, meta=exc.meta),
+    )
+
+
+@app.exception_handler(SQLAlchemyError)
+async def database_exception_handler(request: Request, exc: SQLAlchemyError):
+    """数据库异常只对外返回安全文案。"""
+    definition = get_error_definition(CODE_DATABASE_ERROR)
+    logger.exception(
+        "数据库请求失败: exception=%s context=%s",
+        type(exc).__name__,
+        request_log_context(request),
+    )
+    return JSONResponse(
+        status_code=definition.http_status,
+        content=error_response(definition.code, definition.message),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """未处理异常不向客户端泄露内部细节。"""
+    definition = get_error_definition(CODE_INTERNAL_ERROR)
+    logger.exception(
+        "未处理请求异常: exception=%s context=%s",
+        type(exc).__name__,
+        request_log_context(request),
+    )
+    return JSONResponse(
+        status_code=definition.http_status,
+        content=error_response(definition.code, definition.message),
+    )
+
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    """将 HTTPException 转为统一响应格式"""
-    status_code = exc.status_code
-    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-
-    if status_code == 401:
-        # 根据 detail 区分 Token 过期 vs 无效/未登录
-        if "过期" in detail or "expired" in detail.lower():
-            code = 40101
-            message = "Token 已过期，请重新登录"
-        else:
-            code = 40100
-            message = "未登录或 Token 无效"
-    elif status_code == 403:
-        code = 40300
-        message = detail
-    elif status_code == 404:
-        code = 40400
-        message = "资源不存在"
-    elif status_code == 422:
-        code = 40000
-        message = "参数校验失败"
-        return JSONResponse(
-            status_code=status_code,
-            content=error_response(code, message, {"detail": detail}),
-        )
-    elif status_code == 500:
-        code = 50000
-        message = "服务器内部错误"
-    elif status_code == 504:
-        code = 50400
-        message = "请求超时"
-    else:
-        code = status_code * 100
-        message = detail
-
+    """将旧 HTTPException 安全转换为统一错误 envelope。"""
+    definition, message, meta = resolve_legacy_http_error(exc.status_code, exc.detail)
     return JSONResponse(
-        status_code=status_code,
-        content=error_response(code, message),
+        status_code=exc.status_code,
+        content=error_response(definition.code, message, meta=meta),
+        headers=safe_response_headers(exc.headers),
     )
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """将 Pydantic 参数校验错误转为统一响应格式"""
-    errors = exc.errors()
-    detail = "; ".join(
-        f"{'.'.join(str(loc) for loc in e['loc'])}: {e['msg']}"
-        for e in errors
-    )
+    """将 Pydantic 参数校验错误转为统一、安全的响应格式。"""
+    definition = get_error_definition(CODE_PARAM_ERROR)
     return JSONResponse(
         status_code=422,
-        content=error_response(40000, "参数校验失败", {"detail": detail}),
+        content=error_response(
+            definition.code,
+            definition.message,
+            meta=validation_error_meta(exc.errors()),
+        ),
     )
 
 

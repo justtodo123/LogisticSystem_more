@@ -30,6 +30,7 @@ proced_problem/
 | 009 | [schedule_service 残留 DEBUG/ERROR print 语句，内部状态泄漏到 stdout](009-residual-debug-print.md) | 2026-08-14 | logging, code-hygiene, print, observability |
 | 010 | [已送达货物在 AI 重规划中被打回 pending_pack](010-delivered-goods-reset-on-replan.md) | 2026-08-19 | state-machine, replan, delivered, data-integrity |
 | 011 | [CI 空仓库下 SQLite 无法打开 data/logistics.db](011-sqlite-missing-data-dir-breaks-ci.md) | 2026-08-19 | ci, sqlite, test-isolation, startup |
+| 012 | [logger.exception 在 rollback 失败时把异常原文写入日志](012-logger-exception-leaks-rollback-message.md) | 2026-08-26 | logging, security, sqlalchemy, rollback, error-contract |
 
 ## 如何新增记录
 

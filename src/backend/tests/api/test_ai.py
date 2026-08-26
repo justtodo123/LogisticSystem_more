@@ -457,3 +457,48 @@ class TestAnalyzeExceptionAPI:
             data = response.json()
             assert data["code"] == 0
             assert "AI服务暂时不可用" in data["data"]["root_cause"]
+
+
+class TestParseErrorContract:
+    def test_parse_exception_uses_safe_internal_envelope(self, client, auth_headers):
+        """解析失败不得把异常原文放进 HTTPException.detail。"""
+        sentinel = "postgresql://user:secret@db"
+        with patch("api.ai._resolve_params", new_callable=AsyncMock) as mock_resolve:
+            mock_resolve.side_effect = RuntimeError(sentinel)
+            response = client.post(
+                "/api/ai/parse",
+                json={"message": "排车", "execute": "dry-run"},
+                headers=auth_headers,
+            )
+        assert response.status_code == 500
+        body = response.json()
+        assert set(body) == {"code", "message", "data", "meta"}
+        assert body["code"] == 50000
+        assert body["data"] is None
+        assert body["message"] == "服务器内部错误"
+        assert "detail" not in body
+        assert sentinel not in response.text
+
+
+class TestAiDegradedReasonSanitization:
+    def test_explain_exception_does_not_echo_internal_error(self, client, auth_headers, mock_schedule_data):
+        sentinel = "postgresql://user:secret@db"
+        with patch("api.ai.ScheduleService.get_global_schedule", new_callable=AsyncMock) as mock_get_schedule, \
+             patch("api.ai.DeepSeekService.explain_schedule", new_callable=AsyncMock) as mock_explain:
+            mock_get_schedule.return_value = {
+                "code": 0,
+                "message": "success",
+                "data": mock_schedule_data,
+            }
+            mock_explain.side_effect = RuntimeError(sentinel)
+            response = client.post(
+                "/api/ai/explain",
+                json={"schedule_code": "GS001"},
+                headers=auth_headers,
+            )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0
+        assert body["meta"]["degraded"] is True
+        assert body["meta"]["degraded_reason"] == "AI服务暂时不可用"
+        assert sentinel not in response.text

@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -10,6 +12,8 @@ from config.database_url import (
 from config.settings import settings  # noqa: F401  # 向后兼容：其他模块通过 from config.database import settings 使用
 from models.base import Base
 
+
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = resolve_database_url(settings.DATABASE_URL)
 
@@ -25,10 +29,19 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db():
-    """数据库会话依赖函数"""
+    """提供数据库会话；异常路径回滚并保留原异常。"""
     db = SessionLocal()
     try:
         yield db
+    except BaseException:
+        try:
+            db.rollback()
+        except Exception as rollback_error:
+            logger.error(
+                "数据库会话回滚失败: exception=%s",
+                type(rollback_error).__name__,
+            )
+        raise
     finally:
         db.close()
 

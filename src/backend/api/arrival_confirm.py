@@ -1,6 +1,8 @@
 """
 到货确认 API 路由
 """
+import logging
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
@@ -11,12 +13,14 @@ from schemas.arrival_confirm import (
     BatchArrivalConfirmRequest,
     ArrivalPackageResponse
 )
-from core.error_codes import CODE_SUCCESS, CODE_INTERNAL_ERROR, CODE_PACKAGE_NOT_FOUND
+from core.error_codes import CODE_SUCCESS, CODE_INTERNAL_ERROR
 from config.database import get_db
 from api.dependencies import require_dispatcher
 from models.user import User
+from utils.response import error_response
 
 router = APIRouter(prefix="/api/simulation", tags=["simulation"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/confirm-arrival")
@@ -47,9 +51,10 @@ async def confirm_arrival(
             "data": result,
             "meta": {"degraded": False, "degraded_reason": None}
         }
-    except Exception as e:
+    except Exception as exc:
         db.rollback()
-        return {"code": CODE_INTERNAL_ERROR, "message": f"到货确认失败：{str(e)}", "data": None}
+        logger.error("到货确认失败: exception=%s", type(exc).__name__)
+        return error_response(CODE_INTERNAL_ERROR, "到货确认失败")
 
 
 @router.post("/confirm-arrival-batch")
@@ -83,9 +88,10 @@ async def confirm_arrival_batch(
             "data": result,
             "meta": {"degraded": False, "degraded_reason": None}
         }
-    except Exception as e:
+    except Exception as exc:
         db.rollback()
-        return {"code": CODE_INTERNAL_ERROR, "message": f"批量到货确认失败：{str(e)}", "data": None}
+        logger.error("批量到货确认失败: exception=%s", type(exc).__name__)
+        return error_response(CODE_INTERNAL_ERROR, "批量到货确认失败")
 
 
 @router.get("/arrival-packages")
@@ -114,5 +120,6 @@ async def get_arrival_packages(
             "data": results,
             "meta": {"degraded": False, "degraded_reason": None}
         }
-    except Exception as e:
-        return {"code": CODE_INTERNAL_ERROR, "message": f"查询到站包裹失败：{str(e)}", "data": None}
+    except Exception as exc:
+        logger.error("查询到站包裹失败: exception=%s", type(exc).__name__)
+        return error_response(CODE_INTERNAL_ERROR, "查询到站包裹失败")

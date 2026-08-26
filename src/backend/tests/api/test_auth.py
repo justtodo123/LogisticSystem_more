@@ -105,8 +105,10 @@ class TestLogin:
         body = response.json()
         assert "code" in body
         assert body["code"] == 40000
-        assert "data" in body
-        assert "detail" in body["data"]
+        assert body["data"] is None
+        assert "errors" in body["meta"]
+        assert body["meta"]["errors"]
+        assert set(body["meta"]["errors"][0]) == {"loc", "type", "msg"}
 
 
 class TestGetMe:
