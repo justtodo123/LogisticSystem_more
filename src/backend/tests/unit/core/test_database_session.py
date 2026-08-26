@@ -1,4 +1,5 @@
 from unittest.mock import Mock
+import logging
 
 import pytest
 
@@ -35,6 +36,7 @@ def test_get_db_rolls_back_reraises_original_and_closes(monkeypatch):
 
 
 def test_get_db_preserves_original_when_rollback_fails(monkeypatch, caplog):
+    caplog.set_level(logging.ERROR, logger="config.database")
     session = Mock()
     session.rollback.side_effect = RuntimeError("rollback secret")
     monkeypatch.setattr(database, "SessionLocal", Mock(return_value=session))
