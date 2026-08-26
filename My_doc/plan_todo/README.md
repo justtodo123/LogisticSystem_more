@@ -4,7 +4,7 @@
 > **参考依据**：[大厂后端 SP 标准差距与优化路线图](../reference/大厂后端SP标准差距与优化路线图.md)。
 > **决策基线**：[decisions.md](./decisions.md)（协议冻结 `v2026-08-25-r2-freeze`；治理增补 `v2026-08-25-r2-governance`）。冲突时：代码与验证证据 > 版本化决策 > 本 README > 单卡正文。
 > **第一轮归档**：[第一轮优化计划](../post_plan/第一轮优化计划/)。第一轮文档只追溯，不承担第二轮实时状态。
-> **修订日期**：2026-08-25。R2-00 治理已完成并合并；下一步并行实施迁移基线 R2-00A 与错误基座 R2-04A。
+> **修订日期**：2026-08-26。R2-00A 与 R2-04A 已完成并合并；当前主链为 R2-01，可并行 R2-04B。
 
 ## 阅读与状态规则
 
@@ -20,7 +20,7 @@
 | 层级 | 何时开始 | 环境 | 包含 |
 |---|---|---|---|
 | **治理基线** | **已完成** | Git + 文档审查 | `00`：My_doc 追踪、证据模板、计划依赖和真实发布记录 |
-| **P0 基础** | `00` done 后 | Windows + Python 3.13 + SQLite + pytest | `00A` 与 `04A` 并行：迁移单一真相源、错误/Session 基座 |
+| **P0 基础** | **已完成** | Windows + Python 3.13 + SQLite + pytest | `00A` 与 `04A`：迁移单一真相源、错误/Session 基座 |
 | **P0 协议** | `00A` + `04A` done 后 | 同上 | `01 → 02 → 03`；`04B` 可与主链并行 |
 | **P1 外部拓扑** | P0 协议稳定，且 P1 环境三条路径之一就绪 | GHA Postgres/Redis（首选）或 Linux VM / 云主机 Docker Engine | `05`；随后 `06` |
 | **P2** | 不阻塞面试材料 | 同上 | soak、Grafana、镜像安全扫描 |
@@ -36,8 +36,8 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | ID | 层级 | 优先级 | 状态 | 计划 | 关键出口 |
 |---|---|---|---|---|---|
 | 00 | 治理 | P0 | done | [第二轮执行治理与证据基线](./00-execution-governance.md) | My_doc 追踪、证据和依赖已验证；PR #3 与 CI 证据已回填 |
-| 00A | P0 基础 | P0 | pending | [Alembic 迁移基线与 Schema 真相源治理](./00A-alembic-migration-baseline.md) | fresh/legacy 可升级、单 head、schema parity |
-| 04A | P0 基础 | P0 | pending | [领域错误、统一响应契约与数据库会话回滚](./04A-error-contract-and-db-session.md) | 错误 registry/envelope、detail 兼容、rollback |
+| 00A | P0 基础 | P0 | done | [Alembic 迁移基线与 Schema 真相源治理](./00A-alembic-migration-baseline.md) | PR #5 / CI 通过并合并；fresh/legacy、单 head、schema parity 已验证 |
+| 04A | P0 基础 | P0 | done | [领域错误、统一响应契约与数据库会话回滚](./04A-error-contract-and-db-session.md) | PR #6 / CI 通过并合并；registry、envelope、detail 兼容与 rollback 已验证 |
 | 01 | P0 | P0 | pending | [关键状态转移并发控制](./01-concurrency-state-transitions.md) | 并发确认最多一次成功且无重复副作用 |
 | 02 | P0 | P0 | pending | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | 同 key 一次执行、编码无 `max+1` 竞态 |
 | 03 | P0 | P0 | pending | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | 崩溃可恢复、通知进 outbox、重复消费可控 |
@@ -49,8 +49,8 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 
 ```text
 R2-00 (done)
-├── R2-00A
-└── R2-04A
+├── R2-00A (done)
+└── R2-04A (done)
 
 R2-00A + R2-04A -> R2-01 -> R2-02 -> R2-03
 R2-00A + R2-04A -> R2-04B
@@ -58,13 +58,13 @@ R2-00A + R2-01 + R2-02 + R2-03 -> R2-05
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：从最新 `main` 并行启动 **R2-00A 迁移基线**与 **R2-04A 错误基座**；两者均完成后方可进入 R2-01。
+当前下一动作：主链启动 **R2-01 关键状态转移并发控制**；可并行推进 **R2-04B RBAC/JWT/前端权限**。
 
 ## 当前证据边界
 
 - 已有 SQLite、本地 HTTP smoke、单元/API/集成测试和路线查询次数回归；这些不等价于 PostgreSQL 多 worker 容量证明。
 - 本机（2026-08-25）：Win11 家庭版，Ryzen 7 7840H，16GB（空闲曾约 1.6GB），Python 3.13.3，Node v24.12.0，Git 2.49；**无** Docker / WSL / PostgreSQL / Redis / k6 / Locust。
-- 仓库 `docker-compose.yml` 仍是 SQLite + 单 worker；`requirements.txt` 无 PostgreSQL 驱动；`config/database.py` 无条件 `check_same_thread`，启动仍依赖 `create_all()` 与手写 SQLite DDL；Alembic 当前仍为双 head。这些是 00A/01 的待办，不是已完成能力。
+- R2-00A 已完成 Alembic 单 head、正式启动 migration gate、运行时 DDL 移除和 SQLite schema parity；仓库 `docker-compose.yml` 仍是 SQLite + 单 worker，PostgreSQL 驱动、Redis 与多 worker 验证属于 R2-05，不计入当前已完成能力。
 - 第一轮 02B Docker E2E 仍未完成；P1 保留独立 `blocked`，不默认为通过。
 - `My_doc/` 已正式纳入追踪；小型脱敏报告可入库，预览、依赖目录、数据库、日志、原始 CI 输出、待脱敏 Office 二进制、可再生成的历史演示输出与实验大产物继续忽略。
 
