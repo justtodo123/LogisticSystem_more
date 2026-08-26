@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, ForeignKey, String, DECIMAL, DateTime
+from sqlalchemy import Column, Integer, ForeignKey, Index, String, DECIMAL, DateTime
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .base import Base
@@ -6,6 +6,9 @@ from .base import Base
 
 class Goods(Base):
     __tablename__ = "goods"
+    __table_args__ = (
+        Index("ix_goods_order_status", "order_id", "status"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     goods_code = Column(String(64), unique=True, nullable=False, index=True)

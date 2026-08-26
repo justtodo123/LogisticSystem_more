@@ -12,6 +12,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  migration-check:
+    name: 数据库迁移基线
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/backend
+    env:
+      DATABASE_URL: sqlite:////tmp/logistics-migration-ci.db
+      JWT_SECRET: ci-only-r2-00a-migration-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: src/backend/requirements.txt
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 校验唯一 Alembic head
+        run: test "$(python -m alembic -c alembic.ini heads | wc -l)" -eq 1
+
+      - name: 校验发布迁移门禁与 metadata parity
+        run: |
+          python scripts/release_migrate.py
+          python -m alembic -c alembic.ini check
+
+      - name: 运行迁移与索引专项测试
+        run: >-
+          python -m pytest -q -p no:cacheprovider
+          tests/migration
+          tests/unit/core/test_model_registry.py
+          tests/unit/core/test_database_sqlite.py
+          tests/unit/services/test_db_indexes.py
+          tests/unit/scripts/test_release_migrate.py
+
   backend-test:
     name: 后端测试 (pytest)
     runs-on: ubuntu-latest

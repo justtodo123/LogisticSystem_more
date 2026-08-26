@@ -1,6 +1,21 @@
 # 本地一键启动：docker compose up -d
 # 真实密钥（DEEPSEEK_API_KEY 等）请通过 docker-compose.override.yml 注入（已被 gitignore）
 services:
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: logistics-backend:latest
+    container_name: logistics-migrate
+    command: ["python", "scripts/release_migrate.py"]
+    environment:
+      ENV: dev
+      DATABASE_URL: sqlite:////app/data/logistics.db
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
+    volumes:
+      - logistics-data:/app/data
+    restart: "no"
+
   backend:
     build:
       context: .
@@ -16,7 +31,10 @@ services:
       REDIS_ENABLED: "true"
       REDIS_URL: redis://redis:6379/0
     depends_on:
-      - redis
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     volumes:
       - logistics-data:/app/data
     ports:

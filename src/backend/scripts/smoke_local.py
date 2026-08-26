@@ -604,9 +604,17 @@ def stop_uvicorn(proc: subprocess.Popen[bytes] | None) -> None:
 
 
 def bootstrap_database(env: dict[str, str], db_path: Path) -> None:
-    log("[00] init_db + dual init")
+    log("[00] alembic upgrade + dual init")
     run_cmd(
-        [sys.executable, "-c", "from config.database import init_db; init_db()"],
+        [
+            sys.executable,
+            "-m",
+            "alembic",
+            "-c",
+            str(BACKEND_ROOT / "alembic.ini"),
+            "upgrade",
+            "head",
+        ],
         env,
         BACKEND_ROOT,
     )

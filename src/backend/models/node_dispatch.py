@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, JSON, DECIMAL, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, JSON, DECIMAL, DateTime, Boolean, ForeignKey, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .base import Base
@@ -7,6 +7,10 @@ from .base import Base
 class NodeDispatch(Base):
     """F005 节点调度明细表"""
     __tablename__ = "node_dispatches"
+    __table_args__ = (
+        Index("ix_node_dispatches_batch_phase", "dispatch_batch_id", "level_phase"),
+        Index("ix_node_dispatches_vehicle_id", "vehicle_id"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     dispatch_code = Column(String(64), unique=True, nullable=False, index=True)

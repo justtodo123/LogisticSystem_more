@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DECIMAL, JSON, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, DECIMAL, JSON, DateTime, Boolean, ForeignKey, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .base import Base
@@ -7,6 +7,9 @@ from .base import Base
 class GlobalSchedule(Base):
     """F007 全局调度方案表"""
     __tablename__ = "global_schedules"
+    __table_args__ = (
+        Index("idx_global_schedules_status", "status"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     schedule_code = Column(String(64), unique=True, nullable=False, index=True)

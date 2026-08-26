@@ -1,6 +1,6 @@
 # 智能物流平台 — 后端
 
-> FastAPI 后端服务 · 83 个 API 端点 · 626 测试全绿
+> FastAPI 后端服务 · 83 个 API 端点 · Alembic 管理正式 schema
 
 ## 快速启动
 
@@ -8,12 +8,31 @@
 cd src/backend
 pip install -r requirements.txt
 cp .env.example .env.dev          # 编辑 .env.dev，至少修改 JWT_SECRET
+python -m alembic -c alembic.ini upgrade head  # 显式迁移 schema
 python scripts/init_users.py      # 创建演示用户
 python scripts/init_demo_data.py  # 初始化示例数据
 uvicorn main:app --reload --port 8000
 ```
 
 访问 [http://localhost:8000/docs](http://localhost:8000/docs) 查看 Swagger API 文档。
+
+## 数据库迁移边界
+
+- Alembic 是正式 schema 的唯一迁移入口；应用启动和 Uvicorn worker 不执行 DDL。
+- 本地 fresh 开发库可运行 `python -m alembic -c alembic.ini upgrade head`；发布/Compose 使用 `python scripts/release_migrate.py`，只创建 fresh SQLite 或验证已处于当前 head 且无 drift 的现有库。
+- `config.database.init_db()` 仅供隔离测试按 ORM metadata 建表，禁止用于部署或旧库升级。
+- 旧 SQLite 必须先备份；合法 `alembic_version` 由 Alembic 升级，未知 revision、多版本行或未知结构均停止处理，禁止用 `stamp head` 掩盖差异。
+- 无版本旧库只能在 schema 与当前 ORM 完全一致时复制采用；原文件保持不变，副本 parity 通过后才能 stamp。
+
+旧 SQLite 操作必须在 `src/backend` 目录执行，并指定与源文件不同、尚不存在的目标副本：
+
+```bash
+python scripts/migrate_sqlite.py classify <source>
+python scripts/migrate_sqlite.py upgrade-copy <source> <target>  # 仅 Alembic managed 旧库
+python scripts/migrate_sqlite.py adopt-copy <source> <target>    # 仅与当前 ORM 完全一致的无版本库
+```
+
+命令会先分类；未知 revision、异常版本行、结构漂移或含未映射遗留数据时 fail closed，不修改源文件，也不会创建可误用的目标副本。
 
 ## 目录结构
 
@@ -22,19 +41,20 @@ uvicorn main:app --reload --port 8000
 | `api/` | REST 路由层（24 个 Router 模块） |
 | `services/` | 业务逻辑层（调度/模拟/异常/AI/通知） |
 | `algorithms/` | 调度算法（策略模式：base → greedy/dummy/deepseek） |
-| `models/` | SQLAlchemy ORM 模型 |
+| `models/` | SQLAlchemy ORM 模型；`base.py` 提供共享 metadata，`registry.py` 显式注册正式模型 |
 | `schemas/` | Pydantic v2 请求/响应 Schema |
 | `core/` | 统一响应/错误码/权限/RBAC/幂等 |
 | `middleware/` | 审计日志中间件 |
-| `config/` | 环境配置（pydantic-settings）+ algorithm_config.json |
-| `scripts/` | 运维脚本（init_users/init_demo_data） |
-| `tests/` | 单元/集成/API 测试（626 用例） |
-| `alembic/` | 数据库迁移 |
+| `config/` | 环境配置、共用数据库 URL 解析及 engine/session |
+| `utils/` | 通用工具；`schema_management.py` 负责 SQLite 分类、复制迁移与 parity |
+| `scripts/` | 初始化脚本、`migrate_sqlite.py` 旧库安全操作 CLI 与 `release_migrate.py` 发布门禁 |
+| `tests/` | 单元/集成/API/迁移测试 |
+| `alembic/` | 正式 schema 唯一迁移入口及 revision graph |
 
 ## 运行测试
 
 ```bash
-python -m pytest -q     # 全部 626 测试
+python -m pytest -q     # 全部后端测试
 python -m pytest tests/unit/ -q    # 仅单元测试
 python -m pytest tests/api/ -q     # 仅 API 测试
 ```

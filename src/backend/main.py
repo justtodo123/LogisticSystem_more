@@ -203,8 +203,12 @@ async def health_check():
 # 应用启动时初始化数据库（创建所有表）
 @app.on_event("startup")
 async def startup_event():
-    """应用启动事件"""
-    from config.database import init_db
-    logger.info(f"启动环境：ENV={settings.ENV}，数据库={settings.DATABASE_URL}")
-    init_db()
+    """应用启动事件；schema 由发布前的 Alembic 步骤负责。"""
+    from config.database_url import redact_database_url
+
+    logger.info(
+        "启动环境：ENV=%s，数据库=%s（schema 需由发布前 Alembic 管理）",
+        settings.ENV,
+        redact_database_url(settings.DATABASE_URL),
+    )
 
