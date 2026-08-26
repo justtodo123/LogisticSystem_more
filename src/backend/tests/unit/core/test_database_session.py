@@ -1,5 +1,4 @@
 from unittest.mock import Mock
-import logging
 
 import pytest
 
@@ -35,11 +34,16 @@ def test_get_db_rolls_back_reraises_original_and_closes(monkeypatch):
     assert session.method_calls.index(("rollback", (), {})) < session.method_calls.index(("close", (), {}))
 
 
-def test_get_db_preserves_original_when_rollback_fails(monkeypatch, caplog):
-    caplog.set_level(logging.ERROR, logger="config.database")
+def test_get_db_preserves_original_when_rollback_fails(monkeypatch):
     session = Mock()
     session.rollback.side_effect = RuntimeError("rollback secret")
     monkeypatch.setattr(database, "SessionLocal", Mock(return_value=session))
+    records: list[str] = []
+
+    def capture(message, *args, **kwargs):
+        records.append(message % args if args else str(message))
+
+    monkeypatch.setattr(database.logger, "error", capture)
     dependency = database.get_db()
     next(dependency)
     original = ValueError("original handler failure")
@@ -49,5 +53,6 @@ def test_get_db_preserves_original_when_rollback_fails(monkeypatch, caplog):
 
     assert caught.value is original
     session.close.assert_called_once_with()
-    assert "数据库会话回滚失败" in caplog.text
-    assert "rollback secret" not in caplog.text
+    assert records
+    assert any("数据库会话回滚失败" in item for item in records)
+    assert all("rollback secret" not in item for item in records)
