@@ -1,11 +1,11 @@
 ---
 plan_id: "R2-04A"
 title: 领域错误、统一响应契约与数据库会话回滚
-status: pending
+status: done
 priority: P0
 owner: justtodo123
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-26
 depends_on: ["R2-00"]
 ---
 
@@ -106,6 +106,15 @@ python -m pytest -q tests/api tests/unit/core tests/unit -p no:cacheprovider
 
 ## 完成记录
 
-- 状态仍为 pending，未经完整回归和审查前不改 status，不 commit / push / 开 PR。
-- 调用方迁移清单：[04A-error-migration-inventory.md](./04A-error-migration-inventory.md)。
-- 完成时补齐 registry 版本、rollback/脱敏测试结果、Commit/PR 与兼容层移除条件。
+- R2-04A 已完成并合并；P0 错误契约、兼容层与 Session rollback 验证均通过。
+- 调用方迁移清单：[04A-error-migration-inventory.md](./04A-error-migration-inventory.md)。兼容层保留；移除条件见该清单，本卡不删除 `exception_mapping.resolve_legacy_http_error`。
+- Registry：无独立 version 字段，以 `src/backend/core/error_codes.py` @ `a8c5972` 为准。已登记通用码与冻结码 `40901` / `40902` / `40903`，owner 分别为 R2-01、R2-02、R2-02。
+- 实现 commit：`a8c5972949a704da0232f06c301a4a9f312e74c7`（契约与 rollback）、`e2555eb`、`91730f60f4d3928280ccc6c815b306c680320d91`（rollback 失败日志断言）。
+- PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/6（MERGED，2026-08-26 08:36:59 UTC）。
+- Merge commit：`ea6d8c5cb184040c2dde35d51d90df1d7fdc2d7c`。
+- CI run：https://github.com/justtodo123/LogisticSystem_more/actions/runs/32948346709（SUCCESS，head `91730f6`）；合并后 main CI：https://github.com/justtodo123/LogisticSystem_more/actions/runs/32948669210（SUCCESS）。
+- 全量后端 CI：`746 passed, 214 warnings`；数据库迁移基线、前端类型检查与构建均成功。
+- 聚焦测试文件：`tests/api/test_error_contract.py`、`tests/unit/core/test_error_codes.py`、`tests/unit/core/test_domain_errors.py`、`tests/unit/core/test_database_session.py`、`tests/unit/test_response_contract.py`，以及 AI/export/arrival 脱敏回归。本收口会话未重跑本机 pytest，验收依据为已合并代码与上述远程 CI。
+- 兼容层保留：旧 `HTTPException.detail` 字符串/字典仍由兼容映射承接；待鉴权/业务调用点与前端/ERP 契约全部迁到统一 envelope 后才能删除。
+- PostgreSQL、Redis、多 worker 验证不在本卡 P0 本机协议范围内。
+- 详细命令、环境、退出码、验收对照与限制见 [R2-04A 实验记录](./experiments/20260826-R2-04A-error-contract-verification.md)。

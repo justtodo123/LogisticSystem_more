@@ -1,6 +1,6 @@
 # R2-04A 错误迁移清单
 
-> 更新：2026-08-26 | 状态：R2-04A 仍为 pending，本清单只盘点调用方，不表示兼容层可以移除。
+> 更新：2026-08-26 | 状态：R2-04A 已完成并合并；本清单继续盘点未迁移调用方，不表示兼容层可以移除。
 
 本清单记录仍使用旧 `HTTPException.detail`、`error_response` 或 `str(e)` 对外返回的点，并标注后续迁移边界。
 兼容层（`exception_mapping.resolve_legacy_http_error`）必须在本清单清空、契约测试通过且文档只描述统一 envelope 后才能删除。

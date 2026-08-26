@@ -107,4 +107,4 @@ git check-ignore -v My_doc/README.md.preview.txt My_doc/pre-optimization/ppt/nod
 - 状态：`done`
 - 完成日期：2026-08-25
 - 验证结论：`My_doc/` 追踪边界、版本化决策、实验模板、9 张计划卡和无环依赖已纳入 `main`；PR 与 CI 证据均为真实可访问记录。
-- 后续入口：R2-00A 与 R2-04A 可从最新 `main` 并行启动；R2-01 仍须等待两者完成。
+- 后续入口：R2-00A 与 R2-04A 已完成；当前主链为 R2-01，可并行 R2-04B。
