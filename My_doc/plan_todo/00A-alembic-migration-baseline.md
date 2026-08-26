@@ -1,11 +1,11 @@
 ---
 plan_id: "R2-00A"
 title: Alembic 迁移基线与 Schema 真相源治理
-status: pending
+status: in_progress
 priority: P0
 owner: justtodo123
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-26
 depends_on: ["R2-00"]
 ---
 
@@ -106,4 +106,13 @@ python -m pytest -q tests -p no:cacheprovider
 
 ## 完成记录
 
-- 尚未开始。完成时填写唯一 head、revision 链、fresh/legacy fixture、schema parity、测试结果、Commit/PR 和仍不支持的旧库签名。
+- 本地实现与 P0 协议验证已完成并按治理边界分批提交，计划保持 `in_progress`，直至 PR、远程 CI 与合并证据齐备。
+- 唯一 head：`r2_00a_schema_convergence`；双父为 `c78f9b436833` 与 `phase7_exception_fields`。
+- 已覆盖 fresh、全部受支持 revision、known mixed、WAL、未知/漂移、多 version rows、孤立 sidecar、失败目标清理与发布门禁。
+- metadata parity 与临时数据库重启 smoke 已通过；完整后端结果为 718 passed、209 warnings。
+- Commit SHA：`71237cd`（模型/URL 基座）、`9952095`（迁移收敛）、`adb3cac`（安全 SQLite 工作流）、`efe6d73`（发布门禁与 CI）；文档证据提交见本次后续提交。
+- PR URL：尚无。
+- CI run：未执行。
+- Docker runtime validation：未执行（本机 Docker CLI unavailable，退出码 127）。
+- PostgreSQL、Redis、多 worker 验证不在本卡 P0 本机协议范围内。
+- 详细命令、环境、退出码与限制见 [R2-00A 实验记录](./experiments/20260826-R2-00A-migration-verification.md)。
