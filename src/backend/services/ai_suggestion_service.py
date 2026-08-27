@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
 
 from core.ai_guard import SUGGESTION_STATUSES
+from core.cas import claim_status
 from models.ai_suggestion import AiSuggestion
 from services.log_service import (
     EVENT_AI_SUGGESTION_CONFIRM,
@@ -133,26 +134,28 @@ async def confirm_suggestion(
     if not suggestion:
         return error_response(code=40401, message=f"AI 建议不存在: {suggestion_id}")
 
-    if suggestion.status != "pending":
-        return error_response(
-            code=40003,
-            message=f"AI 建议已处理（当前状态: {suggestion.status}）",
-        )
+    claim_status(
+        db,
+        AiSuggestion,
+        identity=AiSuggestion.id == suggestion.id,
+        from_statuses="pending",
+        to_status="confirmed",
+    )
+    db.refresh(suggestion)
 
     applied_code = None
     if suggestion.level in ("suggestion", "action") and suggestion.related_schedule_code:
-        # 应用建议 → 确认关联的 draft 调度方案（触发实际调度修改）
         from services.schedule_service import ScheduleService
         confirm_result = await ScheduleService.confirm_schedule(
             schedule_code=suggestion.related_schedule_code,
             db=db,
+            commit=False,
         )
         if confirm_result["code"] != 0:
-            # 确认失败（如 draft 已被确认/丢弃）→ 建议保持 pending，返回错误
+            db.rollback()
             return confirm_result
         applied_code = suggestion.related_schedule_code
 
-    suggestion.status = "confirmed"
     suggestion.decided_at = datetime.now()
     suggestion.decision_note = note or None
     suggestion.applied_schedule_code = applied_code
@@ -173,6 +176,15 @@ async def confirm_suggestion(
 
     db.commit()
     db.refresh(suggestion)
+    if applied_code:
+        from models.global_schedule import GlobalSchedule
+        from services.schedule_service import _notify_schedule_confirmed
+
+        gs = db.query(GlobalSchedule).filter(
+            GlobalSchedule.schedule_code == applied_code
+        ).first()
+        if gs:
+            await _notify_schedule_confirmed(db, gs, float(gs.score))
     logger.info(f"AI 建议已确认：{suggestion.suggestion_code} applied={applied_code}")
 
     return success_response(data={
@@ -192,13 +204,15 @@ def reject_suggestion(
     if not suggestion:
         return error_response(code=40401, message=f"AI 建议不存在: {suggestion_id}")
 
-    if suggestion.status != "pending":
-        return error_response(
-            code=40003,
-            message=f"AI 建议已处理（当前状态: {suggestion.status}）",
-        )
+    claim_status(
+        db,
+        AiSuggestion,
+        identity=AiSuggestion.id == suggestion.id,
+        from_statuses="pending",
+        to_status="rejected",
+    )
+    db.refresh(suggestion)
 
-    suggestion.status = "rejected"
     suggestion.decided_at = datetime.now()
     suggestion.decision_note = note or None
 

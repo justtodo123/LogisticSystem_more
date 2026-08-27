@@ -188,6 +188,37 @@ class TestScheduleServiceExceptionRollback:
         assert db_session.query(Package).count() == 0
 
 
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_confirm_packaging_exception_commit_false_keeps_draft(self, db_session, test_nodes, test_orders, test_goods):
+        """commit=False packaging failure only flushes draft deletion so the caller can roll it back."""
+        preview_result = await ScheduleService.create_global_schedule(
+            order_codes=None,
+            algorithm="traditional",
+            db=db_session,
+            preview=True,
+        )
+        schedule_code = preview_result["data"]["schedule_code"]
+
+        with patch("services.schedule_service.packaging") as mock_packaging:
+            mock_packaging.side_effect = RuntimeError("mock packaging boom")
+            confirm_result = await ScheduleService.confirm_schedule(
+                schedule_code=schedule_code,
+                db=db_session,
+                commit=False,
+            )
+
+        assert confirm_result["code"] == 50001
+        db_session.rollback()
+        gs = db_session.query(GlobalSchedule).filter(
+            GlobalSchedule.schedule_code == schedule_code
+        ).first()
+        assert gs is not None, "nested confirm failure must not persist draft deletion"
+        assert gs.status == "draft"
+        assert db_session.query(Package).count() == 0
+
+
 class TestScheduleServiceQuery:
     """查询服务测试"""
 

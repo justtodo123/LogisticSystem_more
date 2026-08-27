@@ -14,6 +14,7 @@ from schemas.arrival_confirm import (
     ArrivalPackageResponse
 )
 from core.error_codes import CODE_SUCCESS, CODE_INTERNAL_ERROR
+from core.errors import DomainError
 from config.database import get_db
 from api.dependencies import require_dispatcher
 from models.user import User
@@ -45,12 +46,27 @@ async def confirm_arrival(
             remark=request.remark
         )
         db.commit()
+        if request.is_normal:
+            try:
+                from services.notification import (
+                    SCENARIO_ARRIVAL_CONFIRMED,
+                    send_notification_fire_and_forget,
+                )
+                send_notification_fire_and_forget(db, SCENARIO_ARRIVAL_CONFIRMED, {
+                    "package_code": request.package_code,
+                    "schedule_code": request.schedule_code,
+                })
+            except Exception:
+                pass
         return {
             "code": CODE_SUCCESS,
             "message": "success",
             "data": result,
             "meta": {"degraded": False, "degraded_reason": None}
         }
+    except DomainError:
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
         logger.error("到货确认失败: exception=%s", type(exc).__name__)
@@ -88,6 +104,9 @@ async def confirm_arrival_batch(
             "data": result,
             "meta": {"degraded": False, "degraded_reason": None}
         }
+    except DomainError:
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
         logger.error("批量到货确认失败: exception=%s", type(exc).__name__)
