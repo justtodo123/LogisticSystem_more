@@ -1,7 +1,7 @@
 ---
 plan_id: "R2-01"
 title: 关键状态转移并发控制
-status: in_progress
+status: done
 priority: P0
 owner: justtodo123
 created: 2026-08-25
@@ -122,10 +122,12 @@ python -m pytest -q tests/unit/services tests/api tests/integration -p no:cachep
 
 ## 完成记录
 
-- 本地实施中，状态：`in_progress`。Commit SHA / PR / CI：尚无。
+- 状态：`done`。功能提交：`03bffbc7afba3e6bf95ed6ac4fe7b7c06b875b67`；合并提交：`4e355394eb420ab8f35d1852ceaa95dfc0eac1a7`。
+- PR：[PR #8](https://github.com/justtodo123/LogisticSystem_more/pull/8)，已于 2026-08-27 合并。
+- CI：[run 33047947336](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33047947336)，`数据库迁移基线`、`后端测试 (pytest)`、`前端类型检查 + 构建` 均成功。
 - 实验记录：[experiments/20260827-R2-01-cas-state-transitions.md](./experiments/20260827-R2-01-cas-state-transitions.md)
 - 定向 pytest（含新增回归）：47 passed / 35 warnings / 23.84s。
 - 完整后端 pytest：772 passed / 216 warnings / 238.32s。
 - 迁移/parity 子集：49 passed / 15.91s；无新增 Alembic revision，head 仍为 `r2_00a_schema_convergence`。
 - SQLite 限制：20/100 独立 Session 线程在 NullPool + busy_timeout=30s 下本地通过；不能外推 PostgreSQL 多 worker。
-- 本地默认 SQLite 不在 head：release_migrate 拒绝原地修改（exit 2），未触碰业务库。
+- 本地默认 SQLite 不在 head：release_migrate 拒绝原地修改（exit 2），未触碰业务库；CI fresh SQLite 的发布迁移、Alembic check 与 parity 专项均通过。

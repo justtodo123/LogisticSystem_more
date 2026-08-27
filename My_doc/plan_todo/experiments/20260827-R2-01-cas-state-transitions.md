@@ -15,9 +15,10 @@ metadata:
 - 执行人：justtodo123
 - 层级：P0 内部协议
 - Git 分支：`feat/R2-01-cas-state-transitions`
-- Commit SHA：尚无
-- PR URL：尚无
-- CI run URL：尚无
+- Commit SHA：`03bffbc7afba3e6bf95ed6ac4fe7b7c06b875b67`
+- Merge commit SHA：`4e355394eb420ab8f35d1852ceaa95dfc0eac1a7`
+- PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/8
+- CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33047947336
 
 ## Schema 与数据来源
 
@@ -82,8 +83,9 @@ python -m pytest -q -p no:cacheprovider tests/migration tests/unit/scripts/test_
 
 ## 结论
 
-- 状态：本地验证通过；计划保持 `in_progress`，待明确授权后才 stage/commit/push/PR
+- 状态：通过并已合并；R2-01 标记为 `done`
 - 与假设对应证据：批量 40901 透传且回滚；commit=False packaging 失败回滚后 draft 仍在；init postgres `connect_args=={}`
+- 远程交付证据：PR #8 已合并；CI run 33047947336 的 `数据库迁移基线`、`后端测试 (pytest)`、`前端类型检查 + 构建` 均成功
 - 已知限制：SQLite 写锁可把 100 worker 拉成串行；本次 20/100 在 busy_timeout=30s 下仍为单成功 + 其余 40901。不能外推 PostgreSQL 多 worker。首次完整 pytest 曾因用户 Temp `pytest-of-Lenovo` PermissionError 出 43 ERROR；TEMP 改到仓库 `tmp/pytest-tmp` 后 772 passed。
-- 未通过项 / 未执行项：远程 CI / PR 未执行；本地默认库 alembic check / release_migrate 按设计 fail-closed
-- 下一动作：获得明确授权后再 commit 并创建 PR；CI 通过并合并后才把 R2-01 标为 done 并回填真实 SHA/PR/CI
+- 未通过项 / 未执行项：PostgreSQL / Redis / 多 worker 复跑未执行，归 R2-05；本地默认库 alembic check / release_migrate 按设计 fail-closed，CI fresh SQLite 的发布迁移、Alembic check 与 parity 专项通过
+- 下一动作：进入 R2-02A 数据库幂等状态机；R2-02B 业务编号号段另行实施
