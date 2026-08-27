@@ -26,16 +26,54 @@ from models.goods import Goods
 from models.package import Package
 from models.node import Node
 from utils.response import success_response, error_response
+from core.cas import claim_status
+from core.error_codes import CODE_STATE_CONFLICT
+from core.errors import DomainError
 from services.state_machine import (
     update_orders_after_f007,
     update_goods_after_f021,
-    transition_global_schedule_status,
 )
 
 logger = logging.getLogger(__name__)
 
 # 外部可选的调度算法（阶段3仅实现 traditional；deepseek 预留未实现）
 SUPPORTED_ALGORITHMS = ("traditional",)
+
+
+
+def _discard_remaining_draft(db: Session, schedule_code: str, *, commit: bool = True) -> None:
+    """打包或确认失败后清理仍为 draft 的方案。"""
+    try:
+        leftover = db.query(GlobalSchedule).filter(
+            GlobalSchedule.schedule_code == schedule_code,
+            GlobalSchedule.status == "draft",
+        ).first()
+        if leftover:
+            db.delete(leftover)
+            if commit:
+                db.commit()
+            else:
+                db.flush()
+    except Exception:
+        db.rollback()
+
+
+async def _notify_schedule_confirmed(db: Session, gs: GlobalSchedule, raw_score: float) -> None:
+    try:
+        from services.notification import (
+            SCENARIO_SCHEDULE_CONFIRMED,
+            send_notification,
+        )
+        await send_notification(db, SCENARIO_SCHEDULE_CONFIRMED, {
+            "schedule_code": gs.schedule_code,
+            "total_goods": gs.total_goods,
+            "total_distance": float(gs.total_distance),
+            "total_time": float(gs.total_time),
+            "score": raw_score,
+            "is_replan": gs.is_replan,
+        })
+    except Exception:
+        pass
 
 
 # ── Score 归一化：内存缓存历史最大 score ──
@@ -440,57 +478,57 @@ class ScheduleService:
     async def confirm_schedule(
         schedule_code: str,
         db: Session,
+        *,
+        commit: bool = True,
     ) -> Dict[str, Any]:
         """
-        确认 draft 调度方案
-        
-        流程：
-        1. 查询 draft 方案
-        2. 校验订单状态（仍为 pending/exception）
-        3. 执行 F021（打包算法）
-        4. 写入 packages 表
-        5. 更新订单/货物/包裹状态
-        6. 更新 status = 'active'
-        7. 单事务提交
-        
-        Args:
-            schedule_code: draft 方案的调度编号
-            db: 数据库会话
-            
-        Returns:
-            统一响应格式 dict
+        确认 draft 调度方案。
+
+        先条件更新抢占 draft→active，再执行 F021 与本地副作用。
+        通知在事务提交之后发送，避免持锁调用外部通道。
         """
         try:
-            # 1. 查询 draft 方案
             gs = db.query(GlobalSchedule).filter(
                 GlobalSchedule.schedule_code == schedule_code,
-                GlobalSchedule.status == "draft",
             ).first()
-            
+
             if not gs:
                 return error_response(
                     code=40401,
                     message=f"draft 方案不存在或已确认: {schedule_code}"
                 )
-            
-            # 2. 校验订单状态
+            if gs.status != "draft":
+                raise DomainError(CODE_STATE_CONFLICT)
+
+            claim_status(
+                db,
+                GlobalSchedule,
+                identity=GlobalSchedule.id == gs.id,
+                from_statuses="draft",
+                to_status="active",
+                increment_version=True,
+            )
+            db.refresh(gs)
+
             orders = db.query(Order).filter(
                 Order.order_code.in_(gs.order_codes)
             ).all()
-            
-            # 重规划时允许 assigned/in_transit 状态（订单已在上一版本方案中推进）
-            allowed_statuses = ("unassigned", "exception") if not gs.is_replan else ("unassigned", "exception", "assigned", "in_transit")
+
+            allowed_statuses = (
+                ("unassigned", "exception")
+                if not gs.is_replan
+                else ("unassigned", "exception", "assigned", "in_transit")
+            )
             for order in orders:
                 if order.status not in allowed_statuses:
-                    # 删除 draft
                     db.delete(gs)
-                    db.commit()
+                    if commit:
+                        db.commit()
                     return error_response(
                         code=40003,
                         message=f"订单 {order.order_code} 状态已变化（当前: {order.status}），请重新预览"
                     )
-            
-            # 3. 执行 F021（打包算法）
+
             schedule_result = {
                 "schedule_code": gs.schedule_code,
                 "order_codes": gs.order_codes,
@@ -504,48 +542,29 @@ class ScheduleService:
                 schedule_result, gs.id, db,
                 is_replan=(orders[0].status == "exception")
             )
-            
-            # 4. 写入 packages
+
             for pkg in packages:
                 pkg.schedule_id = gs.id
                 db.add(pkg)
-            
-            # 5. 更新状态
+
             update_orders_after_f007(db, gs.order_codes)
             update_goods_after_f021(db, gs.id, is_replan=(orders[0].status == "exception"))
-            
-            # 6. 通过状态机更新 status: draft → active
-            transition_global_schedule_status(db, gs, "active")
-            
-            db.commit()
-            
-            # 7. 计算 score_display
+
+            if commit:
+                db.commit()
+            else:
+                db.flush()
+
             raw_score = float(gs.score)
             max_possible = _refresh_max_score(db)
             _update_max_score_if_needed(raw_score)
             score_display = _calc_score_display(raw_score, max_possible)
-            
-            # 查询 package_count
             pkg_count = db.query(Package).filter(
                 Package.schedule_id == gs.id
             ).count()
 
-            # T3-2：调度确认后发送通知（失败不影响主流程）
-            try:
-                from services.notification import (
-                    SCENARIO_SCHEDULE_CONFIRMED,
-                    send_notification,
-                )
-                await send_notification(db, SCENARIO_SCHEDULE_CONFIRMED, {
-                    "schedule_code": gs.schedule_code,
-                    "total_goods": gs.total_goods,
-                    "total_distance": float(gs.total_distance),
-                    "total_time": float(gs.total_time),
-                    "score": raw_score,
-                    "is_replan": gs.is_replan,
-                })
-            except Exception:
-                pass  # 通知失败不影响主业务流程
+            if commit:
+                await _notify_schedule_confirmed(db, gs, raw_score)
 
             return success_response(data={
                 "schedule_code": gs.schedule_code,
@@ -559,35 +578,17 @@ class ScheduleService:
                 "is_replan": gs.is_replan,
                 "status": "active",
             })
-            
+
+        except DomainError:
+            db.rollback()
+            raise
         except ValueError as e:
             db.rollback()
-            # 删除 draft
-            try:
-                gs = db.query(GlobalSchedule).filter(
-                    GlobalSchedule.schedule_code == schedule_code,
-                    GlobalSchedule.status == "draft",
-                ).first()
-                if gs:
-                    db.delete(gs)
-                    db.commit()
-            except:
-                pass
+            _discard_remaining_draft(db, schedule_code, commit=commit)
             return error_response(code=50001, message=f"确认失败，draft 已丢弃: {str(e)}")
-            
         except Exception as e:
             db.rollback()
-            # 删除 draft
-            try:
-                gs = db.query(GlobalSchedule).filter(
-                    GlobalSchedule.schedule_code == schedule_code,
-                    GlobalSchedule.status == "draft",
-                ).first()
-                if gs:
-                    db.delete(gs)
-                    db.commit()
-            except:
-                pass
+            _discard_remaining_draft(db, schedule_code, commit=commit)
             return error_response(code=50001, message=f"确认失败，draft 已丢弃: {str(e)}")
 
 

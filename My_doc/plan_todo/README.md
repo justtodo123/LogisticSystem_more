@@ -38,7 +38,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | 00 | 治理 | P0 | done | [第二轮执行治理与证据基线](./00-execution-governance.md) | My_doc 追踪、证据和依赖已验证；PR #3 与 CI 证据已回填 |
 | 00A | P0 基础 | P0 | done | [Alembic 迁移基线与 Schema 真相源治理](./00A-alembic-migration-baseline.md) | PR #5 / CI 通过并合并；fresh/legacy、单 head、schema parity 已验证 |
 | 04A | P0 基础 | P0 | done | [领域错误、统一响应契约与数据库会话回滚](./04A-error-contract-and-db-session.md) | PR #6 / CI 通过并合并；registry、envelope、detail 兼容与 rollback 已验证 |
-| 01 | P0 | P0 | pending | [关键状态转移并发控制](./01-concurrency-state-transitions.md) | 并发确认最多一次成功且无重复副作用 |
+| 01 | P0 | P0 | in_progress | [关键状态转移并发控制](./01-concurrency-state-transitions.md) | 并发确认最多一次成功且无重复副作用 |
 | 02 | P0 | P0 | pending | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | 同 key 一次执行、编码无 `max+1` 竞态 |
 | 03 | P0 | P0 | pending | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | 崩溃可恢复、通知进 outbox、重复消费可控 |
 | 04B | P0 并行 | P0 | pending | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | 权限矩阵、token version、前后端权限一致 |

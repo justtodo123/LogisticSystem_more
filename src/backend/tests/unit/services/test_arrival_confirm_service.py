@@ -22,6 +22,8 @@ import pytest
 from sqlalchemy.orm import Session
 import json
 
+from core.error_codes import CODE_STATE_CONFLICT
+from core.errors import DomainError
 from services.arrival_confirm_service import ArrivalConfirmService
 from models.package import Package
 from models.goods import Goods
@@ -664,6 +666,79 @@ class TestConfirmArrivalBatch:
 
         assert exc_info.value.status_code == 400
         assert "状态不正确" in exc_info.value.detail
+
+
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_confirm_arrival_batch_state_conflict_rolls_back(self, db_session, test_nodes, test_orders, test_goods):
+        """Second already-delivered package raises 40901 and rolls back the first update."""
+        goods_list = {
+            "G005": test_goods["G005"],
+            "G007": test_goods["G007"],
+        }
+        for g in goods_list.values():
+            g.status = "in_transit"
+            g.node_id = test_nodes["SC001"].id
+        db_session.commit()
+
+        global_schedule = GlobalSchedule(
+            schedule_code="GS_TEST_BATCH_CAS",
+            order_codes=json.dumps([]),
+            total_distance=0.0,
+            total_time=0.0,
+            total_goods=0,
+            score=0.0,
+            algorithm_type="traditional",
+            version=1,
+            is_replan=False,
+            goods_schedules=json.dumps([
+                {"goods_code": "G005", "order_code": "O003", "path": ["SC002", "SO001", "SO010"]},
+                {"goods_code": "G007", "order_code": "O004", "path": ["SC001", "SO001", "SO010"]},
+            ]),
+        )
+        db_session.add(global_schedule)
+        db_session.commit()
+
+        package1 = Package(
+            package_code="PKG_TEST_BATCH_CAS_OK",
+            from_node_id=test_nodes["SC001"].id,
+            to_node_id=test_nodes["SO001"].id,
+            weight=10.0,
+            volume=0.5,
+            status="in_transit",
+            schedule_id=global_schedule.id,
+            goods_items=[{"goods_code": "G005", "order_code": "O003"}],
+        )
+        package2 = Package(
+            package_code="PKG_TEST_BATCH_CAS_DONE",
+            from_node_id=test_nodes["SC001"].id,
+            to_node_id=test_nodes["SO001"].id,
+            weight=10.0,
+            volume=0.5,
+            status="delivered",
+            schedule_id=global_schedule.id,
+            goods_items=[{"goods_code": "G007", "order_code": "O004"}],
+        )
+        db_session.add(package1)
+        db_session.add(package2)
+        db_session.commit()
+
+        with pytest.raises(DomainError) as exc_info:
+            ArrivalConfirmService.confirm_arrival_batch(
+                db=db_session,
+                schedule_code="GS_TEST_BATCH_CAS",
+                confirmations=[
+                    {"package_code": "PKG_TEST_BATCH_CAS_OK", "is_normal": True},
+                    {"package_code": "PKG_TEST_BATCH_CAS_DONE", "is_normal": True},
+                ],
+            )
+
+        assert exc_info.value.code == CODE_STATE_CONFLICT
+        db_session.rollback()
+        db_session.expire_all()
+        assert db_session.query(Package).filter_by(package_code="PKG_TEST_BATCH_CAS_OK", status="in_transit").count() == 1
+        assert db_session.query(Package).filter_by(package_code="PKG_TEST_BATCH_CAS_DONE", status="delivered").count() == 1
 
 
 class TestTriggerRepacking:

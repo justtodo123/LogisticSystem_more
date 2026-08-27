@@ -238,9 +238,9 @@ class TestConfirmSuggestion:
         assert r1.json()["code"] == 0
 
         r2 = client.post(f"/api/ai/suggestions/{suggestion_id}/confirm", headers=auth_headers)
-        assert r2.status_code == 200
-        assert r2.json()["code"] != 0
-        assert "已处理" in r2.json()["message"]
+        assert r2.status_code == 409
+        assert r2.json()["code"] == 40901
+        assert r2.json()["data"] is None
 
     @pytest.mark.api
     def test_confirm_not_found(self, client, auth_headers):

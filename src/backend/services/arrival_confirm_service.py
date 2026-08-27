@@ -10,6 +10,8 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
+from core.cas import claim_status
+from core.errors import DomainError
 from models.package import Package
 from models.goods import Goods
 from models.order import Order
@@ -71,8 +73,15 @@ class ArrivalConfirmService:
 
         # 2. 正常路径
         if is_normal:
-            # 2.1 更新包裹状态
-            transition_package_status(db, package, "delivered")
+            # 2.1 条件更新抢占 in_transit → delivered；重复确认返回 40901
+            claim_status(
+                db,
+                Package,
+                identity=Package.id == package.id,
+                from_statuses="in_transit",
+                to_status="delivered",
+            )
+            db.refresh(package)
 
             # 2.2 处理货物：检查是否到目的地
             triggered_repacking = False
@@ -134,19 +143,6 @@ class ArrivalConfirmService:
             else:
                 goods_status = "packed"
 
-            # T3-2：送达确认后发送通知（失败不影响主流程）
-            try:
-                from services.notification import (
-                    SCENARIO_ARRIVAL_CONFIRMED,
-                    send_notification_fire_and_forget,
-                )
-                send_notification_fire_and_forget(db, SCENARIO_ARRIVAL_CONFIRMED, {
-                    "package_code": package_code,
-                    "schedule_code": schedule_code,
-                })
-            except Exception:
-                pass  # 通知失败不影响主业务流程
-
             return {
                 "package_code": package_code,
                 "status": "delivered",
@@ -161,8 +157,15 @@ class ArrivalConfirmService:
             import time
             import random
 
-            # 3.1 更新包裹状态（delivered → exception 允许）
-            transition_package_status(db, package, "exception")
+            # 3.1 条件更新抢占 in_transit/delivered → exception
+            claim_status(
+                db,
+                Package,
+                identity=Package.id == package.id,
+                from_statuses=("in_transit", "delivered"),
+                to_status="exception",
+            )
+            db.refresh(package)
 
             goods_items = package.goods_items
             if isinstance(goods_items, str):
@@ -295,6 +298,8 @@ class ArrivalConfirmService:
         except HTTPException as e:
             # 4. 返回失败响应（已回滚）
             raise e
+        except DomainError:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"批量确认失败：{str(e)}")
 
