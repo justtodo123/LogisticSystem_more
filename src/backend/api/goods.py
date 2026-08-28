@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
-from api.dependencies import get_current_user, require_dispatcher
+from api.dependencies import get_current_user, require_dispatcher_with_optional_idempotency
 from schemas.goods import GoodsUpdate
 from services.goods_service import GoodsService
 from config.database import get_db
@@ -48,7 +48,7 @@ async def update_good(
     goods_code: str,
     goods: GoodsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher)
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
 ):
     """编辑货物"""
     result = await GoodsService.update_good(goods_code, goods, db)

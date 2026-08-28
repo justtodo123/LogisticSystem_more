@@ -12,7 +12,11 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_current_user, require_dispatcher
+from api.dependencies import (
+    get_current_user,
+    require_dispatcher,
+    require_dispatcher_with_idempotency,
+)
 from config.database import get_db
 from models.user import User
 from services.ai_suggestion_service import (
@@ -45,7 +49,7 @@ async def get_suggestions(
 async def confirm_suggestion_endpoint(
     suggestion_id: int,
     request: Optional[SuggestionDecisionRequest] = None,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_idempotency),
     db: Session = Depends(get_db),
 ):
     """
@@ -67,7 +71,7 @@ async def confirm_suggestion_endpoint(
 async def reject_suggestion_endpoint(
     suggestion_id: int,
     request: Optional[SuggestionDecisionRequest] = None,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_idempotency),
     db: Session = Depends(get_db),
 ):
     """拒绝 AI 建议（仅记录审计，不触发任何调度修改）"""

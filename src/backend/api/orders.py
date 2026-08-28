@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
-from api.dependencies import get_current_user, require_dispatcher
+from api.dependencies import get_current_user, require_dispatcher_with_optional_idempotency
 from schemas.order import OrderCreate, OrderUpdate
 from services.order_service import OrderService
 from config.database import get_db
@@ -38,7 +38,7 @@ async def list_orders(
 async def create_order(
     order: OrderCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher)
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
 ):
     """新增订单"""
     result = await OrderService.create_order(order, db)
@@ -61,7 +61,7 @@ async def update_order(
     order_code: str,
     order: OrderUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher)
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
 ):
     """编辑订单"""
     result = await OrderService.update_order(order_code, order, db)
@@ -72,7 +72,7 @@ async def update_order(
 async def delete_order(
     order_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher)
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
 ):
     """删除订单"""
     result = await OrderService.delete_order(order_code, db)
@@ -85,7 +85,7 @@ async def import_orders(
     skip_errors: bool = True,
     column_mapping: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher)
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
 ):
     """批量导入订单
 
@@ -104,7 +104,7 @@ async def import_orders(
 async def close_order(
     order_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher)
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
 ):
     """关闭订单（T1-1 新增：unassigned/assigned → closed）"""
     result = await OrderService.close_order(order_code, db)

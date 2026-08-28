@@ -10,7 +10,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_current_user, require_dispatcher
+from api.dependencies import get_current_user, require_dispatcher_with_optional_idempotency
 from config.database import get_db
 from models.user import User
 from schemas.notification import (
@@ -40,7 +40,7 @@ async def get_config(
 @router.put("/config")
 async def update_config(
     body: UpdateNotificationConfigRequest,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
     db: Session = Depends(get_db),
 ):
     """运行时切换通知渠道（写 notification_configs 表，单行 id=1）"""
@@ -63,7 +63,7 @@ async def update_config(
 @router.post("/test")
 async def test_notification(
     body: TestNotificationRequest,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
     db: Session = Depends(get_db),
 ):
     """发送一条测试通知到所有启用渠道（验收标准：运行时切换渠道验证）"""

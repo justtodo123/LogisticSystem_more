@@ -56,7 +56,7 @@ class TestCacheOps:
 
     async def test_redis_disabled_uses_memory(self):
         """REDIS_ENABLED 默认 False 时走内存缓存"""
-        assert cache._resolve_redis() is None
+        assert cache.resolve_redis() is None
         await cache_set("k1", 42)
         assert await cache_get("k1") == 42
 

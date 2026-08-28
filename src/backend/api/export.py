@@ -13,7 +13,7 @@ from core.errors import DomainError
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from api.dependencies import require_dispatcher
+from api.dependencies import require_dispatcher_with_optional_idempotency
 from config.database import get_db
 from models.user import User
 from services import export_service
@@ -33,7 +33,7 @@ SUPPORTED_FORMAT = Query("xlsx", pattern="^(csv|xlsx)$", description="导出格�
 async def export_orders(
     format: str = SUPPORTED_FORMAT,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
 ):
     """导出完整订单表，返回文件下载。
 
@@ -53,7 +53,7 @@ async def export_schedule(
     schedule_code: str = Query(..., description="调度方案编号"),
     format: str = SUPPORTED_FORMAT,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
 ):
     """导出指定调度方案结果，返回文件下载。
 

@@ -19,7 +19,7 @@ from utils.schema_management import (
 )
 
 
-HEAD_REVISION = "r2_00a_schema_convergence"
+HEAD_REVISION = "r2_02a_idempotency_state"
 
 
 def _upgrade(path: Path, revision: str = "head") -> None:
@@ -100,6 +100,66 @@ def test_fresh_upgrade_has_one_head_and_no_metadata_drift(tmp_path: Path):
 
     assert _version(db_path) == HEAD_REVISION
     assert classify_sqlite(db_path).kind is SchemaKind.ALEMBIC_MANAGED
+
+
+def test_idempotency_legacy_rows_expire_and_downgrade_preserves_payload(
+    tmp_path: Path,
+):
+    database = tmp_path / "idempotency-legacy.db"
+    _upgrade(database, "r2_00a_schema_convergence")
+    legacy_payload = '{"code": 0, "data": {"legacy": true}}'
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO idempotency_records (
+                idempotency_key, response_data, expires_at
+            ) VALUES (?, ?, ?)
+            """,
+            ("legacy-key", legacy_payload, "2099-01-01 00:00:00"),
+        )
+        connection.commit()
+
+    _upgrade(database)
+    with sqlite3.connect(database) as connection:
+        row = connection.execute(
+            """
+            SELECT status, payload_hash, claim_token, http_status,
+                   response_body, response_data
+            FROM idempotency_records
+            WHERE idempotency_key = ?
+            """,
+            ("legacy-key",),
+        ).fetchone()
+        indexes = {
+            item[1]
+            for item in connection.execute("PRAGMA index_list(idempotency_records)")
+        }
+
+    assert row == ("EXPIRED", None, None, None, None, legacy_payload)
+    assert "ix_idempotency_records_status_expires_at" in indexes
+
+    command.downgrade(
+        alembic_config(sqlite_database_url(database)),
+        "r2_00a_schema_convergence",
+    )
+    with sqlite3.connect(database) as connection:
+        columns = {
+            item[1]
+            for item in connection.execute("PRAGMA table_info(idempotency_records)")
+        }
+        preserved = connection.execute(
+            "SELECT response_data FROM idempotency_records WHERE idempotency_key = ?",
+            ("legacy-key",),
+        ).fetchone()
+
+    assert columns == {
+        "id",
+        "idempotency_key",
+        "response_data",
+        "created_at",
+        "expires_at",
+    }
+    assert preserved == (legacy_payload,)
 
 
 def test_managed_legacy_upgrade_preserves_seed_data(tmp_path: Path):
@@ -541,6 +601,7 @@ def test_missing_main_file_with_orphan_sidecar_is_unknown(
         "17b1974d0918",
         "c78f9b436833",
         "phase7_exception_fields",
+        "r2_00a_schema_convergence",
         HEAD_REVISION,
     ),
 )

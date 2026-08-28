@@ -279,7 +279,7 @@ class TestExceptionAPI:
                 "action": "reroute",
                 "reason": "测试重规划"
             },
-            headers=auth_headers
+            headers={**auth_headers, "X-Idempotency-Key": "r2-02a-exception-replan"}
         )
         
         # 验证
@@ -305,7 +305,7 @@ class TestExceptionAPI:
                 "action": "reroute",
                 "reason": "测试重规划"
             },
-            headers=auth_headers
+            headers={**auth_headers, "X-Idempotency-Key": "r2-02a-exception-replan"}
         )
         
         # 验证
@@ -325,7 +325,7 @@ class TestExceptionAPI:
                 "action": "invalid",  # 无效动作
                 "reason": "测试重规划"
             },
-            headers=auth_headers
+            headers={**auth_headers, "X-Idempotency-Key": "r2-02a-exception-replan"}
         )
 
         # 验证
@@ -345,7 +345,7 @@ class TestExceptionAPI:
                 "reason": "测试重规划",
                 "strategy": "invalid",  # 无效策略
             },
-            headers=auth_headers
+            headers={**auth_headers, "X-Idempotency-Key": "r2-02a-exception-replan"}
         )
         assert response.status_code == 422
 
@@ -356,7 +356,7 @@ class TestExceptionAPI:
             json={
                 "reason": "批量重规划"
             },
-            headers=auth_headers
+            headers={**auth_headers, "X-Idempotency-Key": "r2-02a-exception-replan"}
         )
         assert response.status_code == 422
 
@@ -368,7 +368,7 @@ class TestExceptionAPI:
                 "event_codes": ["EX_NONEXISTENT_001"],
                 "reason": "批量重规划"
             },
-            headers=auth_headers
+            headers={**auth_headers, "X-Idempotency-Key": "r2-02a-exception-replan"}
         )
         if response.status_code == 501:
             pytest.skip("批量重规划API未实现，跳过测试")
@@ -428,7 +428,7 @@ class TestExceptionAPI:
                 "reason": "批量重规划",
                 "strategy": "full",
             },
-            headers=auth_headers
+            headers={**auth_headers, "X-Idempotency-Key": "r2-02a-exception-replan"}
         )
         if response.status_code == 501:
             pytest.skip("批量重规划API未实现，跳过测试")

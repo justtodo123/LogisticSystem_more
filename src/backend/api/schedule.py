@@ -22,7 +22,11 @@ from services.dispatch_service import DispatchService
 from services.log_service import LogService, build_global_schedule_event_data
 from schemas.dispatch import NodeDispatchRequest, DispatchBatchListResponse, DispatchBatchResponse
 from config.database import get_db
-from api.dependencies import get_current_user, require_dispatcher
+from api.dependencies import (
+    get_current_user,
+    require_dispatcher_with_optional_idempotency,
+    require_dispatcher_with_idempotency,
+)
 from models.user import User
 
 router = APIRouter(prefix="/api/schedule", tags=["调度管理"])
@@ -47,7 +51,7 @@ class GlobalScheduleRequest(BaseModel):
 @router.post("/global")
 async def create_global_schedule(
     body: GlobalScheduleRequest,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_idempotency),
     db: Session = Depends(get_db),
 ):
     """
@@ -127,7 +131,7 @@ async def get_global_schedule(
 @router.post("/node-dispatch")
 async def create_node_dispatch(
     body: NodeDispatchRequest,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
     db: Session = Depends(get_db),
 ):
     """
@@ -265,7 +269,7 @@ async def get_dispatch_detail(
 @router.post("/confirm/{schedule_code}")
 async def confirm_schedule(
     schedule_code: str,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_idempotency),
     db: Session = Depends(get_db),
 ):
     """
@@ -282,7 +286,7 @@ async def confirm_schedule(
 @router.delete("/draft/{schedule_code}")
 async def discard_draft(
     schedule_code: str,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
     db: Session = Depends(get_db),
 ):
     """
