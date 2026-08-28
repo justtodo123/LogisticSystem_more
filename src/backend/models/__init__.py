@@ -3,6 +3,7 @@ from .registry import (
     MODEL_REGISTRY,
     MODEL_TABLE_NAMES,
     AiSuggestion,
+    CodeRange,
     DispatchBatch,
     Driver,
     ExceptionEvent,
@@ -46,4 +47,5 @@ __all__ = [
     "IdempotencyRecord",
     "NotificationConfig",
     "AiSuggestion",
+    "CodeRange",
 ]

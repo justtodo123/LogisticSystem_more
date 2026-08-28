@@ -17,6 +17,8 @@ CODE_CONFLICT = 40900
 CODE_STATE_CONFLICT = 40901
 CODE_IDEMPOTENCY_IN_PROGRESS = 40902
 CODE_IDEMPOTENCY_PAYLOAD_MISMATCH = 40903
+CODE_CODE_RANGE_EXHAUSTED = 40904
+CODE_CODE_ALLOCATION_CONFLICT = 40905
 CODE_INTERNAL_ERROR = 50000
 CODE_DATABASE_ERROR = 50001
 CODE_REQUEST_TIMEOUT = 50400
@@ -95,6 +97,28 @@ _ERROR_DEFINITIONS = (
         "幂等键已用于不同请求",
         "R2-02",
         "idempotency_middleware",
+    ),
+    _definition(
+        CODE_CODE_RANGE_EXHAUSTED,
+        HTTPStatus.CONFLICT,
+        "业务编号号段已耗尽",
+        "R2-02",
+        "code_allocation",
+        "schedule",
+        "packaging",
+        "route",
+        "dispatch",
+    ),
+    _definition(
+        CODE_CODE_ALLOCATION_CONFLICT,
+        HTTPStatus.CONFLICT,
+        "业务编号分配冲突，请稍后重试",
+        "R2-02",
+        "code_allocation",
+        "schedule",
+        "packaging",
+        "route",
+        "dispatch",
     ),
     _definition(CODE_INTERNAL_ERROR, HTTPStatus.INTERNAL_SERVER_ERROR, "服务器内部错误", "core"),
     _definition(CODE_DATABASE_ERROR, HTTPStatus.INTERNAL_SERVER_ERROR, "数据库服务暂时不可用", "core"),

@@ -5,6 +5,7 @@ Alembic、运行时和测试通过本模块加载同一组模型，避免依赖�
 """
 
 from .ai_suggestion import AiSuggestion
+from .code_range import CodeRange
 from .dispatch_batch import DispatchBatch
 from .driver import Driver
 from .exception_event import ExceptionEvent
@@ -42,6 +43,7 @@ MODEL_REGISTRY = (
     IdempotencyRecord,
     NotificationConfig,
     AiSuggestion,
+    CodeRange,
 )
 
 MODEL_TABLE_NAMES = frozenset(model.__tablename__ for model in MODEL_REGISTRY)

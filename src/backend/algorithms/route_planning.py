@@ -9,7 +9,6 @@ F006 路径规划算法
 
 import json
 from typing import List, Dict, Any, Optional
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -19,47 +18,13 @@ from models.node_dispatch import NodeDispatch
 from models.route import Route
 
 from algorithms.base import SchedulingStrategy
+from core.code_allocation import RESOURCE_ROUTE, allocate_code
 from services.map_service import get_route_distance, SOURCE_LABEL
 
 
 def _generate_route_code(db: Session) -> str:
-    """
-    生成路线编码，格式：ROUTE + YYYYMMDD + 3位序号
-    
-    Args:
-        db: 数据库会话
-        
-    Returns:
-        路线编码字符串
-    """
-    today_str = datetime.now().strftime("%Y%m%d")
-    prefix = f"ROUTE{today_str}"
-    
-    # 查询数据库中已存在的最大route_code
-    max_record = (
-        db.query(Route.route_code)
-        .filter(Route.route_code.like(f"{prefix}%"))
-        .order_by(Route.route_code.desc())
-        .first()
-    )
-    
-    # 同时检查当前事务中已添加但未提交的Route对象
-    max_seq_in_transaction = 0
-    for obj in db.new:
-        if isinstance(obj, Route) and obj.route_code and obj.route_code.startswith(prefix):
-            try:
-                seq = int(obj.route_code[-3:])
-                max_seq_in_transaction = max(max_seq_in_transaction, seq)
-            except ValueError:
-                pass
-    
-    if max_record and max_record[0]:
-        db_max_seq = int(max_record[0][-3:])
-        max_seq = max(db_max_seq + 1, max_seq_in_transaction + 1)
-    else:
-        max_seq = max(1, max_seq_in_transaction + 1)
-    
-    return f"{prefix}{max_seq:03d}"
+    """生成路线编码，格式：ROUTE + YYYYMMDD + 3位序号。"""
+    return allocate_code(db, RESOURCE_ROUTE)
 
 
 def _calculate_emission(distance: float, energy_type: str) -> float:

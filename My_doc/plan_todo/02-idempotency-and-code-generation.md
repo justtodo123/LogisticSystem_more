@@ -13,22 +13,22 @@ depends_on: ["R2-01"]
 
 ## 当前进度
 
-- **R2-02A 数据库幂等状态机：本机实现与验证完成，待 Commit / PR / CI / merge。**
-- **R2-02B 业务编号号段：pending，明确不在当前分支实施。**
-- 本卡在 R2-02B 完成前保持 `in_progress`，不得因 R2-02A 完成而把整个 R2-02 标为 `done`。
+- **R2-02A 数据库幂等状态机：已通过 PR #10 合并到 main。**
+- **R2-02B 业务编号号段：本机实现与验证完成，待 Commit / PR / CI / merge。**
+- 本卡在 R2-02B 真实合并前保持 `in_progress`，不得把整个 R2-02 标为 `done`。
 
 ## 来源证据与当前行为
 
 R2-02A 已将 `middleware/idempotency.py` 与 `utils/idempotency_store.py` 从 check → execute → cache 改为数据库 claim/finalize 状态机。`idempotency_records` 是正确性来源；Redis 只在数据库提交 `SUCCEEDED` 后作为 best-effort 成功响应旁路缓存，进程内 dict 不参与幂等正确性。
 
-R2-02B 的编码生成点仍位于 `algorithms/global_schedule.py`、`packaging.py`、`route_planning.py`、`node_dispatch.py` 等位置，现有 `LIKE prefix` 后取最大号的行为留待独立 slice 替换。
+R2-02B 已用 `code_ranges` 条件更新替换 `algorithms/global_schedule.py`、`packaging.py`、`route_planning.py`、`node_dispatch.py` 和 `services/state_machine.py` 中的 `LIKE prefix` / `max+1` / 进程序号。对外形态仍为 `GS` / `PKG` / `ROUTE` / `BATCH` / `DISP` + 日期 + 定宽序号。
 
-协议已冻结：[D-R2-IDEM](./decisions.md)、[D-R2-CODE](./decisions.md)。R2-02A schema 从 [R2-00A](./00A-alembic-migration-baseline.md) 的唯一 head 派生；`40902` / `40903` 使用统一错误登记和映射。
+协议已冻结：[D-R2-IDEM](./decisions.md)、[D-R2-CODE](./decisions.md)。R2-02B schema 从 [R2-02A](./02-idempotency-and-code-generation.md) 的唯一 head `r2_02a_idempotency_state` 派生；`40904` / `40905` 使用统一错误登记和映射。
 
 ## 问题与目标
 
 1. R2-02A：建立数据库唯一约束上的幂等状态机，消除并发请求的 TOCTOU 重复执行窗口，并保真重放成功响应。
-2. R2-02B：业务编码改为号段条件更新，消除并发重复编号。该目标尚未实施。
+2. R2-02B：业务编码改为号段条件更新，消除并发重复编号。
 
 ## R2-02A 已完成范围
 
@@ -45,12 +45,13 @@ R2-02B 的编码生成点仍位于 `algorithms/global_schedule.py`、`packaging.
 - 成功终态写入失败时不把可能已提交副作用的 owner 释放为 FAILED；记录保留 PROCESSING 隔离即时重试。
 - HTTP 200 且 JSON code != 0 的错误信封视为失败并释放 claim，不写入 SUCCEEDED；非 JSON 的 2xx（如导出文件）仍保真重放。
 
-## R2-02B pending 范围
+## R2-02B 已完成范围
 
-- 调度/包裹/路线/批次号段表。
-- 用号段条件更新替换现有 `max+1` / 前缀扫描。
-- 已有唯一约束下的有限冲突重试、耗尽错误与并发编号证据。
-- 编号生成量、无重复统计和后续 PostgreSQL 拓扑复跑。
+- 新增 `code_ranges`（`resource` + `prefix` + `next_value` + `width`），唯一索引 `(resource, prefix)`。
+- `allocate_code()` 以条件更新抢号；号段行不存在时才扫描已有最大号作为一次性 seed。
+- 替换调度/包裹/路线/批次/调度明细生成点，删除进程序号与事务内 `max+1`。
+- 已有唯一约束下占用编号有限重试；号段耗尽返回 `40904`，冲突重试耗尽返回 `40905`。
+- 20/100 独立 Session 并发编号无重复；顺序 200 次包裹编号无重复。
 
 ## 非目标与边界
 
@@ -58,6 +59,7 @@ R2-02B 的编码生成点仍位于 `algorithms/global_schedule.py`、`packaging.
 - R2-02A 不要求 Redis NX、PostgreSQL 多进程或 10 万编码作为完成条件；P1 拓扑验证归 R2-05。
 - 不改对外编号形态为 ULID。
 - 当前不设置响应捕获大小上限：若业务已提交后因本地阈值拒绝持久化，会造成不安全重试语义。部署应避免对 keyed 写接口返回无界内容。
+- R2-02B 的 SQLite 并发只证明协议；PostgreSQL 多 worker 复跑归 R2-05。
 
 ## R2-02A 验收结果
 
@@ -70,30 +72,44 @@ R2-02B 的编码生成点仍位于 `algorithms/global_schedule.py`、`packaging.
 - 八个强制端点的 missing-key、401、403 优先级矩阵通过。
 - fresh migration、Alembic check、release gate、downgrade/schema 测试通过。
 
+## R2-02B 验收结果
+
+- 同一前缀的 20 与 100 个独立 Session：编号互不重复，落库行数等于并发数，`next_value` 分别为 21 与 101。
+- 顺序 200 个包裹编号无重复。
+- 已有 `GS...007` 时下一号为 `008`；占用 `001` 时跳到 `002`。
+- 宽度耗尽：HTTP 409 / `40904`。
+- 连续占用导致重试耗尽：HTTP 409 / `40905`。
+- 生成函数源码不再包含 `LIKE` / 进程序号。
+- fresh SQLite 唯一 head `r2_02b_code_range_allocation`；从 `r2_02a_idempotency_state` 升级新增 `code_ranges`，downgrade 删除该表。
+
 ## 验证证据
 
-详见 [20260828-R2-02A-idempotency-state-machine.md](./experiments/20260828-R2-02A-idempotency-state-machine.md)。本机实际结果：
+R2-02A 详见 [20260828-R2-02A-idempotency-state-machine.md](./experiments/20260828-R2-02A-idempotency-state-machine.md)。
 
-- R2-02A 定向：82 passed, 70 warnings，退出码 0。
-- 完整后端：834 passed, 258 warnings，退出码 0。
-- migration/release 测试：33 passed，退出码 0。
-- fresh SQLite：唯一 head `r2_02a_idempotency_state`；Alembic check 无漂移；release gate passed。
-- 前端：`npx vue-tsc --noEmit` 与 `npm run build` 退出码 0；构建转换 1925 modules。
+R2-02B 详见 [20260828-R2-02B-code-range-allocation.md](./experiments/20260828-R2-02B-code-range-allocation.md)。本机实际结果：
+
+- R2-02B 定向：21 passed，退出码 0。
+- 算法/状态机/R2-01 CAS 回归：189 passed in 15.61s，退出码 0。
+- 迁移/release 测试：35 passed in 16.42s，退出码 0。
+- 完整后端：859 passed, 258 warnings in 173.70s，退出码 0。
+- fresh SQLite：唯一 head `r2_02b_code_range_allocation`；Alembic check 无漂移；release gate passed。
 
 SQLite 结果只证明本机 P0 协议辅助验证，不能外推 PostgreSQL、Redis 或多 worker 的锁行为与容量。
 
 ## 后续有序步骤
 
-1. 完成 R2-02A diff/status/敏感文件检查。
-2. 创建 R2-02A Commit / PR，等待 CI，并在真实合并后回填证据。
-3. 从更新后的 main 创建独立 R2-02B slice。
-4. 实施号段表、迁移、有限冲突重试与编号并发证据。
-5. R2-02B 完成后才将整个 R2-02 标记为 `done`。
+1. 完成 R2-02B diff/status/敏感文件检查。
+2. 创建 R2-02B Commit / PR，等待 CI，并在真实合并后回填证据。
+3. 将整个 R2-02 标记为 `done`。
+4. 从更新后的 main 进入 R2-03。
 
 ## 完成记录
 
-- R2-02A Commit SHA：尚无。
-- R2-02A PR URL：尚无。
-- R2-02A CI run URL：尚无。
-- R2-02A merge SHA：尚无。
-- R2-02B：尚未开始。
+- R2-02A Commit SHA：`889a70ac232f0958624cf677c82375feb51bc5d9`
+- R2-02A PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/10
+- R2-02A CI run URL：尚无单独回填；合并记录见 merge SHA。
+- R2-02A merge SHA：`c1020a44d69b050c3b0ce80554ba2198cea039ee`
+- R2-02B Commit SHA：尚无。
+- R2-02B PR URL：尚无。
+- R2-02B CI run URL：尚无。
+- R2-02B merge SHA：尚无。

@@ -15,7 +15,6 @@ F005 节点间调度算法
 import math
 import json
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
 from collections import defaultdict
 
 from sqlalchemy.orm import Session, aliased
@@ -43,6 +42,11 @@ from services.state_machine import (
 )
 
 from algorithms.base import SchedulingStrategy
+from core.code_allocation import (
+    RESOURCE_DISPATCH_BATCH,
+    RESOURCE_NODE_DISPATCH,
+    allocate_code,
+)
 
 
 def _load_config() -> dict:
@@ -81,43 +85,13 @@ def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 
 
 def _generate_batch_code(db: Session) -> str:
-    """生成调度批次编号，格式：BATCH + YYYYMMDD + 3位序号"""
-    today_str = datetime.now().strftime("%Y%m%d")
-    prefix = f"BATCH{today_str}"
-    
-    max_record = (
-        db.query(DispatchBatch.batch_code)
-        .filter(DispatchBatch.batch_code.like(f"{prefix}%"))
-        .order_by(DispatchBatch.batch_code.desc())
-        .first()
-    )
-    
-    if max_record and max_record[0]:
-        seq = int(max_record[0][-3:]) + 1
-    else:
-        seq = 1
-    
-    return f"{prefix}{seq:03d}"
+    """生成调度批次编号，格式：BATCH + YYYYMMDD + 3位序号。"""
+    return allocate_code(db, RESOURCE_DISPATCH_BATCH)
 
 
 def _generate_dispatch_code(db: Session) -> str:
-    """生成节点调度明细编号，格式：DISP + YYYYMMDD + 3位序号"""
-    today_str = datetime.now().strftime("%Y%m%d")
-    prefix = f"DISP{today_str}"
-    
-    max_record = (
-        db.query(NodeDispatch.dispatch_code)
-        .filter(NodeDispatch.dispatch_code.like(f"{prefix}%"))
-        .order_by(NodeDispatch.dispatch_code.desc())
-        .first()
-    )
-    
-    if max_record and max_record[0]:
-        seq = int(max_record[0][-3:]) + 1
-    else:
-        seq = 1
-    
-    return f"{prefix}{seq:03d}"
+    """生成节点调度明细编号，格式：DISP + YYYYMMDD + 3位序号。"""
+    return allocate_code(db, RESOURCE_NODE_DISPATCH)
 
 
 def _get_idle_vehicles_at_node(db: Session, node_id: int) -> List[Vehicle]:

@@ -19,7 +19,7 @@ from utils.schema_management import (
 )
 
 
-HEAD_REVISION = "r2_02a_idempotency_state"
+HEAD_REVISION = "r2_02b_code_range_allocation"
 
 
 def _upgrade(path: Path, revision: str = "head") -> None:
@@ -88,6 +88,52 @@ def _create_stamped_legacy_exception_db(path: Path, *, populated: bool) -> None:
             ("phase7_exception_fields",),
         )
         connection.commit()
+
+
+def test_code_ranges_table_added_from_r2_02a(tmp_path: Path):
+    database = tmp_path / "code-ranges.db"
+    _upgrade(database, "r2_02a_idempotency_state")
+    with sqlite3.connect(database) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert "code_ranges" not in tables
+
+    _upgrade(database)
+    with sqlite3.connect(database) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        columns = {
+            item[1]
+            for item in connection.execute("PRAGMA table_info(code_ranges)")
+        }
+        indexes = {
+            item[1]
+            for item in connection.execute("PRAGMA index_list(code_ranges)")
+        }
+
+    assert "code_ranges" in tables
+    assert columns == {"id", "resource", "prefix", "next_value", "width"}
+    assert "uq_code_ranges_resource_prefix" in indexes
+    assert _version(database) == HEAD_REVISION
+
+    command.downgrade(alembic_config(sqlite_database_url(database)), "r2_02a_idempotency_state")
+    with sqlite3.connect(database) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+    assert "code_ranges" not in tables
+    assert _version(database) == "r2_02a_idempotency_state"
 
 
 def test_fresh_upgrade_has_one_head_and_no_metadata_drift(tmp_path: Path):
@@ -602,6 +648,7 @@ def test_missing_main_file_with_orphan_sidecar_is_unknown(
         "c78f9b436833",
         "phase7_exception_fields",
         "r2_00a_schema_convergence",
+        "r2_02a_idempotency_state",
         HEAD_REVISION,
     ),
 )
