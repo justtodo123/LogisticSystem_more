@@ -21,11 +21,12 @@ EXPECTED_MODEL_TABLES = {
     "idempotency_records",
     "notification_configs",
     "ai_suggestions",
+    "code_ranges",
 }
 
 
 def test_model_registry_is_complete_and_unique():
-    assert len(MODEL_REGISTRY) == 18
+    assert len(MODEL_REGISTRY) == 19
     assert len(set(MODEL_REGISTRY)) == len(MODEL_REGISTRY)
     assert MODEL_TABLE_NAMES == EXPECTED_MODEL_TABLES
 

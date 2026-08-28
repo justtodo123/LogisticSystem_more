@@ -34,6 +34,7 @@ from models.global_schedule import GlobalSchedule
 from models.package import Package
 from algorithms.packaging import packaging
 from core.order_status import ORDER_STATUSES as CONTRACT_ORDER_STATUSES
+from core.code_allocation import RESOURCE_PACKAGE, allocate_code
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -326,8 +327,6 @@ def repack_at_l1(
     Returns:
         字典，包含新创建的包裹列表和层级信息
     """
-    from datetime import datetime
-    
     # 1. 查询订单
     order = db.query(Order).filter(Order.order_code == order_code).first()
     if not order:
@@ -405,22 +404,7 @@ def repack_at_l1(
         total_volume = sum(float(g.volume) for g in goods_list)
         
         # 6. 生成包裹编号
-        today_str = datetime.now().strftime("%Y%m%d")
-        prefix = f"PKG{today_str}"
-        
-        max_record = (
-            db.query(Package.package_code)
-            .filter(Package.package_code.like(f"{prefix}%"))
-            .order_by(Package.package_code.desc())
-            .first()
-        )
-        
-        if max_record and max_record[0]:
-            seq = int(max_record[0][-4:]) + 1
-        else:
-            seq = 1
-        
-        package_code = f"{prefix}{seq:04d}"
+        package_code = allocate_code(db, RESOURCE_PACKAGE)
         
         # 7. 创建goods_items
         goods_items = [

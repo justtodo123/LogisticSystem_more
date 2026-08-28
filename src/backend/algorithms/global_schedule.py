@@ -7,7 +7,6 @@ F007 全局调度算法
 import math
 import json
 from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -19,6 +18,7 @@ from models.package import Package
 
 from algorithms.base import SchedulingStrategy
 from algorithms import scoring
+from core.code_allocation import RESOURCE_GLOBAL_SCHEDULE, allocate_code
 
 
 def _load_config() -> dict:
@@ -93,31 +93,9 @@ def _calculate_storage_time(
     return 2.0 + distance_l0_l1 / 100.0
 
 
-# 内存计数器
-_schedule_seq: int = 0
-_schedule_date: str = ""
-
-
 def _generate_schedule_code(db: Session) -> str:
-    """生成调度方案编号，格式：GS + YYYYMMDD + 3位序号"""
-    global _schedule_seq, _schedule_date
-    today_str = datetime.now().strftime("%Y%m%d")
-    if _schedule_date != today_str:
-        _schedule_date = today_str
-        from models.global_schedule import GlobalSchedule
-        prefix = f"GS{today_str}"
-        max_record = (
-            db.query(GlobalSchedule.schedule_code)
-            .filter(GlobalSchedule.schedule_code.like(f"{prefix}%"))
-            .order_by(GlobalSchedule.schedule_code.desc())
-            .first()
-        )
-        if max_record and max_record[0]:
-            _schedule_seq = int(max_record[0][-3:])
-        else:
-            _schedule_seq = 0
-    _schedule_seq += 1
-    return f"GS{today_str}{_schedule_seq:03d}"
+    """生成调度方案编号，格式：GS + YYYYMMDD + 3位序号。"""
+    return allocate_code(db, RESOURCE_GLOBAL_SCHEDULE)
 
 
 # 候选方案权重画像（T2-2 多目标评分：在关键分叉点生成 ≥3 个候选方案供评分器排序）

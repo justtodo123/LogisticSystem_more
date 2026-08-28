@@ -1,6 +1,8 @@
 import pytest
 
 from core.error_codes import (
+    CODE_CODE_ALLOCATION_CONFLICT,
+    CODE_CODE_RANGE_EXHAUSTED,
     CODE_IDEMPOTENCY_IN_PROGRESS,
     CODE_IDEMPOTENCY_PAYLOAD_MISMATCH,
     CODE_STATE_CONFLICT,
@@ -25,6 +27,8 @@ def test_registry_codes_are_unique_and_valid():
         (CODE_STATE_CONFLICT, "R2-01"),
         (CODE_IDEMPOTENCY_IN_PROGRESS, "R2-02"),
         (CODE_IDEMPOTENCY_PAYLOAD_MISMATCH, "R2-02"),
+        (CODE_CODE_RANGE_EXHAUSTED, "R2-02"),
+        (CODE_CODE_ALLOCATION_CONFLICT, "R2-02"),
     ],
 )
 def test_frozen_conflict_codes_are_registered(code, owner):

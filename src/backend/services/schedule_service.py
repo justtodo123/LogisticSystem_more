@@ -254,6 +254,10 @@ class ScheduleService:
                 "explanation": explanation,
             })
             
+        except DomainError:
+            db.rollback()
+            raise
+
         except ValueError as e:
             db.rollback()
             return error_response(code=40001, message=f"全局调度失败: {str(e)}")

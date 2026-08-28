@@ -11,7 +11,7 @@
 |---|---|---|
 | R2-04A | 错误 registry、`DomainError`、全局 handler、统一 envelope、旧 `detail` 兼容、`get_db` rollback；只修代表性高风险泄露 | 不迁移全部业务判断，不改成功响应语义 |
 | R2-01 | 调度 / 到货 / AI 建议的状态冲突改为 `DomainError(CODE_STATE_CONFLICT)`，HTTP 409 + `40901` | 不自建错误 JSON，不重编号现有 code |
-| R2-02 | 幂等中间件改为登记码 `40902` / `40903`，需要时带 `Retry-After` | 不把冲突映射成 200 |
+| R2-02 | 幂等中间件改为登记码 `40902` / `40903`；编号号段耗尽/冲突为 `40904` / `40905` | 不把冲突映射成 200 |
 | R2-04B | `dependencies.py`、登录/ERP/审计鉴权从 `HTTPException` 迁到 `DomainError`；前端不再依赖 `detail` | 不重做错误 envelope 或 Session rollback |
 | 原业务卡保留 | 订单/货物/包裹/车辆/节点/路径/重调度等 HTTP 200 + `error_response` 业务错误 | R2-04A 不强制改成 4xx |
 

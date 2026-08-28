@@ -39,7 +39,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | 00A | P0 基础 | P0 | done | [Alembic 迁移基线与 Schema 真相源治理](./00A-alembic-migration-baseline.md) | PR #5 / CI 通过并合并；fresh/legacy、单 head、schema parity 已验证 |
 | 04A | P0 基础 | P0 | done | [领域错误、统一响应契约与数据库会话回滚](./04A-error-contract-and-db-session.md) | PR #6 / CI 通过并合并；registry、envelope、detail 兼容与 rollback 已验证 |
 | 01 | P0 | P0 | done | [关键状态转移并发控制](./01-concurrency-state-transitions.md) | PR #8 / CI 通过并合并；并发确认最多一次成功且无重复副作用 |
-| 02 | P0 | P0 | pending | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | 同 key 一次执行、编码无 `max+1` 竞态 |
+| 02 | P0 | P0 | in_progress | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | R2-02A 已合并；R2-02B 本机号段验证完成，待 Commit / PR |
 | 03 | P0 | P0 | pending | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | 崩溃可恢复、通知进 outbox、重复消费可控 |
 | 04B | P0 并行 | P0 | pending | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | 权限矩阵、token version、前后端权限一致 |
 | 05 | P1 | P1 | blocked | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | 真实数据库/缓存/多 worker 集成证据 |
@@ -58,7 +58,7 @@ R2-00A + R2-01 + R2-02 + R2-03 -> R2-05
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：主链启动 **R2-02 原子幂等与业务编号**，先实施 R2-02A 数据库幂等状态机，再单独实施 R2-02B 业务编号号段；可并行推进 **R2-04B RBAC/JWT/前端权限**。
+当前下一动作：R2-02A 已合并；R2-02B 本机号段实现与验证完成，待 Commit / PR / CI / merge。合并后进入 **R2-03 重规划 Saga 与 outbox**；可并行推进 **R2-04B RBAC/JWT/前端权限**。
 
 ## 当前证据边界
 
