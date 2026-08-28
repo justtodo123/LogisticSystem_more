@@ -1,7 +1,7 @@
 ---
 plan_id: "R2-02"
 title: 原子幂等与业务编号生成
-status: in_progress
+status: done
 priority: P0
 owner: justtodo123
 created: 2026-08-25
@@ -13,9 +13,9 @@ depends_on: ["R2-01"]
 
 ## 当前进度
 
-- **R2-02A 数据库幂等状态机：已通过 PR #10 合并到 main。**
-- **R2-02B 业务编号号段：本机实现与验证完成，待 Commit / PR / CI / merge。**
-- 本卡在 R2-02B 真实合并前保持 `in_progress`，不得把整个 R2-02 标为 `done`。
+- **R2-02A 数据库幂等状态机：已通过 PR #10 与 CI 验证并合并到 main。**
+- **R2-02B 业务编号号段：已通过 PR #11 与 CI 验证并合并到 main。**
+- **R2-02 已完成；后续主链进入 R2-03，生产拓扑复验仍归 R2-05。**
 
 ## 来源证据与当前行为
 
@@ -98,18 +98,16 @@ SQLite 结果只证明本机 P0 协议辅助验证，不能外推 PostgreSQL、R
 
 ## 后续有序步骤
 
-1. 完成 R2-02B diff/status/敏感文件检查。
-2. 创建 R2-02B Commit / PR，等待 CI，并在真实合并后回填证据。
-3. 将整个 R2-02 标记为 `done`。
-4. 从更新后的 main 进入 R2-03。
+1. 从更新后的 `main` 进入 R2-03，收口业务副作用与幂等终态之间的事务边界，并实现 Saga/outbox 恢复协议。
+2. 在 R2-05 的 PostgreSQL + Redis + 多 worker 拓扑中复跑幂等与编号并发验证。
 
 ## 完成记录
 
 - R2-02A Commit SHA：`889a70ac232f0958624cf677c82375feb51bc5d9`
 - R2-02A PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/10
-- R2-02A CI run URL：尚无单独回填；合并记录见 merge SHA。
+- R2-02A CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33151979633
 - R2-02A merge SHA：`c1020a44d69b050c3b0ce80554ba2198cea039ee`
-- R2-02B Commit SHA：尚无。
-- R2-02B PR URL：尚无。
-- R2-02B CI run URL：尚无。
-- R2-02B merge SHA：尚无。
+- R2-02B Commit SHA：`6b8a8d2c8c2e0a65a3c11b11f71172dd254737fe`
+- R2-02B PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/11
+- R2-02B CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33157404527
+- R2-02B merge SHA：`87190d23de8a28fa2a84f9abb50b18a2e6ddf167`

@@ -15,9 +15,10 @@ metadata:
 - 执行人：justtodo123
 - 层级：P0 本机协议
 - Git 分支：`feat/R2-02-idempotency-state-machine`
-- Commit SHA：尚无（当前工作树未提交）
-- PR URL：尚无
-- CI run URL：尚无
+- Commit SHA：`889a70ac232f0958624cf677c82375feb51bc5d9`
+- PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/10
+- CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33151979633
+- Merge SHA：`c1020a44d69b050c3b0ce80554ba2198cea039ee`
 
 ## Schema 与数据来源
 
@@ -79,7 +80,7 @@ npm run build
 - 并发摘要：20 与 100 contender 均仅 1 个 `OWNED`，其余为 `IN_PROGRESS`；最终状态使用新 Session 断言为 `PROCESSING`
 - Redis 摘要：disabled 与写入异常时，导出响应均从数据库原样重放；业务导出只执行一次；未写入 `idem:` 进程内缓存
 - 追踪内摘要路径：本文件
-- 外部原始产物位置 / CI artifact URL：尚无；本机后台任务输出为临时文件，不追踪
+- 外部原始产物位置 / CI artifact URL：CI run https://github.com/justtodo123/LogisticSystem_more/actions/runs/33151979633；本机后台任务输出为临时文件，不追踪
 - 产物大小 / SHA-256：未登记（临时输出不作为持久 artifact）
 - 保留期限 / 删除日期：会话临时输出，由工具运行环境管理
 - 脱敏检查：已检查摘要；不含 DSN、JWT、口令、个人数据或原始业务请求体
@@ -87,12 +88,12 @@ npm run build
 
 ## 结论
 
-- 状态：R2-02A 本机实现与验证通过；尚未 commit/PR/CI/merge
+- 状态：R2-02A 已通过本机验证、PR #10 与 CI，并合并到 `main`
 - 结论与对应证据：数据库状态机、claim token fencing、401/403/key precedence、八个强制端点、其他认证写接口可选幂等、DELETE、响应 status/body/media type/安全 header 重放、流式响应 materialize、background 仅 owner 执行、Redis 故障降级、明确业务失败释放、取消歧义隔离、过期后新 payload reclaim 均有测试覆盖
 - 成功终态失败边界：路由可能已提交副作用时，`mark_succeeded` 失败返回数据库错误但不主动标记 `FAILED`；记录保持 `PROCESSING`，即时重试为 `40902`，避免立即重复执行。业务提交与幂等终态不是同一事务，lease 到期后的重复风险不宣称 exactly-once，后续与 R2-03 outbox/事务边界处理
 - 响应策略：keyed 响应在返回前完整 materialize 以便数据库保真重放；background task 仅挂在首次 owner 响应，不持久化、不在 replay 重复；当前不设置响应捕获上限，避免已提交副作用后因本地捕获阈值拒绝持久化
 - PROCESSING lease：配置校验要求 lease 严格大于全局请求 timeout；无 heartbeat；请求取消/外层 timeout 属于歧义结果，不主动写 `FAILED`，保留 `PROCESSING` 隔离即时重试
 - 已知限制：SQLite 写锁可能串行化竞争；本结果只证明 P0 协议辅助验证，不能证明 PostgreSQL、多 worker 或真实 Redis 的锁与容量行为
-- 未通过项 / 未执行项：Commit、PR、CI、merge 尚无；PostgreSQL + Redis + 多 worker 拓扑验证归 R2-05；业务编号号段 R2-02B 未实施
+- 未执行项：PostgreSQL + Redis + 多 worker 拓扑验证归 R2-05；业务提交与幂等终态的原子边界归 R2-03
 - 审查修复：HTTP 200 + JSON code != 0 的错误信封不再写入 SUCCEEDED，同一 key 可重试；导出等非 JSON 2xx 仍保真重放。
-- 下一步：提交 R2-02A Commit / PR；R2-02B 保持独立后续 slice
+- 后续：在 R2-03 收口业务事务边界，在 R2-05 复跑生产拓扑验证
