@@ -64,8 +64,8 @@ _redis: Optional[Any] = None
 _redis_usable: Optional[bool] = None  # None=未检测；False=已降级内存缓存
 
 
-def _resolve_redis():
-    """返回可用的 Redis 客户端，或 None（未启用 / 已降级内存）"""
+def resolve_redis():
+    """返回可用的 Redis 客户端，或 None（未启用 / 已降级内存）。"""
     global _redis, _redis_usable
     if not is_redis_enabled():
         _redis_usable = False
@@ -84,7 +84,7 @@ def _resolve_redis():
 
 async def cache_get(key: str) -> Any:
     """读取缓存；不存在/过期返回 None"""
-    client = _resolve_redis()
+    client = resolve_redis()
     if client is not None:
         try:
             raw = await client.get(key)
@@ -99,7 +99,7 @@ async def cache_get(key: str) -> Any:
 
 async def cache_set(key: str, value: Any, ttl: Optional[int] = None) -> None:
     """写入缓存（默认 TTL 取 settings.REDIS_CACHE_TTL）"""
-    client = _resolve_redis()
+    client = resolve_redis()
     ttl = ttl if ttl is not None else settings.REDIS_CACHE_TTL
     payload = json.dumps(value, ensure_ascii=False, default=str)
     if client is not None:
@@ -114,7 +114,7 @@ async def cache_set(key: str, value: Any, ttl: Optional[int] = None) -> None:
 
 async def cache_delete(key: str) -> None:
     """删除单个缓存键"""
-    client = _resolve_redis()
+    client = resolve_redis()
     if client is not None:
         try:
             await client.delete(key)
@@ -125,7 +125,7 @@ async def cache_delete(key: str) -> None:
 
 async def cache_delete_prefix(prefix: str) -> None:
     """删除指定前缀的所有缓存键（写操作后的缓存失效）"""
-    client = _resolve_redis()
+    client = resolve_redis()
     if client is not None:
         try:
             async for key in client.scan_iter(match=f"{prefix}:*"):

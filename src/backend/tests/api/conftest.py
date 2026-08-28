@@ -18,6 +18,7 @@ def client(test_db):
     """创建 FastAPI TestClient，覆盖数据库依赖。"""
     from main import app
     from config import database as db_mod
+    from utils.idempotency_store import reset_session_factory, set_session_factory
 
     _engine, TestingSessionLocal = test_db
 
@@ -29,10 +30,12 @@ def client(test_db):
             session.close()
 
     app.dependency_overrides[db_mod.get_db] = override_get_db
+    set_session_factory(TestingSessionLocal)
     try:
         with TestClient(app) as c:
             yield c
     finally:
+        reset_session_factory()
         app.dependency_overrides.clear()
 
 
@@ -42,24 +45,27 @@ def async_client(test_db):
     from main import app
     from config.database import get_db
     from httpx import ASGITransport, AsyncClient
-    
-    engine, TestingSessionLocal = test_db
-    
+    from utils.idempotency_store import reset_session_factory, set_session_factory
+
+    _engine, TestingSessionLocal = test_db
+
     def override_get_db():
         session = TestingSessionLocal()
         try:
             yield session
         finally:
             session.close()
-    
+
     app.dependency_overrides[get_db] = override_get_db
-    
+    set_session_factory(TestingSessionLocal)
+
     transport = ASGITransport(app=app)
-    async_client = AsyncClient(transport=transport, base_url="http://test")
-    
-    yield async_client
-    
-    app.dependency_overrides.clear()
+    client = AsyncClient(transport=transport, base_url="http://test")
+    try:
+        yield client
+    finally:
+        reset_session_factory()
+        app.dependency_overrides.clear()
 
 
 def create_jwt_token(username, role):

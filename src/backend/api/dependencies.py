@@ -8,7 +8,10 @@ from config.database import settings
 from config.database import get_db
 from models.user import User
 from services.auth_service import get_user_by_username
+from core.error_codes import CODE_IDEMPOTENCY_KEY_MISSING
+from core.errors import DomainError
 from core.permissions import get_user_permissions, PERMISSIONS
+from middleware.idempotency import claim_idempotency
 
 security = HTTPBearer()
 
@@ -89,4 +92,44 @@ def require_dispatcher(current_user: User = Depends(get_current_user)) -> User:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="无权限执行此操作（仅调度员可操作）",
         )
+    return current_user
+
+
+async def get_current_user_with_optional_idempotency(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Claim a supplied key after active-user authentication."""
+    await claim_idempotency(
+        request,
+        f"user:{current_user.username}",
+        settings.IDEMPOTENCY_PROCESSING_LEASE_SECONDS,
+    )
+    return current_user
+
+
+async def require_dispatcher_with_optional_idempotency(
+    request: Request,
+    current_user: User = Depends(require_dispatcher),
+) -> User:
+    """Claim a supplied key after dispatcher authorization."""
+    await claim_idempotency(
+        request,
+        f"user:{current_user.username}",
+        settings.IDEMPOTENCY_PROCESSING_LEASE_SECONDS,
+    )
+    return current_user
+
+async def require_dispatcher_with_idempotency(
+    request: Request,
+    current_user: User = Depends(require_dispatcher),
+) -> User:
+    """Require and claim a durable key after dispatcher authorization."""
+    if not request.headers.get("X-Idempotency-Key"):
+        raise DomainError(CODE_IDEMPOTENCY_KEY_MISSING)
+    await claim_idempotency(
+        request,
+        f"user:{current_user.username}",
+        settings.IDEMPOTENCY_PROCESSING_LEASE_SECONDS,
+    )
     return current_user

@@ -20,6 +20,7 @@ CODE_IDEMPOTENCY_PAYLOAD_MISMATCH = 40903
 CODE_INTERNAL_ERROR = 50000
 CODE_DATABASE_ERROR = 50001
 CODE_REQUEST_TIMEOUT = 50400
+CODE_REQUEST_BODY_TOO_LARGE = 41300
 
 # 业务错误码
 CODE_ORDER_NOT_FOUND = 40001
@@ -98,6 +99,13 @@ _ERROR_DEFINITIONS = (
     _definition(CODE_INTERNAL_ERROR, HTTPStatus.INTERNAL_SERVER_ERROR, "服务器内部错误", "core"),
     _definition(CODE_DATABASE_ERROR, HTTPStatus.INTERNAL_SERVER_ERROR, "数据库服务暂时不可用", "core"),
     _definition(CODE_REQUEST_TIMEOUT, HTTPStatus.GATEWAY_TIMEOUT, "请求超时，请稍后重试", "core"),
+    _definition(
+        CODE_REQUEST_BODY_TOO_LARGE,
+        HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+        "请求体超过允许大小",
+        "idempotency",
+        "idempotency_middleware",
+    ),
     _definition(CODE_ORDER_NOT_FOUND, HTTPStatus.NOT_FOUND, "订单不存在", "orders"),
     _definition(CODE_ORDER_STATUS_NOT_ALLOWED, HTTPStatus.CONFLICT, "订单状态不允许当前操作", "orders"),
     _definition(CODE_GOODS_NOT_FOUND, HTTPStatus.NOT_FOUND, "货物不存在", "goods"),
@@ -132,6 +140,7 @@ _STATUS_DEFAULT_CODES: Mapping[int, int] = MappingProxyType(
         HTTPStatus.NOT_FOUND: CODE_NOT_FOUND,
         HTTPStatus.CONFLICT: CODE_CONFLICT,
         HTTPStatus.UNPROCESSABLE_ENTITY: CODE_PARAM_ERROR,
+        HTTPStatus.REQUEST_ENTITY_TOO_LARGE: CODE_REQUEST_BODY_TOO_LARGE,
         HTTPStatus.INTERNAL_SERVER_ERROR: CODE_INTERNAL_ERROR,
         HTTPStatus.GATEWAY_TIMEOUT: CODE_REQUEST_TIMEOUT,
     }

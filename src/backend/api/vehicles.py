@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
-from api.dependencies import get_current_user, require_dispatcher
+from api.dependencies import get_current_user, require_dispatcher_with_optional_idempotency
 from schemas.vehicle import VehicleCreate, VehicleUpdate
 from services.vehicle_service import VehicleService
 from config.database import get_db
@@ -50,7 +50,7 @@ async def list_vehicles(
 async def create_vehicle(
     vehicle: VehicleCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher)
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
 ):
     """新增车辆"""
     result = await VehicleService.create_vehicle(vehicle, db)
@@ -75,7 +75,7 @@ async def update_vehicle(
     vehicle_code: str,
     vehicle: VehicleUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher)
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
 ):
     """编辑车辆"""
     result = await VehicleService.update_vehicle(vehicle_code, vehicle, db)
@@ -88,7 +88,7 @@ async def update_vehicle(
 async def delete_vehicle(
     vehicle_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher)
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
 ):
     """删除车辆"""
     result = await VehicleService.delete_vehicle(vehicle_code, db)

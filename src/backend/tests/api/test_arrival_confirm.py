@@ -131,7 +131,10 @@ class TestArrivalConfirmAuthorized:
         response = client.post(
             "/api/simulation/confirm-arrival",
             json=_confirm_payload(),
-            headers={"Authorization": f"Bearer {dispatcher_token}"},
+            headers={
+                "Authorization": f"Bearer {dispatcher_token}",
+                "X-Idempotency-Key": "r2-02a-arrival-key",
+            },
         )
         assert response.status_code == 200
         body = response.json()
@@ -160,7 +163,10 @@ class TestArrivalConfirmErrorSanitization:
         response = client.post(
             "/api/simulation/confirm-arrival-batch",
             json=_batch_payload(),
-            headers={"Authorization": f"Bearer {dispatcher_token}"},
+            headers={
+                "Authorization": f"Bearer {dispatcher_token}",
+                "X-Idempotency-Key": "r2-02a-arrival-key",
+            },
         )
         assert response.status_code == 200
         body = response.json()

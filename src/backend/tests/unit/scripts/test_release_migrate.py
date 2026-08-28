@@ -22,7 +22,7 @@ def test_release_gate_creates_fresh_database(tmp_path: Path):
 
     migrate_release_database(sqlite_database_url(database))
 
-    assert _version(database) == "r2_00a_schema_convergence"
+    assert _version(database) == "r2_02a_idempotency_state"
 
 
 def test_release_gate_accepts_current_head(tmp_path: Path):
@@ -33,7 +33,7 @@ def test_release_gate_accepts_current_head(tmp_path: Path):
 
     migrate_release_database(database_url)
 
-    assert _version(database) == "r2_00a_schema_convergence"
+    assert _version(database) == "r2_02a_idempotency_state"
     assert file_sha256(database) == before_hash
 
 
@@ -64,5 +64,5 @@ def test_release_gate_rejects_head_revision_with_schema_drift(
     with pytest.raises(RuntimeError, match="不允许由发布门禁原地修改"):
         migrate_release_database(database_url)
 
-    assert _version(database) == "r2_00a_schema_convergence"
+    assert _version(database) == "r2_02a_idempotency_state"
     assert file_sha256(database) == before_hash

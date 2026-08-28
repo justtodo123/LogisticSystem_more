@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
-from api.dependencies import get_current_user, require_dispatcher
+from api.dependencies import get_current_user, require_dispatcher_with_optional_idempotency
 from schemas.package import PackageRepack
 from services.package_service import PackageService
 from config.database import get_db
@@ -48,7 +48,7 @@ async def repack_package(
     package_code: str,
     repack: PackageRepack,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher)
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
 ):
     """手动重新打包"""
     result = await PackageService.repack_package(package_code, repack, db)

@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from config.database import get_db
-from api.dependencies import require_dispatcher
+from api.dependencies import require_dispatcher_with_optional_idempotency
 from models.user import User
 from models.node_dispatch import NodeDispatch
 from models.dispatch_batch import DispatchBatch
@@ -54,7 +54,7 @@ class UndoOverrideRequest(BaseModel):
 async def override_vehicle(
     request: VehicleOverrideRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
 ):
     """
     更换某条调度明细的车辆。
@@ -93,7 +93,7 @@ async def override_vehicle(
 async def override_driver(
     request: DriverOverrideRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
 ):
     """
     更换某条调度明细的司机。
@@ -131,7 +131,7 @@ async def override_driver(
 async def recalculate_override(
     request: RecalculateOverrideRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
 ):
     """
     对批次内已人工干预的调度明细批量重算路线（仅影响被调整的任务链）。
@@ -163,7 +163,7 @@ async def recalculate_override(
 async def undo_override(
     request: UndoOverrideRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
 ):
     """
     撤销某条调度明细的人工干预，恢复到调整前状态（车辆/司机 + 路线版本回退）。

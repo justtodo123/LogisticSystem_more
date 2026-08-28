@@ -41,7 +41,11 @@ from core.exception_mapping import (
     safe_response_headers,
     validation_error_meta,
 )
-from middleware.idempotency import IdempotencyMiddleware
+from middleware.idempotency import (
+    IdempotencyMiddleware,
+    IdempotencyProtocolError,
+    IdempotencyReplay,
+)
 from middleware.timeout import TimeoutMiddleware
 from middleware.audit_log import AuditLogMiddleware
 from utils.response import error_response
@@ -157,6 +161,27 @@ async def domain_exception_handler(request: Request, exc: DomainError):
     return JSONResponse(
         status_code=exc.http_status,
         content=error_response(exc.code, exc.public_message, meta=exc.meta),
+    )
+
+
+@app.exception_handler(IdempotencyReplay)
+async def idempotency_replay_handler(
+    request: Request,
+    exc: IdempotencyReplay,
+):
+    """Return a stored response only after route authorization succeeds."""
+    return IdempotencyMiddleware.replay_response(exc.response)
+
+
+@app.exception_handler(IdempotencyProtocolError)
+async def idempotency_protocol_error_handler(
+    request: Request,
+    exc: IdempotencyProtocolError,
+):
+    """Render errors raised by the post-authorization claim protocol."""
+    return IdempotencyMiddleware.protocol_error_response(
+        exc.code,
+        headers=exc.headers,
     )
 
 

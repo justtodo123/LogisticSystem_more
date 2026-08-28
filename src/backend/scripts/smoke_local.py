@@ -648,6 +648,7 @@ def run_self_host(args: argparse.Namespace) -> int:
     env["REDIS_ENABLED"] = "false"
     env["DATABASE_URL"] = sqlite_url(db_path)
     env["REQUEST_TIMEOUT_SECONDS"] = "300"
+    env["IDEMPOTENCY_PROCESSING_LEASE_SECONDS"] = "360"
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"

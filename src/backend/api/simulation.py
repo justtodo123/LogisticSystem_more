@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from schemas.simulation import DeliverRequest, DeliverResponse
 from services.simulation_service import SimulationService
 from config.database import get_db
-from api.dependencies import get_current_user, require_dispatcher
+from api.dependencies import require_dispatcher_with_optional_idempotency
 from models.user import User
 
 router = APIRouter(prefix="/api/simulation", tags=["模拟送达"])
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/simulation", tags=["模拟送达"])
 async def deliver_packages(
     request: DeliverRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
 ):
     """
     模拟送达，驱动状态流转

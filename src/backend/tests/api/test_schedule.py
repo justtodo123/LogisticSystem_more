@@ -167,7 +167,7 @@ class TestCreateGlobalSchedule:
         response = client.post(
             "/api/schedule/global",
             json={"algorithm": "traditional"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-global"},
         )
         
         # 验证预览响应
@@ -183,7 +183,7 @@ class TestCreateGlobalSchedule:
         # 第二阶段：确认（draft → active，执行 F021 打包）
         confirm_resp = client.post(
             f"/api/schedule/confirm/{schedule_code}",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-confirm"},
         )
         assert confirm_resp.status_code == 200
         confirm_body = confirm_resp.json()
@@ -215,7 +215,7 @@ class TestCreateGlobalSchedule:
         response = client.post(
             "/api/schedule/global",
             json={"algorithm": "traditional"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-global"},
         )
         
         # 验证响应（业务错误）
@@ -422,7 +422,7 @@ class TestCreateGlobalScheduleBoundaries:
         response = client.post(
             "/api/schedule/global",
             json={"algorithm": "traditional"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-global"},
         )
         
         # 验证响应（业务错误）
@@ -456,7 +456,7 @@ class TestCreateGlobalScheduleBoundaries:
         response = client.post(
             "/api/schedule/global",
             json={"algorithm": "deepseek"},  # 阶段3不支持
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-global"},
         )
         
         # 验证响应（业务错误）
@@ -520,7 +520,7 @@ class TestCreateGlobalScheduleBoundaries:
                 "order_codes": ["O_NONEXIST"],
                 "algorithm": "traditional",
             },
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-global"},
         )
         
         # 验证响应（业务错误）
@@ -629,7 +629,7 @@ class TestCreateGlobalScheduleBoundaries:
         response = client.post(
             "/api/schedule/global",
             json={"algorithm": "traditional"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-global"},
         )
         
         # 获取方案编号
@@ -774,7 +774,7 @@ class TestCreateNodeDispatch:
         response = client.post(
             "/api/schedule/global",
             json={"algorithm": "traditional"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-global"},
         )
         assert response.status_code == 200
         schedule_code = response.json()["data"]["schedule_code"]
@@ -782,7 +782,7 @@ class TestCreateNodeDispatch:
         # 确认方案（draft → active，执行 F021 打包）
         confirm_resp = client.post(
             f"/api/schedule/confirm/{schedule_code}",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-confirm"},
         )
         assert confirm_resp.status_code == 200
         assert confirm_resp.json()["code"] == 0
@@ -896,7 +896,7 @@ class TestCreateNodeDispatchBoundaries:
         response = client.post(
             "/api/schedule/global",
             json={"algorithm": "traditional"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-global"},
         )
         # 可能没有pending订单，返回业务错误
         if response.status_code == 200 and response.json()["code"] != 0:
@@ -984,7 +984,7 @@ class TestCreateNodeDispatchBoundaries:
         response = client.post(
             "/api/schedule/global",
             json={"algorithm": "traditional"},
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-global"},
         )
         
         if response.status_code == 200 and response.json()["code"] == 0:
@@ -993,7 +993,7 @@ class TestCreateNodeDispatchBoundaries:
             # 确认方案
             confirm_resp = client.post(
                 f"/api/schedule/confirm/{schedule_code}",
-                headers={"Authorization": f"Bearer {token}"},
+                headers={"Authorization": f"Bearer {token}", "X-Idempotency-Key": "r2-02a-schedule-confirm"},
             )
             assert confirm_resp.status_code == 200
             assert confirm_resp.json()["code"] == 0

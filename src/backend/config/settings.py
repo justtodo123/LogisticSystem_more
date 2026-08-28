@@ -42,6 +42,7 @@ class Settings(BaseSettings):
 
     # ── 请求控制 ──
     REQUEST_TIMEOUT_SECONDS: int = 30
+    IDEMPOTENCY_PROCESSING_LEASE_SECONDS: int = 120
     IDEMPOTENCY_TTL_HOURS: int = 24
     DEEPSEEK_TIMEOUT_SECONDS: int = 15
 
@@ -97,6 +98,17 @@ class Settings(BaseSettings):
                 "生产环境（ENV=prod/staging）必须设置强 JWT_SECRET："
                 "至少 32 位随机字符串，且不得使用默认占位值 "
                 f"（当前长度 {len(self.JWT_SECRET)}）。"
+            )
+        return self
+
+
+    @model_validator(mode="after")
+    def _validate_idempotency_lease(self) -> "Settings":
+        """Keep a live request inside its PROCESSING ownership lease."""
+        if self.IDEMPOTENCY_PROCESSING_LEASE_SECONDS <= self.REQUEST_TIMEOUT_SECONDS:
+            raise ValueError(
+                "IDEMPOTENCY_PROCESSING_LEASE_SECONDS must be greater than "
+                "REQUEST_TIMEOUT_SECONDS"
             )
         return self
 

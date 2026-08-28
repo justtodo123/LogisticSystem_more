@@ -7,10 +7,12 @@ ERP 对接 Webhook（T5-1）：外部系统订单推送
 - 配置了 settings.ERP_API_KEY 时，要求 X-ERP-API-Key 请求头匹配（机器对机器）
 - 未配置时回退到标准 Bearer JWT（dispatcher 角色），便于本地联调
 """
+import hashlib
+from dataclasses import dataclass
 from typing import List, Optional
 
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -20,11 +22,18 @@ from config.database import get_db, settings
 from core.error_codes import CODE_SUCCESS
 from schemas.order import GoodsCreate, OrderCreate
 from services.order_service import OrderService
+from services.auth_service import get_user_by_username
+from middleware.idempotency import claim_idempotency
 
 router = APIRouter(prefix="/api/erp", tags=["ERP 对接"])
 
 # auto_error=False：允许无 Authorization 头（API Key 模式下不要求 JWT）
 _security = HTTPBearer(auto_error=False)
+
+
+@dataclass(frozen=True, slots=True)
+class ErpPrincipal:
+    caller_scope: str
 
 
 class ErpOrderCreate(BaseModel):
@@ -37,35 +46,56 @@ class ErpOrderCreate(BaseModel):
 
 
 async def verify_erp_auth(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(_security),
     x_erp_api_key: Optional[str] = Header(default=None, alias="X-ERP-API-Key"),
-) -> None:
-    """ERP 对接认证：API Key 优先，未配置时回退 JWT"""
+    db: Session = Depends(get_db),
+) -> ErpPrincipal:
+    """ERP 对接认证：API Key 优先，未配置时回退数据库校验的 JWT。"""
     if settings.ERP_API_KEY:
         if not x_erp_api_key or x_erp_api_key != settings.ERP_API_KEY:
             raise HTTPException(status_code=401, detail="ERP API Key 无效")
-        return
+        key_identity = hashlib.sha256(settings.ERP_API_KEY.encode()).hexdigest()
+        return ErpPrincipal(caller_scope=f"erp-api-key:{key_identity}")
 
-    # 回退：标准 JWT 认证
     if credentials is None:
         raise HTTPException(status_code=401, detail="未登录或缺少认证")
     try:
         payload = jwt.decode(credentials.credentials, settings.JWT_SECRET, algorithms=["HS256"])
-        if not payload.get("sub"):
+        username = payload.get("sub")
+        if not username:
             raise HTTPException(status_code=401, detail="未登录或 Token 无效")
-        if payload.get("role") not in ("dispatcher", "admin"):
+        user = get_user_by_username(db, username)
+        if user is None or not user.is_active:
+            raise HTTPException(status_code=401, detail="未登录或 Token 无效")
+        if user.role not in ("dispatcher", "admin"):
             raise HTTPException(status_code=403, detail="无权限推送订单（仅 dispatcher/admin）")
+        request.state.current_user = user
+        return ErpPrincipal(caller_scope=f"user:{user.username}")
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token 已过期，请重新登录")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="未登录或 Token 无效")
 
 
+async def verify_erp_auth_with_optional_idempotency(
+    request: Request,
+    principal: ErpPrincipal = Depends(verify_erp_auth),
+) -> ErpPrincipal:
+    """Claim a supplied key only after ERP authentication succeeds."""
+    await claim_idempotency(
+        request,
+        principal.caller_scope,
+        settings.IDEMPOTENCY_PROCESSING_LEASE_SECONDS,
+    )
+    return principal
+
+
 @router.post("/orders", summary="ERP 推送订单")
 async def erp_push_orders(
     order: ErpOrderCreate,
     db: Session = Depends(get_db),
-    _auth: None = Depends(verify_erp_auth),
+    _principal: ErpPrincipal = Depends(verify_erp_auth_with_optional_idempotency),
 ):
     """接收 ERP/WMS 推送订单，创建订单并返回 201 + 内部订单号。
 

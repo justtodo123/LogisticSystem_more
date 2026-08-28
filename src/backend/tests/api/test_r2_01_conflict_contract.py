@@ -22,13 +22,19 @@ async def test_confirm_schedule_second_call_is_40901(
         preview=True,
     )
     schedule_code = preview["data"]["schedule_code"]
-    headers = {"Authorization": f"Bearer {dispatcher_token}"}
+    headers = {
+        "Authorization": f"Bearer {dispatcher_token}",
+        "X-Idempotency-Key": "r2-01-conflict-first",
+    }
 
     first = client.post(f"/api/schedule/confirm/{schedule_code}", headers=headers)
     assert first.status_code == 200
     assert first.json()["code"] == 0
 
-    second = client.post(f"/api/schedule/confirm/{schedule_code}", headers=headers)
+    second = client.post(
+        f"/api/schedule/confirm/{schedule_code}",
+        headers={**headers, "X-Idempotency-Key": "r2-01-conflict-second"},
+    )
     assert second.status_code == 409
     body = second.json()
     assert set(body) == {"code", "message", "data", "meta"}
@@ -77,7 +83,10 @@ def test_confirm_arrival_second_call_is_40901(
     db_session.add(package)
     db_session.commit()
 
-    headers = {"Authorization": f"Bearer {dispatcher_token}"}
+    headers = {
+        "Authorization": f"Bearer {dispatcher_token}",
+        "X-Idempotency-Key": "r2-01-conflict-first",
+    }
     payload = {
         "schedule_code": "GS_HTTP_ARRIVAL",
         "package_code": "PKG_HTTP_ARRIVAL",
@@ -89,7 +98,11 @@ def test_confirm_arrival_second_call_is_40901(
         assert first.json()["code"] == 0
         assert notify.call_count == 1
 
-        second = client.post("/api/simulation/confirm-arrival", json=payload, headers=headers)
+        second = client.post(
+            "/api/simulation/confirm-arrival",
+            json=payload,
+            headers={**headers, "X-Idempotency-Key": "r2-01-conflict-second"},
+        )
         assert second.status_code == 409
         body = second.json()
         assert body["code"] == 40901
@@ -154,7 +167,10 @@ def test_confirm_arrival_batch_second_package_is_40901(
     db_session.add(second_package)
     db_session.commit()
 
-    headers = {"Authorization": f"Bearer {dispatcher_token}"}
+    headers = {
+        "Authorization": f"Bearer {dispatcher_token}",
+        "X-Idempotency-Key": "r2-01-conflict-first",
+    }
     payload = {
         "schedule_code": "GS_HTTP_ARRIVAL_BATCH",
         "confirmations": [

@@ -16,7 +16,7 @@ from schemas.arrival_confirm import (
 from core.error_codes import CODE_SUCCESS, CODE_INTERNAL_ERROR
 from core.errors import DomainError
 from config.database import get_db
-from api.dependencies import require_dispatcher
+from api.dependencies import require_dispatcher, require_dispatcher_with_idempotency
 from models.user import User
 from utils.response import error_response
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 async def confirm_arrival(
     request: ArrivalConfirmRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_idempotency),
 ) -> Dict[str, Any]:
     """
     单个到货确认
@@ -77,7 +77,7 @@ async def confirm_arrival(
 async def confirm_arrival_batch(
     request: BatchArrivalConfirmRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_idempotency),
 ) -> Dict[str, Any]:
     """
     批量到货确认（事务性，任一失败则全部回滚）

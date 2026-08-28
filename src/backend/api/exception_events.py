@@ -23,7 +23,11 @@ from schemas.exception_event import (
     UpdateExceptionRequest,
 )
 from config.database import get_db
-from api.dependencies import get_current_user, require_dispatcher
+from api.dependencies import (
+    get_current_user,
+    require_dispatcher_with_optional_idempotency,
+    require_dispatcher_with_idempotency,
+)
 from models.user import User
 
 router = APIRouter(prefix="/api/exceptions", tags=["异常管理"])
@@ -55,7 +59,7 @@ async def get_exceptions(
 @router.post("")
 async def create_exception(
     body: CreateExceptionEventRequest,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
     db: Session = Depends(get_db),
 ):
     """
@@ -115,7 +119,7 @@ async def get_exception_detail(
 @router.post("/replan/batch")
 async def trigger_batch_replan(
     body: BatchReplanRequest,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_idempotency),
     db: Session = Depends(get_db),
 ):
     """
@@ -165,7 +169,7 @@ async def trigger_batch_replan(
 async def trigger_replan(
     event_code: str,
     body: TriggerReplanRequest,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_idempotency),
     db: Session = Depends(get_db),
 ):
     """
@@ -211,7 +215,7 @@ async def trigger_replan(
 async def update_exception(
     event_code: str,
     body: UpdateExceptionRequest,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
     db: Session = Depends(get_db),
 ):
     """
@@ -231,7 +235,7 @@ async def update_exception(
 @router.put("/{event_code}/resolve")
 async def resolve_exception(
     event_code: str,
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
     db: Session = Depends(get_db),
 ):
     """

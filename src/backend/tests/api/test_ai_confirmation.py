@@ -200,7 +200,7 @@ class TestConfirmSuggestion:
 
         response = client.post(
             f"/api/ai/suggestions/{suggestion_id}/confirm",
-            headers=auth_headers,
+            headers={**auth_headers, "X-Idempotency-Key": "ai-confirm-success"},
         )
         assert response.status_code == 200
         confirm_body = response.json()
@@ -234,10 +234,13 @@ class TestConfirmSuggestion:
         _build_topology(db_session)
         _, suggestion_id = _parse_draft(client, auth_headers)
 
-        r1 = client.post(f"/api/ai/suggestions/{suggestion_id}/confirm", headers=auth_headers)
+        r1 = client.post(f"/api/ai/suggestions/{suggestion_id}/confirm", headers={**auth_headers, "X-Idempotency-Key": "r2-02a-ai-key"})
         assert r1.json()["code"] == 0
 
-        r2 = client.post(f"/api/ai/suggestions/{suggestion_id}/confirm", headers=auth_headers)
+        r2 = client.post(
+            f"/api/ai/suggestions/{suggestion_id}/confirm",
+            headers={**auth_headers, "X-Idempotency-Key": "ai-confirm-second"},
+        )
         assert r2.status_code == 409
         assert r2.json()["code"] == 40901
         assert r2.json()["data"] is None
@@ -246,7 +249,8 @@ class TestConfirmSuggestion:
     def test_confirm_not_found(self, client, auth_headers):
         """建议不存在 → 40401"""
         response = client.post(
-            "/api/ai/suggestions/99999/confirm", headers=auth_headers
+            "/api/ai/suggestions/99999/confirm",
+            headers={**auth_headers, "X-Idempotency-Key": "ai-confirm-not-found"},
         )
         assert response.status_code == 200
         assert response.json()["code"] == 40401
@@ -277,7 +281,7 @@ class TestRejectSuggestion:
         response = client.post(
             f"/api/ai/suggestions/{suggestion_id}/reject",
             json={"note": "权重不合理"},
-            headers=auth_headers,
+            headers={**auth_headers, "X-Idempotency-Key": "ai-reject-success"},
         )
         assert response.status_code == 200
         reject_body = response.json()
@@ -305,10 +309,13 @@ class TestRejectSuggestion:
         _build_topology(db_session)
         _, suggestion_id = _parse_draft(client, auth_headers)
 
-        r1 = client.post(f"/api/ai/suggestions/{suggestion_id}/reject", headers=auth_headers)
+        r1 = client.post(f"/api/ai/suggestions/{suggestion_id}/reject", headers={**auth_headers, "X-Idempotency-Key": "r2-02a-ai-key"})
         assert r1.json()["code"] == 0
 
-        r2 = client.post(f"/api/ai/suggestions/{suggestion_id}/reject", headers=auth_headers)
+        r2 = client.post(
+            f"/api/ai/suggestions/{suggestion_id}/reject",
+            headers={**auth_headers, "X-Idempotency-Key": "ai-reject-second"},
+        )
         assert r2.json()["code"] != 0
 
 
@@ -365,7 +372,8 @@ class TestInfoLevelSuggestion:
         )
 
         response = client.post(
-            f"/api/ai/suggestions/{suggestion.id}/confirm", headers=auth_headers
+            f"/api/ai/suggestions/{suggestion.id}/confirm",
+            headers={**auth_headers, "X-Idempotency-Key": "ai-info-confirm"},
         )
         assert response.status_code == 200
         body = response.json()

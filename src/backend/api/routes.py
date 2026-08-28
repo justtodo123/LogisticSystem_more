@@ -14,7 +14,7 @@ from schemas.route import (  # noqa: F401
 from services.route_service import RouteService
 from services.log_service import LogService, build_route_plan_event_data
 from config.database import get_db
-from api.dependencies import get_current_user, require_dispatcher
+from api.dependencies import get_current_user, require_dispatcher_with_optional_idempotency
 from models.user import User
 
 
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/routes", tags=["路径规划"])
 async def plan_routes(
     request: RoutePlanRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
 ):
     """
     手动触发路径规划（F006）

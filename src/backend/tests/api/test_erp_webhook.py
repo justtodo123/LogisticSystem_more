@@ -16,6 +16,26 @@ def dispatcher_token():
     return create_jwt_token("dispatcher", "dispatcher")
 
 
+@pytest.fixture(autouse=True)
+def erp_users(db_session, test_users):
+    """Seed database-backed JWT principals used by ERP authentication tests."""
+    from models.user import User
+    from services.auth_service import get_password_hash
+
+    for username, role in (("viewer", "viewer"), ("admin", "admin")):
+        db_session.add(
+            User(
+                username=username,
+                password_hash=get_password_hash("123456"),
+                role=role,
+                display_name=username,
+                is_active=True,
+            )
+        )
+    db_session.commit()
+    return test_users
+
+
 def _payload():
     return {
         "erp_order_no": "ERP-20260810-001",

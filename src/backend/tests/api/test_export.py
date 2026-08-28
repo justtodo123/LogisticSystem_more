@@ -96,6 +96,65 @@ class TestExportOrders:
         assert rows[0][0] == "订单编号"  # 表头
         assert len(rows) >= 2            # 表头 + 至少一行数据
 
+
+    @pytest.mark.parametrize("redis_mode", ["disabled", "write-error"])
+    def test_keyed_export_replays_from_database_when_redis_unavailable(
+        self,
+        client,
+        auth_headers,
+        test_orders,
+        monkeypatch,
+        redis_mode,
+    ):
+        """Redis 关闭或写入失败时，数据库仍保真重放导出响应。"""
+        from services import export_service
+        from utils import cache
+
+        calls = 0
+        original = export_service.export_orders
+
+        def counted(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return original(*args, **kwargs)
+
+        if redis_mode == "disabled":
+            monkeypatch.setattr(cache, "resolve_redis", lambda: None)
+        else:
+            class FailingRedis:
+                async def setex(self, *_args, **_kwargs):
+                    raise RuntimeError("redis unavailable")
+
+            monkeypatch.setattr(cache, "resolve_redis", lambda: FailingRedis())
+
+        monkeypatch.setattr(export_service, "export_orders", counted)
+        headers = {
+            **auth_headers,
+            "X-Idempotency-Key": f"export-redis-{redis_mode}",
+        }
+
+        first = client.post(
+            "/api/export/orders?format=xlsx",
+            headers=headers,
+        )
+        replay = client.post(
+            "/api/export/orders?format=xlsx",
+            headers=headers,
+        )
+
+        assert first.status_code == 200
+        assert replay.status_code == first.status_code
+        assert replay.content == first.content
+        assert replay.headers["content-type"] == first.headers["content-type"]
+        assert (
+            replay.headers["content-disposition"]
+            == first.headers["content-disposition"]
+        )
+        assert calls == 1
+        assert not any(
+            key.startswith("idem:") for key in cache.memory_cache._store
+        )
+
     def test_export_orders_requires_dispatcher(self, client, manager_headers):
         """非调度角色（manager）导出被拒绝"""
         response = client.post("/api/export/orders", headers=manager_headers)

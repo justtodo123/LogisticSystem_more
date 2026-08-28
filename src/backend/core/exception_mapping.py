@@ -13,7 +13,13 @@ from core.errors import sanitize_meta
 
 
 _SAFE_RESPONSE_HEADERS = frozenset(
-    {"www-authenticate", "retry-after", "x-request-id", "x-trace-id"}
+    {
+        "content-disposition",
+        "www-authenticate",
+        "retry-after",
+        "x-request-id",
+        "x-trace-id",
+    }
 )
 _MAX_VALIDATION_ERRORS = 20
 _MAX_VALIDATION_TEXT = 256
