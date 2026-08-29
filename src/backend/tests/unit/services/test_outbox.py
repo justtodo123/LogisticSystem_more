@@ -131,3 +131,47 @@ def test_duplicate_dedup_key_is_rejected_at_database_boundary(db_session):
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
+
+
+def test_worker_sender_can_use_dispatcher_with_worker_session(db_session):
+    """worker sender 接收独立 Session，不复用请求 Session。"""
+    from sqlalchemy.orm import sessionmaker
+
+    from services.notification.dispatcher import NotificationDispatcher
+    from services.outbox_service import complete_notification_step, deliver_outbox_batch
+
+    task = ReplanTask(
+        idempotency_key="step5-worker-session",
+        current_step="NOTIFICATION",
+        status="RUNNING",
+    )
+    db_session.add(task)
+    db_session.commit()
+    complete_notification_step(
+        db_session,
+        task,
+        event_type="replan.completed",
+        payload={"schedule_code": "GS_STEP5_002"},
+    )
+
+    request_session = db_session
+    worker_sessions = []
+
+    def worker_session_factory():
+        session = sessionmaker(bind=request_session.get_bind())()
+        worker_sessions.append(session)
+        return session
+
+    dispatcher_sessions = []
+
+    def sender(_event):
+        worker_session = worker_sessions[-1]
+        dispatcher = NotificationDispatcher(db=worker_session)
+        dispatcher_sessions.append(dispatcher._db)
+        return True
+
+    result = deliver_outbox_batch(worker_session_factory, sender)
+
+    assert result["delivered"] == 1
+    assert worker_sessions[0] is not request_session
+    assert dispatcher_sessions == [worker_sessions[0]]

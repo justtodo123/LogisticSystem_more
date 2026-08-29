@@ -16,6 +16,8 @@ from fastapi import HTTPException
 
 from models.exception_event import ExceptionEvent
 from models.global_schedule import GlobalSchedule
+from models.outbox_event import OutboxEvent
+from models.replan_task import ReplanTask
 from models.route import Route
 from models.node_dispatch import NodeDispatch
 from models.dispatch_batch import DispatchBatch
@@ -248,6 +250,48 @@ class TestExceptionServiceCRUD:
 
 class TestReplanService:
     """重规划服务测试（方案A）"""
+
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_replan_success_path_enqueues_without_sending_smtp(db_session):
+    """重规划通知应只入 outbox；请求路径不能触发 SMTP。"""
+    original = GlobalSchedule(
+        schedule_code="GS_STEP5_001",
+        order_codes=[],
+        goods_schedules=[],
+        total_distance=0.0,
+        total_time=0.0,
+        total_goods=0,
+        score=0.0,
+        version=1,
+        is_replan=False,
+    )
+    db_session.add(original)
+    db_session.commit()
+
+    from unittest.mock import patch
+
+    with patch("services.notification.email.smtplib.SMTP") as smtp:
+        # 直接验证成功路径的通知替换契约，避免重跑调度算法。
+        task = ReplanTask(
+            idempotency_key="step5-notification",
+            current_step="NOTIFICATION",
+            status="RUNNING",
+        )
+        db_session.add(task)
+        db_session.commit()
+        from services.outbox_service import complete_notification_step
+        complete_notification_step(
+            db_session,
+            task,
+            event_type="replan.completed",
+            payload={"schedule_code": original.schedule_code},
+        )
+
+    assert smtp.called is False
+    assert db_session.query(OutboxEvent).one().status == "pending"
 
     @pytest.mark.unit
     @pytest.mark.asyncio

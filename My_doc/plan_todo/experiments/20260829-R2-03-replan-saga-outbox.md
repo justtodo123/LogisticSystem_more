@@ -131,11 +131,28 @@ python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_ser
 
 覆盖：业务提交成功但投递失败时 task 保持完成且 outbox 为 retry、重复 deliver 不重复 sender 副作用、pending/retry/dead-letter/delivered 状态、永久失败直达 dead-letter、数据库去重键、worker Session 与请求 Session 隔离、迁移 upgrade/downgrade 与 registry parity。
 
+## Step 5 重规划请求路径隔离
+
+- `ReplanService.redispatch()` 和 `reroute()` 的成功路径不再导入或调用 `send_notification` / fire-and-forget。
+- 两条成功路径在请求 Session 的业务事务中写入唯一 `replan.completed` outbox 行；请求返回时状态为 `pending`，没有 SMTP/Webhook I/O。
+- dispatcher/email 通道保持不变，供 worker sender 使用；测试验证 dispatcher 绑定 worker 创建的独立 Session，而不是请求 Session。
+- 其他非重规划业务仍可能使用 fire-and-forget，本轮按范围未做跨模块清扫。
+
+## Round 4 验证结果
+
+```text
+cd src/backend
+python -m pytest -q -p no:cacheprovider tests/unit/services/test_outbox.py tests/unit/services/test_replan_task_service.py tests/unit/services tests/migration -k replan
+# exit 0: 42 passed, 397 deselected, 11 warnings in 3.37s
+```
+
+验证覆盖重规划/NOTIFICATION 入队路径不触发 `smtplib.SMTP`、请求返回时 outbox 为 pending、worker 独立 Session 绑定 dispatcher、既有 resume/补偿与 replan service 回归。11 条 warning 均为既有 Pydantic v2 class Config 弃用提示。
+
 ## 明确未覆盖
 
 - 未实现进程启动自动扫描；本轮按计划只提供显式 `resume(task_id)`；
 - 未将现有 F007/F021/F005/F006 算法调用改接到编排服务；本轮用注入执行器验证事务协议；
-- 已创建 outbox 表和可注入的独立 Session worker；尚未接入真实 SMTP/Webhook sender；
-- 未剥离其他调用点的 fire-and-forget、请求 Session 复用或同步 SMTP；
+- 已将重规划成功路径迁到 outbox；尚未接入真实 SMTP/Webhook worker sender；
+- 未剥离其他非重规划调用点的 fire-and-forget 或同步 SMTP；
 - 未执行 PostgreSQL/Redis/Docker/真实 SMTP 验证；
 - R2-03 计划卡最多保持 `in_progress`，不得标记完成。

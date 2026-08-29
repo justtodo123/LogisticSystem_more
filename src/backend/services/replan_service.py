@@ -24,6 +24,7 @@ from models.node import Node
 from utils.response import success_response, error_response
 from services.state_machine import reset_goods_for_replan, mark_old_entities_exception, update_batch_status
 from services.diff_service import build_diff_report
+from services.outbox_service import enqueue_outbox
 
 
 class ReplanService:
@@ -316,21 +317,20 @@ class ReplanService:
                 db, original, new_schedule, strategy=strategy
             ) if new_schedule else None
 
-            # T3-2：重规划完成后发送通知（失败不影响主流程）
-            try:
-                from services.notification import (
-                    SCENARIO_REPLAN_COMPLETED,
-                    send_notification,
-                )
-                await send_notification(db, SCENARIO_REPLAN_COMPLETED, {
+            # 重规划通知只在请求事务中入队；外部 I/O 由 outbox worker 执行。
+            enqueue_outbox(
+                db,
+                dedup_key=f"replan:{new_schedule_code}:completed",
+                event_type="replan.completed",
+                payload={
                     "original_schedule_code": original_schedule_code,
                     "new_schedule_code": new_schedule_code,
                     "strategy": strategy,
                     "replan_reason": replan_reason,
                     "diff_summary": diff_summary,
-                })
-            except Exception:
-                pass  # 通知失败不影响主业务流程
+                },
+            )
+            db.commit()
 
             return success_response(data={
                 "schedule_code": new_schedule_code,
@@ -527,21 +527,20 @@ class ReplanService:
 
             new_route_code = new_route_codes[0] if new_route_codes else None
 
-            # T3-2：重路径规划完成后发送通知（失败不影响主流程）
-            try:
-                from services.notification import (
-                    SCENARIO_REPLAN_COMPLETED,
-                    send_notification,
-                )
-                await send_notification(db, SCENARIO_REPLAN_COMPLETED, {
+            # 重路径规划通知只入队，不在请求路径调用同步 SMTP/Webhook。
+            enqueue_outbox(
+                db,
+                dedup_key=f"replan-route:{new_route_code}:completed",
+                event_type="replan.completed",
+                payload={
                     "original_schedule_code": batch.batch_code,
                     "new_schedule_code": new_route_code,
                     "strategy": "reroute",
                     "replan_reason": replan_reason,
                     "diff_summary": None,
-                })
-            except Exception:
-                pass  # 通知失败不影响主业务流程
+                },
+            )
+            db.commit()
 
             return success_response(data={
                 "batch_code": batch.batch_code,
