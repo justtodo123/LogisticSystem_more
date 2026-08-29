@@ -17,6 +17,7 @@ from .node import Node
 from .node_dispatch import NodeDispatch
 from .notification_config import NotificationConfig
 from .order import Order
+from .outbox_event import OutboxEvent
 from .package import Package
 from .route import Route
 from .replan_task import ReplanTask
@@ -32,6 +33,7 @@ MODEL_REGISTRY = (
     StorageCenter,
     SortingCenter,
     Order,
+    OutboxEvent,
     Goods,
     Package,
     Vehicle,

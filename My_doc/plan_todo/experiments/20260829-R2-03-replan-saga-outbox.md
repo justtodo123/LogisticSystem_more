@@ -105,11 +105,37 @@ python -m pytest -q -p no:cacheprovider tests/unit/models/test_replan_task.py te
 
 故障注入覆盖：commit 前业务/task 同时回滚、F021 commit 后转人工且禁止 resume、F005/F006 不可逆状态转人工、F007/F005/F006 可补偿状态调用补偿器、重复 start 不新增任务、F007 成功后从 F021 继续。
 
+## Step 4 transactional outbox
+
+- 迁移 `r2_03_outbox_events` 从 `r2_03_replan_tasks` 派生，保持单 head。
+- `enqueue_outbox()` 只在调用方事务中 flush，不 commit、不调用 SMTP/Webhook；唯一 `dedup_key` 防止同一业务事件生成多行。
+- `resume()` 的 `NOTIFICATION` 步调用 `complete_notification_step()`，任务完成状态与 `replan.completed` outbox 事件同行提交。
+- `deliver_outbox_batch(session_factory, sender)` 每批创建独立 Session；查询事务在外部 I/O 前结束，投递结果再用短事务写回。
+- 投递成功标记 `delivered`，后续扫描不再调用 sender；暂时失败进入 `retry` 并设置 `available_at`，达到上限或 `NonRetryableOutboxError` 进入 `dead-letter`。
+- 本轮 sender 是可注入投递边界，没有从请求事务调用现有同步 SMTP。
+
+## Round 3 验证结果
+
+```text
+cd src/backend
+python -m alembic -c alembic.ini heads
+# exit 0: r2_03_outbox_events (head)
+
+python -m pytest -q -p no:cacheprovider tests/unit/services/test_outbox.py
+# 首次 exit 1: 5 passed, 1 failed（测试复用 worker Session 导致 request Session 被关闭）
+# 修复为外部 I/O 前结束查询事务后 exit 0: 6 passed in 0.34s
+
+python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py tests/unit/services/test_outbox.py tests/migration tests/unit/core/test_model_registry.py
+# exit 0: 53 passed in 13.81s
+```
+
+覆盖：业务提交成功但投递失败时 task 保持完成且 outbox 为 retry、重复 deliver 不重复 sender 副作用、pending/retry/dead-letter/delivered 状态、永久失败直达 dead-letter、数据库去重键、worker Session 与请求 Session 隔离、迁移 upgrade/downgrade 与 registry parity。
+
 ## 明确未覆盖
 
 - 未实现进程启动自动扫描；本轮按计划只提供显式 `resume(task_id)`；
 - 未将现有 F007/F021/F005/F006 算法调用改接到编排服务；本轮用注入执行器验证事务协议；
-- 未创建 outbox 表或 worker；
-- 未剥离 fire-and-forget、请求 Session 复用或同步 SMTP；
+- 已创建 outbox 表和可注入的独立 Session worker；尚未接入真实 SMTP/Webhook sender；
+- 未剥离其他调用点的 fire-and-forget、请求 Session 复用或同步 SMTP；
 - 未执行 PostgreSQL/Redis/Docker/真实 SMTP 验证；
 - R2-03 计划卡最多保持 `in_progress`，不得标记完成。

@@ -15,6 +15,7 @@ from .registry import (
     NodeDispatch,
     NotificationConfig,
     Order,
+    OutboxEvent,
     Package,
     ReplanTask,
     Route,
@@ -48,6 +49,7 @@ __all__ = [
     "ExceptionEvent",
     "IdempotencyRecord",
     "NotificationConfig",
+    "OutboxEvent",
     "AiSuggestion",
     "CodeRange",
 ]

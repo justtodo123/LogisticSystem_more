@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from core.error_codes import CODE_STATE_CONFLICT
 from core.errors import DomainError
 from models.replan_task import ReplanTask
+from services.outbox_service import complete_notification_step
 
 
 _READY_STATUSES_BY_STEP = {
@@ -196,6 +197,14 @@ def resume(
     try:
         outcome = executor(db, task) or StepResult()
         next_step = outcome.next_step or _STEP_ORDER[step]
+        if step == "NOTIFICATION":
+            complete_notification_step(
+                db,
+                task,
+                event_type="replan.completed",
+                payload={"task_id": task.id, "idempotency_key": task.idempotency_key},
+            )
+            return task
         task.current_step = next_step
         task.status = "COMPLETED" if next_step == "COMPLETED" else "RUNNING"
         task.retry_count = 0
