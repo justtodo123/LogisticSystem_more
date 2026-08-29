@@ -148,6 +148,27 @@ python -m pytest -q -p no:cacheprovider tests/unit/services/test_outbox.py tests
 
 验证覆盖重规划/NOTIFICATION 入队路径不触发 `smtplib.SMTP`、请求返回时 outbox 为 pending、worker 独立 Session 绑定 dispatcher、既有 resume/补偿与 replan service 回归。11 条 warning 均为既有 Pydantic v2 class Config 弃用提示。
 
+## Step 6 真实主链短事务
+
+- `redispatch()` 非 draft 路径通过 `start(idempotency_key)` 创建/复用任务，再由 `resume_async()` 按持久化 `current_step` 推进 F007/F021/F005/F006/NOTIFICATION。
+- `ScheduleService.create_global_schedule()`、`confirm_schedule()`、`DispatchService.create_node_dispatch()`、`RouteService.create_route_planning()` 在 Saga 调用中统一传 `commit=False`；各步骤只 flush，task 步骤与业务数据由编排层一次 commit 同行落库。
+- F007 执行器创建 draft 并挂版本链；F021 执行确认/打包并标记旧实体；F005 写批次/调度；F006 写 route；NOTIFICATION 将 task 完成与 outbox 同行提交。
+- 重复 `idempotency_key` 从持久化步骤恢复；已完成任务直接重放结果，不重复创建方案、批次、路线或 outbox。
+- 补偿边界：F007 可删除仍为 draft 的方案；F005 未发车批次标失败；F006 仅在批次未执行时删除路线；F021 commit 后故障进入 `manual_required`。
+
+## Round 5 验证结果
+
+```text
+cd src/backend
+python -m alembic -c alembic.ini heads
+# exit 0: r2_03_outbox_events (head)
+
+python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py tests/unit/services/test_outbox.py tests/unit/services/test_exception_service.py tests/migration tests/unit/core/test_model_registry.py
+# exit 0: 90 passed, 3 warnings in 22.92s
+```
+
+新增真实链路测试覆盖：相同 key 重放无重复业务行、F007 下层真实写入后 commit 前异常整体 rollback、F021 已提交后注入异常进入 `manual_required`。通知失败时 outbox 保留由既有 `test_outbox.py` 回归覆盖。3 条 warning 是既有 Pydantic v2 class Config 弃用提示。
+
 ## 明确未覆盖
 
 - 未实现进程启动自动扫描；本轮按计划只提供显式 `resume(task_id)`；

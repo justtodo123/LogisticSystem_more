@@ -228,3 +228,88 @@ def resume(
     except Exception:
         db.rollback()
         raise
+
+
+async def resume_async(
+    db: Session,
+    task_id: int,
+    *,
+    executors: dict[str, Callable[[Session, ReplanTask], object]],
+    compensators: dict[str, Compensator] | None = None,
+    after_commit_hook: Callable[[str, ReplanTask], None] | None = None,
+    notification_payload: dict[str, object] | None = None,
+) -> ReplanTask:
+    """异步服务步骤版本的 resume；事务与补偿语义和 resume 一致。"""
+    task = db.get(ReplanTask, task_id)
+    if task is None:
+        raise DomainError(CODE_STATE_CONFLICT, message="重规划任务不存在")
+    if task.manual_required:
+        raise DomainError(
+            CODE_STATE_CONFLICT,
+            message="重规划任务需要人工处理，不能自动继续",
+        )
+    if task.current_step == "COMPLETED":
+        return task
+    if task.status not in _READY_STATUSES_BY_STEP.get(task.current_step, frozenset()):
+        raise DomainError(CODE_STATE_CONFLICT)
+
+    step = task.current_step
+    try:
+        executor = executors[step]
+    except KeyError as exc:
+        raise DomainError(CODE_STATE_CONFLICT, message="重规划步骤执行器未配置") from exc
+
+    try:
+        outcome = await executor(db, task)
+        outcome = outcome or StepResult()
+        next_step = outcome.next_step or _STEP_ORDER[step]
+        if step == "NOTIFICATION":
+            complete_notification_step(
+                db,
+                task,
+                event_type="replan.completed",
+                payload=notification_payload or {
+                    "task_id": task.id,
+                    "idempotency_key": task.idempotency_key,
+                },
+            )
+            if after_commit_hook is not None:
+                after_commit_hook(step, task)
+            return task
+        task.current_step = next_step
+        task.status = "RUNNING"
+        task.retry_count = 0
+        task.last_error = None
+        task.version += 1
+        db.commit()
+        if after_commit_hook is not None:
+            try:
+                after_commit_hook(step, task)
+            except Exception as exc:
+                if step == "F021":
+                    return _mark_manual_required(
+                        db,
+                        task_id,
+                        f"F021 提交后失败：{exc}",
+                    )
+                raise StepExecutionError(
+                    str(exc),
+                    committed=True,
+                ) from exc
+        return task
+    except StepExecutionError as exc:
+        db.rollback()
+        if not exc.committed:
+            raise
+        if _requires_manual(step, exc.resource_state):
+            return _mark_manual_required(db, task_id, f"{step} 提交后失败：{exc}")
+        return _compensate_after_commit(
+            db,
+            task_id,
+            step,
+            exc,
+            compensators or {},
+        )
+    except Exception:
+        db.rollback()
+        raise

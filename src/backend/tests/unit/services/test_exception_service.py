@@ -253,45 +253,45 @@ class TestReplanService:
 
 
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_replan_success_path_enqueues_without_sending_smtp(db_session):
-    """重规划通知应只入 outbox；请求路径不能触发 SMTP。"""
-    original = GlobalSchedule(
-        schedule_code="GS_STEP5_001",
-        order_codes=[],
-        goods_schedules=[],
-        total_distance=0.0,
-        total_time=0.0,
-        total_goods=0,
-        score=0.0,
-        version=1,
-        is_replan=False,
-    )
-    db_session.add(original)
-    db_session.commit()
-
-    from unittest.mock import patch
-
-    with patch("services.notification.email.smtplib.SMTP") as smtp:
-        # 直接验证成功路径的通知替换契约，避免重跑调度算法。
-        task = ReplanTask(
-            idempotency_key="step5-notification",
-            current_step="NOTIFICATION",
-            status="RUNNING",
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_replan_success_path_enqueues_without_sending_smtp(self, db_session):
+        """重规划通知应只入 outbox；请求路径不能触发 SMTP。"""
+        original = GlobalSchedule(
+            schedule_code="GS_STEP5_001",
+            order_codes=[],
+            goods_schedules=[],
+            total_distance=0.0,
+            total_time=0.0,
+            total_goods=0,
+            score=0.0,
+            version=1,
+            is_replan=False,
         )
-        db_session.add(task)
+        db_session.add(original)
         db_session.commit()
-        from services.outbox_service import complete_notification_step
-        complete_notification_step(
-            db_session,
-            task,
-            event_type="replan.completed",
-            payload={"schedule_code": original.schedule_code},
-        )
 
-    assert smtp.called is False
-    assert db_session.query(OutboxEvent).one().status == "pending"
+        from unittest.mock import patch
+
+        with patch("services.notification.email.smtplib.SMTP") as smtp:
+            # 直接验证成功路径的通知替换契约，避免重跑调度算法。
+            task = ReplanTask(
+                idempotency_key="step5-notification",
+                current_step="NOTIFICATION",
+                status="RUNNING",
+            )
+            db_session.add(task)
+            db_session.commit()
+            from services.outbox_service import complete_notification_step
+            complete_notification_step(
+                db_session,
+                task,
+                event_type="replan.completed",
+                payload={"schedule_code": original.schedule_code},
+            )
+
+        assert smtp.called is False
+        assert db_session.query(OutboxEvent).one().status == "pending"
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -534,6 +534,111 @@ async def test_replan_success_path_enqueues_without_sending_smtp(db_session):
         )
         assert result["code"] == 40001
         assert "调度明细不存在" in result["message"]
+
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_same_idempotency_key_replays_without_duplicates(
+        self, db_session, test_nodes, test_orders, test_goods, test_vehicles, test_drivers
+    ):
+        original = GlobalSchedule(
+            schedule_code="GS_SAGA_IDEM_001",
+            order_codes=list(test_orders.keys())[:3],
+            goods_schedules=[], total_distance=100, total_time=5,
+            total_goods=3, score=0.5, algorithm_type="traditional",
+            version=1, is_replan=False,
+        )
+        db_session.add(original)
+        for code in original.order_codes:
+            test_orders[code].status = "in_transit"
+        db_session.commit()
+
+        first = await ReplanService.redispatch(
+            db_session, original.schedule_code, "idem replan",
+            idempotency_key="real-saga-idem",
+        )
+        counts = tuple(db_session.query(model).count() for model in (GlobalSchedule, DispatchBatch, Route, OutboxEvent))
+        second = await ReplanService.redispatch(
+            db_session, original.schedule_code, "idem replan",
+            idempotency_key="real-saga-idem",
+        )
+
+        assert first["code"] == second["code"] == 0
+        assert first["data"]["task_id"] == second["data"]["task_id"]
+        assert counts == tuple(db_session.query(model).count() for model in (GlobalSchedule, DispatchBatch, Route, OutboxEvent))
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_f007_precommit_failure_rolls_back_real_write(
+        self, db_session, test_orders
+    ):
+        original = GlobalSchedule(
+            schedule_code="GS_SAGA_ROLLBACK_001",
+            order_codes=list(test_orders.keys())[:1],
+            goods_schedules=[], total_distance=1, total_time=1,
+            total_goods=1, score=1, algorithm_type="traditional",
+            version=1, is_replan=False,
+        )
+        db_session.add(original)
+        test_orders[original.order_codes[0]].status = "in_transit"
+        db_session.commit()
+
+        from services.schedule_service import ScheduleService
+        original_executor = ScheduleService.create_global_schedule
+
+        async def fail_after_real_write(*args, **kwargs):
+            result = await original_executor(*args, **kwargs)
+            assert result["code"] == 0
+            raise RuntimeError("injected before F007 commit")
+
+        with patch.object(ScheduleService, "create_global_schedule", new=fail_after_real_write):
+            result = await ReplanService.redispatch(
+                db_session, original.schedule_code, "rollback replan",
+                idempotency_key="real-saga-rollback",
+            )
+
+        assert result["code"] != 0
+        assert db_session.query(GlobalSchedule).filter(
+            GlobalSchedule.parent_id == original.id
+        ).count() == 0
+        task = db_session.query(ReplanTask).filter_by(
+            idempotency_key="real-saga-rollback"
+        ).one()
+        assert task.current_step == "F007"
+        assert task.manual_required is False
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_f021_postcommit_failure_requires_manual(
+        self, db_session, test_orders, test_goods
+    ):
+        original = GlobalSchedule(
+            schedule_code="GS_SAGA_MANUAL_001",
+            order_codes=list(test_orders.keys())[:1],
+            goods_schedules=[], total_distance=1, total_time=1,
+            total_goods=1, score=1, algorithm_type="traditional",
+            version=1, is_replan=False,
+        )
+        db_session.add(original)
+        test_orders[original.order_codes[0]].status = "in_transit"
+        db_session.commit()
+
+        def after_commit(step, _task):
+            if step == "F021":
+                raise RuntimeError("injected after F021 commit")
+
+        result = await ReplanService.redispatch(
+            db_session, original.schedule_code, "manual replan",
+            idempotency_key="real-saga-manual",
+            _after_commit_hook=after_commit,
+        )
+
+        assert result["code"] == 40901, result
+        task = db_session.query(ReplanTask).filter_by(
+            idempotency_key="real-saga-manual"
+        ).one()
+        assert task.current_step == "F005"
+        assert task.manual_required is True
 
 
 class TestExceptionTriggerReplan:

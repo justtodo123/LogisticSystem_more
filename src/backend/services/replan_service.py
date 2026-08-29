@@ -24,6 +24,7 @@ from models.node import Node
 from utils.response import success_response, error_response
 from services.state_machine import reset_goods_for_replan, mark_old_entities_exception, update_batch_status
 from services.diff_service import build_diff_report
+from services.replan_task_service import StepExecutionError, resume_async, start
 from services.outbox_service import enqueue_outbox
 
 
@@ -108,6 +109,221 @@ class ReplanService:
         return strategy if strategy in ("partial", "full") else "full"
 
     @staticmethod
+    async def _redispatch_saga(
+        db: Session,
+        original: GlobalSchedule,
+        replan_reason: str,
+        event: Optional[ExceptionEvent],
+        custom_weights: Optional[Dict[str, Any]],
+        strategy: str,
+        idempotency_key: Optional[str],
+        after_commit_hook=None,
+    ) -> Dict[str, Any]:
+        """用持久化 current_step 驱动真实 F007-F006 重规划链路。"""
+        from services.dispatch_service import DispatchService
+        from services.route_service import RouteService
+        from services.schedule_service import ScheduleService
+
+        all_order_codes = original.order_codes
+        if isinstance(all_order_codes, str):
+            import json
+            all_order_codes = json.loads(all_order_codes)
+        affected_order_codes = (
+            ReplanService._resolve_affected_order_codes(db, event)
+            if event is not None
+            else []
+        )
+        strategy = ReplanService._decide_strategy(
+            strategy, affected_order_codes, all_order_codes or []
+        )
+        order_codes = (
+            affected_order_codes
+            if strategy == "partial" and affected_order_codes
+            else all_order_codes
+        )
+        excluded_nodes = []
+        excluded_vehicles = []
+        if event and event.target_type == "node" and event.target_code:
+            excluded_nodes.append(event.target_code)
+        if event and event.target_type == "vehicle" and event.target_code:
+            excluded_vehicles.append(event.target_code)
+
+        key = idempotency_key or (
+            f"redispatch:{original.schedule_code}:"
+            f"{event.event_code if event else replan_reason}:{strategy}"
+        )
+        task = start(db, key)
+        state: Dict[str, Any] = {}
+
+        if task.current_step != "F007":
+            schedule = (
+                db.query(GlobalSchedule)
+                .filter(
+                    GlobalSchedule.parent_id == original.id,
+                    GlobalSchedule.is_replan.is_(True),
+                )
+                .order_by(GlobalSchedule.id.desc())
+                .first()
+            )
+            if schedule:
+                state["schedule_code"] = schedule.schedule_code
+        if task.current_step in {"F006", "NOTIFICATION", "COMPLETED"}:
+            batch = (
+                db.query(DispatchBatch)
+                .join(GlobalSchedule, DispatchBatch.global_schedule_id == GlobalSchedule.id)
+                .filter(GlobalSchedule.parent_id == original.id)
+                .order_by(DispatchBatch.id.desc())
+                .first()
+            )
+            if batch:
+                state["batch_code"] = batch.batch_code
+
+        async def f007(step_db: Session, _task):
+            if event is None:
+                reset_goods_for_replan(step_db, order_codes)
+            result = await ScheduleService.create_global_schedule(
+                order_codes=order_codes,
+                algorithm=original.algorithm_type or "traditional",
+                db=step_db,
+                excluded_nodes=excluded_nodes or None,
+                is_replan=True,
+                custom_weights=custom_weights,
+                commit=False,
+            )
+            if result.get("code") != 0:
+                raise StepExecutionError(result.get("message", "F007 failed"))
+            schedule_code = result["data"]["schedule_code"]
+            schedule = step_db.query(GlobalSchedule).filter(
+                GlobalSchedule.schedule_code == schedule_code
+            ).first()
+            schedule.version = original.version
+            schedule.parent_id = original.id
+            schedule.replan_reason = replan_reason
+            schedule.is_replan = True
+            state["schedule_code"] = schedule_code
+
+        async def f021(step_db: Session, _task):
+            result = await ScheduleService.confirm_schedule(
+                schedule_code=state["schedule_code"], db=step_db, commit=False
+            )
+            if result.get("code") != 0:
+                raise StepExecutionError(result.get("message", "F021 failed"))
+            mark_old_entities_exception(step_db, original.id)
+
+        async def f005(step_db: Session, _task):
+            result = await DispatchService.create_node_dispatch(
+                schedule_code=state["schedule_code"],
+                demo_mode=event is None,
+                db=step_db,
+                excluded_vehicles=excluded_vehicles or None,
+                is_replan=False,
+                custom_weights=custom_weights,
+                commit=False,
+            )
+            if result.get("code") != 0:
+                raise StepExecutionError(result.get("message", "F005 failed"))
+            state["batch_code"] = result["data"]["batch_code"]
+
+        async def f006(step_db: Session, _task):
+            result = await RouteService.create_route_planning(
+                batch_code=state["batch_code"],
+                dispatch_codes=None,
+                db=step_db,
+                custom_weights=custom_weights,
+                commit=False,
+            )
+            if result.get("code") != 0:
+                raise StepExecutionError(result.get("message", "F006 failed"))
+
+        async def notification(_db: Session, _task):
+            return None
+
+        def compensate_f007(step_db: Session, _task) -> None:
+            schedule = step_db.query(GlobalSchedule).filter(
+                GlobalSchedule.schedule_code == state.get("schedule_code"),
+                GlobalSchedule.status == "draft",
+            ).first()
+            if schedule:
+                step_db.delete(schedule)
+
+        def compensate_f005(step_db: Session, _task) -> None:
+            batch = step_db.query(DispatchBatch).filter(
+                DispatchBatch.batch_code == state.get("batch_code")
+            ).first()
+            if batch and batch.status != "in_transit":
+                batch.status = "failed"
+
+        def compensate_f006(step_db: Session, _task) -> None:
+            routes = (
+                step_db.query(Route)
+                .join(NodeDispatch, Route.dispatch_id == NodeDispatch.id)
+                .join(DispatchBatch, NodeDispatch.dispatch_batch_id == DispatchBatch.id)
+                .filter(DispatchBatch.batch_code == state.get("batch_code"))
+                .all()
+            )
+            batch = step_db.query(DispatchBatch).filter(
+                DispatchBatch.batch_code == state.get("batch_code")
+            ).first()
+            if batch and batch.status not in {"in_transit", "completed"}:
+                for route in routes:
+                    step_db.delete(route)
+
+        executors = {
+            "F007": f007,
+            "F021": f021,
+            "F005": f005,
+            "F006": f006,
+            "NOTIFICATION": notification,
+        }
+        compensators = {
+            "F007": compensate_f007,
+            "F005": compensate_f005,
+            "F006": compensate_f006,
+        }
+        notification_payload = {
+            "original_schedule_code": original.schedule_code,
+            "new_schedule_code": state.get("schedule_code"),
+            "strategy": strategy,
+            "replan_reason": replan_reason,
+        }
+        while task.current_step != "COMPLETED" and not task.manual_required:
+            task = await resume_async(
+                db,
+                task.id,
+                executors=executors,
+                compensators=compensators,
+                after_commit_hook=after_commit_hook,
+                notification_payload=notification_payload,
+            )
+            notification_payload["new_schedule_code"] = state.get("schedule_code")
+
+        if task.manual_required:
+            return error_response(
+                code=40901,
+                message="重规划已进入人工处理",
+                data={"task_id": task.id, "current_step": task.current_step},
+            )
+        schedule = db.query(GlobalSchedule).filter(
+            GlobalSchedule.schedule_code == state.get("schedule_code")
+        ).first()
+        diff_summary = (
+            build_diff_report(db, original, schedule, strategy=strategy)
+            if schedule else None
+        )
+        return success_response(data={
+            "task_id": task.id,
+            "schedule_code": state.get("schedule_code"),
+            "new_schedule_code": state.get("schedule_code"),
+            "batch_code": state.get("batch_code"),
+            "version": schedule.version if schedule else original.version + 1,
+            "is_replan": True,
+            "replan_reason": replan_reason,
+            "original_schedule_code": original.schedule_code,
+            "strategy": strategy,
+            "diff_summary": diff_summary,
+        })
+
+    @staticmethod
     async def redispatch(
         db: Session,
         original_schedule_code: str,
@@ -116,6 +332,8 @@ class ReplanService:
         custom_weights: Optional[Dict[str, Any]] = None,
         draft_only: bool = False,
         strategy: str = "full",
+        idempotency_key: Optional[str] = None,
+        _after_commit_hook=None,
     ) -> Dict[str, Any]:
         """
         重调度（F007→F021→F005→F006）
@@ -151,6 +369,18 @@ class ReplanService:
                 return error_response(
                     code=40401,
                     message=f"原调度方案不存在: {original_schedule_code}",
+                )
+
+            if not draft_only:
+                return await ReplanService._redispatch_saga(
+                    db=db,
+                    original=original,
+                    replan_reason=replan_reason,
+                    event=event,
+                    custom_weights=custom_weights,
+                    strategy=strategy,
+                    idempotency_key=idempotency_key,
+                    after_commit_hook=_after_commit_hook,
                 )
 
             # 2. 获取相关订单编号（T3-1：按策略过滤受影响订单）
@@ -218,6 +448,7 @@ class ReplanService:
                 excluded_nodes=excluded_nodes if excluded_nodes else None,
                 is_replan=True,  # redispatch 始终是重规划，需跳过 active 方案检查
                 custom_weights=custom_weights,  # AI驱动的自定义权重
+                commit=False,
             )
 
             # 检查预览调度是否成功
@@ -257,6 +488,7 @@ class ReplanService:
             confirm_result = await ScheduleService.confirm_schedule(
                 schedule_code=new_schedule_code,
                 db=db,
+                commit=False,
             )
             if confirm_result.get("code") != 0:
                 return confirm_result
@@ -288,6 +520,7 @@ class ReplanService:
                 excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
                 is_replan=False,  # 新方案包裹始终为 packed，不需要查询 exception 包裹
                 custom_weights=custom_weights,  # AI驱动的自定义权重
+                commit=False,
             )
 
             # 调度失败时上报错误（不再静默吞掉）
@@ -304,6 +537,7 @@ class ReplanService:
                 dispatch_codes=None,  # 批量规划该批次所有车辆
                 db=db,
                 custom_weights=custom_weights,
+                commit=False,
             )
             if route_result.get("code") != 0:
                 route_error = route_result.get("message", "未知错误") if isinstance(route_result, dict) else str(route_result)
