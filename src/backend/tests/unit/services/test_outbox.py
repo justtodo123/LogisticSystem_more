@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 import pytest
 from sqlalchemy.exc import IntegrityError
 
@@ -5,6 +7,7 @@ from models.outbox_event import OutboxEvent
 from models.replan_task import ReplanTask
 from services.outbox_service import (
     NonRetryableOutboxError,
+    claim_outbox_batch,
     complete_notification_step,
     deliver_outbox_batch,
     enqueue_outbox,
@@ -133,7 +136,84 @@ def test_duplicate_dedup_key_is_rejected_at_database_boundary(db_session):
     db_session.rollback()
 
 
-def test_worker_sender_can_use_dispatcher_with_worker_session(db_session):
+def test_two_sessions_only_one_can_claim_same_event(db_session):
+    from sqlalchemy.orm import sessionmaker
+
+    enqueue_outbox(db_session, dedup_key="claim-race", event_type="x", payload={})
+    db_session.commit()
+    make_session = sessionmaker(bind=db_session.get_bind())
+    first_session = make_session()
+    second_session = make_session()
+    try:
+        first = claim_outbox_batch(
+            first_session, worker_id="worker-a", limit=1, lease_seconds=60
+        )
+        second = claim_outbox_batch(
+            second_session, worker_id="worker-b", limit=1, lease_seconds=60
+        )
+
+        assert [event.dedup_key for event in first] == ["claim-race"]
+        assert second == []
+        claimed = db_session.query(OutboxEvent).one()
+        db_session.refresh(claimed)
+        assert claimed.status == "processing"
+        assert claimed.claimed_by == "worker-a"
+        assert claimed.claim_token
+    finally:
+        first_session.close()
+        second_session.close()
+
+
+def test_expired_processing_lease_is_reclaimed(db_session):
+    event = OutboxEvent(
+        dedup_key="expired-lease",
+        event_type="x",
+        payload={},
+        status="processing",
+        claim_token="old-token",
+        claimed_by="dead-worker",
+        claimed_at=datetime.utcnow() - timedelta(minutes=2),
+        lease_until=datetime.utcnow() - timedelta(minutes=1),
+    )
+    db_session.add(event)
+    db_session.commit()
+
+    reclaimed = claim_outbox_batch(
+        db_session, worker_id="replacement", limit=1, lease_seconds=60
+    )
+
+    assert [item.id for item in reclaimed] == [event.id]
+    assert reclaimed[0].status == "processing"
+    assert reclaimed[0].claimed_by == "replacement"
+    assert reclaimed[0].claim_token != "old-token"
+    assert reclaimed[0].lease_until > datetime.utcnow()
+
+
+def test_active_processing_lease_is_not_reclaimed(db_session):
+    event = OutboxEvent(
+        dedup_key="active-lease",
+        event_type="x",
+        payload={},
+        status="processing",
+        claim_token="active-token",
+        claimed_by="active-worker",
+        claimed_at=datetime.utcnow(),
+        lease_until=datetime.utcnow() + timedelta(minutes=1),
+    )
+    db_session.add(event)
+    db_session.commit()
+
+    claimed = claim_outbox_batch(
+        db_session, worker_id="other-worker", limit=1, lease_seconds=60
+    )
+
+    assert claimed == []
+    db_session.refresh(event)
+    assert event.claim_token == "active-token"
+    assert event.claimed_by == "active-worker"
+
+
+
     """worker sender 接收独立 Session，不复用请求 Session。"""
     from sqlalchemy.orm import sessionmaker
 

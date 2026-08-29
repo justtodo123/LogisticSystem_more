@@ -9,12 +9,13 @@ class OutboxEvent(Base):
     __tablename__ = "outbox_events"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'retry', 'delivered', 'dead-letter')",
+            "status IN ('pending', 'retry', 'processing', 'delivered', 'dead-letter')",
             name="ck_outbox_events_status",
         ),
         CheckConstraint("retry_count >= 0", name="ck_outbox_events_retry_count"),
         Index("uq_outbox_events_dedup_key", "dedup_key", unique=True),
         Index("ix_outbox_events_status_available_at", "status", "available_at"),
+        Index("ix_outbox_events_status_lease_until", "status", "lease_until"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -25,6 +26,10 @@ class OutboxEvent(Base):
     retry_count = Column(Integer, nullable=False, default=0, server_default="0")
     last_error = Column(Text, nullable=True)
     available_at = Column(DateTime, nullable=False, server_default=func.now())
+    claim_token = Column(String(64), nullable=True)
+    claimed_by = Column(String(128), nullable=True)
+    claimed_at = Column(DateTime, nullable=True)
+    lease_until = Column(DateTime, nullable=True)
     delivered_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(

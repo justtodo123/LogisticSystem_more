@@ -19,7 +19,7 @@ from utils.schema_management import (
 )
 
 
-HEAD_REVISION = "r2_03_replan_task_refs"
+HEAD_REVISION = "r2_03_outbox_claims"
 
 
 def _upgrade(path: Path, revision: str = "head") -> None:
@@ -122,12 +122,17 @@ def test_outbox_events_table_added_from_replan_tasks(tmp_path: Path):
         "retry_count",
         "last_error",
         "available_at",
+        "claim_token",
+        "claimed_by",
+        "claimed_at",
+        "lease_until",
         "delivered_at",
         "created_at",
         "updated_at",
     }
     assert indexes["uq_outbox_events_dedup_key"] is True
     assert indexes["ix_outbox_events_status_available_at"] is False
+    assert indexes["ix_outbox_events_status_lease_until"] is False
     assert _version(database) == HEAD_REVISION
 
     command.downgrade(
