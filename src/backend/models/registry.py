@@ -19,6 +19,7 @@ from .notification_config import NotificationConfig
 from .order import Order
 from .package import Package
 from .route import Route
+from .replan_task import ReplanTask
 from .sorting_center import SortingCenter
 from .storage_center import StorageCenter
 from .user import User
@@ -39,6 +40,7 @@ MODEL_REGISTRY = (
     DispatchBatch,
     NodeDispatch,
     Route,
+    ReplanTask,
     ExceptionEvent,
     IdempotencyRecord,
     NotificationConfig,
