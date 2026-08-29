@@ -4,7 +4,7 @@
 - 分支：`feat/R2-03-replan-saga-outbox`
 - 基线：`origin/main` @ `87190d2`
 - 决策：`D-R2-SAGA`（`v2026-08-25-r2-freeze`）
-- 状态：草稿；仅覆盖 Step 1 事务边界分析与 Step 2 `replan_tasks` 骨架
+- 状态：in_progress；已覆盖 Step 1/2，并完成 Step 3 显式 `start` / `resume`、补偿与 `manual_required` 编排骨架
 - 环境边界：Windows 11 + Python 3.13 + SQLite。SQLite 结果只辅助验证 P0 schema/幂等协议，不代表 PostgreSQL、多 worker 或生产并发能力。
 
 ## 当前 commit 点与外部 I/O
@@ -64,21 +64,52 @@ cd src/backend
 python -m alembic -c alembic.ini heads
 # exit 0: r2_03_replan_tasks (head)
 
-python -m pytest -q -p no:cacheprovider tests/migration tests/unit/core/test_model_registry.py
-# exit 0: 34 passed in 14.70s
+python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py
+# exit 0: 3 passed in 0.42s
 
-python -m pytest -q -p no:cacheprovider tests/migration tests/unit/core/test_model_registry.py tests/unit/models/test_replan_task.py
-# 首次 exit 1: 34 passed, 2 failed（Boolean server default schema parity 差异）
-# 修复后 exit 0: 36 passed in 15.73s
+python -m pytest -q -p no:cacheprovider tests/migration tests/unit/core/test_model_registry.py tests/unit/models/test_replan_task.py tests/unit/services/test_replan_task_service.py
+# exit 0: 39 passed in 15.49s
 ```
 
-迁移验证覆盖从 `r2_02b_code_range_allocation` upgrade、downgrade、字段/唯一索引存在性；模型测试覆盖字段默认值和重复幂等键冲突。首次 parity 失败的定位和修复记录见 `proced_problem/013-replan-task-schema-parity-default.md`。
+验证覆盖迁移 schema、模型注册、任务字段默认值/唯一键，以及 `get_or_create_replan_task` 的幂等复用和 `check_replan_task_preconditions` 的重复只读行为。R2-03 仍保持 `in_progress`，未扩展到 outbox worker 或完整 Saga。
+
+## Step 3 可恢复编排骨架
+
+`services/replan_task_service.py` 在 Round 1 的幂等创建/只读检查草稿上补充：
+
+- `start(db, idempotency_key)`：以唯一索引为真相源，首次创建提交任务；重复 key 返回原任务，不创建第二行。
+- `resume(db, task_id, executors, compensators)`：每次只执行 `current_step` 对应的一个注入执行器；业务写入和 task 的步骤/status/version 更新由同一次 commit 落库。
+- commit 前异常：统一 rollback，task 保持原步骤，执行器写入的业务数据不落库。
+- commit 后异常：
+  - F007 draft、F005 未发车、F006 未执行：调用注入补偿器，补偿提交后保持当前步骤可重试；
+  - F021：禁止自动拆包，直接 `manual_required=True`；
+  - F005 `in_transit`、F006 `executed`：直接进入人工处理；
+  - 缺少可靠补偿或补偿失败：fail closed，进入人工处理。
+- 已进入 `manual_required` 的任务，后续 `resume` 抛出 R2-04A `DomainError(CODE_STATE_CONFLICT)`，由既有全局 handler 渲染统一 envelope。
+
+执行器/补偿器仅是 Step 3 的测试级编排边界，没有重写 F007/F021/F005/F006 算法，也没有接入通知/outbox。
+
+## Round 2 验证结果
+
+```text
+cd src/backend
+python -m alembic -c alembic.ini heads
+# exit 0: r2_03_replan_tasks (head)
+
+python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py
+# exit 0: 12 passed in 0.56s
+
+python -m pytest -q -p no:cacheprovider tests/unit/models/test_replan_task.py tests/unit/services/test_replan_task_service.py tests/migration tests/unit/core/test_model_registry.py
+# exit 0: 48 passed in 36.86s
+```
+
+故障注入覆盖：commit 前业务/task 同时回滚、F021 commit 后转人工且禁止 resume、F005/F006 不可逆状态转人工、F007/F005/F006 可补偿状态调用补偿器、重复 start 不新增任务、F007 成功后从 F021 继续。
 
 ## 明确未覆盖
 
-- 未实现完整 Saga `resume(task_id)` 或启动扫描；
-- 未实现 `manual_required` 判定/补偿执行器；
+- 未实现进程启动自动扫描；本轮按计划只提供显式 `resume(task_id)`；
+- 未将现有 F007/F021/F005/F006 算法调用改接到编排服务；本轮用注入执行器验证事务协议；
 - 未创建 outbox 表或 worker；
 - 未剥离 fire-and-forget、请求 Session 复用或同步 SMTP；
 - 未执行 PostgreSQL/Redis/Docker/真实 SMTP 验证；
-- R2-03 计划卡仍保持 `pending`。
+- R2-03 计划卡最多保持 `in_progress`，不得标记完成。
