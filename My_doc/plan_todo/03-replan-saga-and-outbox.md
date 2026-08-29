@@ -5,7 +5,7 @@ status: pending
 priority: P0
 owner: justtodo123
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-29
 depends_on: ["R2-01", "R2-02"]
 ---
 
@@ -78,4 +78,51 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 
 ## 完成记录
 
-- 尚未开始。完成时填写状态机版本、故障注入矩阵、Commit/PR、仍需人工处理的边界。
+> 当前状态仍为 `pending`：以下是功能分支上的实现与本地验证证据，不代表 PR、CI、合并或发布已完成。
+
+### 已实现状态机与事务边界
+
+- Alembic 单 head：`r2_03_outbox_events`，由 `r2_03_replan_tasks` 派生。
+- `replan_tasks` 以唯一 `idempotency_key` 记录 `F007 → F021 → F005 → F006 → NOTIFICATION → COMPLETED`、重试、错误、版本及 `manual_required`。
+- `redispatch()` 非 draft 主链通过 `start()` 与 `resume_async()` 按持久化 `current_step` 推进；F007/F021/F005/F006 下层调用使用 `commit=False`，业务写入与 task 步骤由编排层逐步提交。
+- `NOTIFICATION` 将任务完成与唯一 outbox 事件同行提交；请求路径不执行 SMTP/Webhook，独立 Session worker 负责 retry、delivered、dead-letter。
+- D-R2-SAGA 已覆盖：F007 draft 可补偿；F021 提交后转人工；F005 未发车可作废、`in_transit` 转人工；F006 未执行可删、已执行转人工。
+
+### 故障注入矩阵
+
+| 场景 | 本地测试结果 |
+|---|---|
+| 同一 idempotency key 重复触发 | 返回同一 task，不重复创建方案、批次、路线或 outbox |
+| F007 真实写入后、commit 前异常 | 业务写入与 task 推进 rollback，task 保持 F007 |
+| F021 commit 后异常 | task 进入 `manual_required`，不自动拆包或继续 |
+| 通知投递失败 | 业务/task 保持完成，outbox 保留为 retry；耗尽后 dead-letter |
+| 重复 deliver | delivered 事件不再调用 sender，不重复外部副作用 |
+| worker Session | 使用独立 Session，不复用请求 Session |
+
+验证命令：
+
+```text
+cd src/backend
+python -m alembic -c alembic.ini heads
+# exit 0: r2_03_outbox_events (head)
+
+python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py tests/unit/services/test_outbox.py tests/unit/services/test_exception_service.py tests/migration tests/unit/core/test_model_registry.py
+# exit 0: 90 passed, 3 warnings in 22.92s
+```
+
+详细记录：[20260829-R2-03-replan-saga-outbox.md](./experiments/20260829-R2-03-replan-saga-outbox.md)。
+
+### 功能分支提交
+
+- `e8f3203` — `feat: add R2-03 replan task skeleton`
+- `9aeabe4` — `feat: add replan task recovery orchestration`
+- `f652947` — `feat: add transactional outbox delivery`
+- `8b8bc61` — `feat: route replan notifications through outbox`
+- `e7ad8ff` — `feat: wire replan saga short transactions`
+
+### 剩余缺口
+
+- `reroute()` 仍是旧的多 commit 路径，尚未接入 `start()` / `resume()`。
+- `redispatch(draft_only=True)` 仍走旧路径，不属于当前 Saga 主链。
+- 真实 PostgreSQL、独立 worker 进程重启、外部超时和真实 SMTP 失败仍归 R2-05；当前环境未执行，因此保持 `blocked`，SQLite 结果不替代 P1 证据。
+- 尚无授权 PR、CI 或 merge 记录，禁止据此将 R2-03 标为 `done`。

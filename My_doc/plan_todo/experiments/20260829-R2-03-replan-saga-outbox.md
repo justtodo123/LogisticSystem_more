@@ -171,8 +171,8 @@ python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_ser
 
 ## 明确未覆盖
 
-- 未实现进程启动自动扫描；本轮按计划只提供显式 `resume(task_id)`；
-- 未将现有 F007/F021/F005/F006 算法调用改接到编排服务；本轮用注入执行器验证事务协议；
+- `reroute()` 仍有多次 commit，尚未接入 `start()` / `resume()`；
+- `redispatch(draft_only=True)` 仍走旧路径，不属于已接入 Saga 的非 draft 主链；
 - 已将重规划成功路径迁到 outbox；尚未接入真实 SMTP/Webhook worker sender；
 - 未剥离其他非重规划调用点的 fire-and-forget 或同步 SMTP；
 - 未执行 PostgreSQL/Redis/Docker/真实 SMTP 验证；
