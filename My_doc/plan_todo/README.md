@@ -4,7 +4,7 @@
 > **参考依据**：[大厂后端 SP 标准差距与优化路线图](../reference/大厂后端SP标准差距与优化路线图.md)。
 > **决策基线**：[decisions.md](./decisions.md)（协议冻结 `v2026-08-25-r2-freeze`；治理增补 `v2026-08-25-r2-governance`）。冲突时：代码与验证证据 > 版本化决策 > 本 README > 单卡正文。
 > **第一轮归档**：[第一轮优化计划](../post_plan/第一轮优化计划/)。第一轮文档只追溯，不承担第二轮实时状态。
-> **修订日期**：2026-08-27。R2-01 已通过 PR #8 与 CI 验证并合并；当前主链进入 R2-02，可并行 R2-04B。
+> **修订日期**：2026-08-29。R2-02A/R2-02B 已随 PR #11 合并至 `origin/main` @ `87190d2`；当前主链为 R2-03，下一动作仅为待授权后创建 R2-03 PR，不开始 R2-04B。
 
 ## 阅读与状态规则
 
@@ -39,7 +39,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | 00A | P0 基础 | P0 | done | [Alembic 迁移基线与 Schema 真相源治理](./00A-alembic-migration-baseline.md) | PR #5 / CI 通过并合并；fresh/legacy、单 head、schema parity 已验证 |
 | 04A | P0 基础 | P0 | done | [领域错误、统一响应契约与数据库会话回滚](./04A-error-contract-and-db-session.md) | PR #6 / CI 通过并合并；registry、envelope、detail 兼容与 rollback 已验证 |
 | 01 | P0 | P0 | done | [关键状态转移并发控制](./01-concurrency-state-transitions.md) | PR #8 / CI 通过并合并；并发确认最多一次成功且无重复副作用 |
-| 02 | P0 | P0 | in_progress | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | R2-02A 已合并；R2-02B 本机号段验证完成，待 Commit / PR |
+| 02 | P0 | P0 | done | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | R2-02A/R2-02B 已随 PR #11 合并至 `origin/main` @ `87190d2` |
 | 03 | P0 | P0 | pending | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | Saga/outbox 实现已在功能分支完成本地验证，当前回写证据；待授权 PR/合并后再进入后续主线 |
 | 04B | P0 并行 | P0 | pending | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | 权限矩阵、token version、前后端权限一致 |
 | 05 | P1 | P1 | blocked | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | 真实数据库/缓存/多 worker 集成证据 |
@@ -58,7 +58,7 @@ R2-00A + R2-01 + R2-02 + R2-03 -> R2-05
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：**R2-03 重规划 Saga 与 outbox** 的实现及本地故障注入证据已在 `feat/R2-03-replan-saga-outbox` 完成，当前进行文档回写；计划卡保持 `pending`，待授权 PR、CI 与合并后再进入 **R2-04B RBAC/JWT/前端权限**。R2-05 的 PostgreSQL/Redis/多 worker 证据仍为 `blocked`，不得用 SQLite 结果替代。
+当前下一动作：**待授权后创建 R2-03 PR**。实现与本地证据已在远程分支 `origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`，相对 `origin/main` @ `87190d2` 为 ahead 11 / behind 0；当前尚无 R2-03 PR。计划卡保持 `pending`，直到获得 PR 授权且完成 CI 与 merge。不得开始 R2-04B；R2-05 的 PostgreSQL/Redis/多 worker 证据继续保持 `blocked`，不得用 SQLite 结果替代。
 
 ## 当前证据边界
 

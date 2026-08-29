@@ -1,10 +1,11 @@
-# R2-03 Step 1/2 实验草稿：重规划 Saga 与任务骨架
+# R2-03 实验记录：重规划 Saga、transactional outbox 与 leased claims
 
 - 日期：2026-08-29
-- 分支：`feat/R2-03-replan-saga-outbox`
-- 基线：`origin/main` @ `87190d2`
+- 分支：`feat/R2-03-replan-saga-outbox`；远程分支 `origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`
+- 基线：`origin/main` @ `87190d2`；当前相对基线 ahead 11 / behind 0
 - 决策：`D-R2-SAGA`（`v2026-08-25-r2-freeze`）
-- 状态：in_progress；已覆盖 Step 1/2，并完成 Step 3 显式 `start` / `resume`、补偿与 `manual_required` 编排骨架
+- 状态：`pending`；功能实现与本地验证已完成，尚无 R2-03 PR，必须等待 PR 授权、CI 与 merge 后才能标记 `done`
+- 当前唯一 Alembic head：`r2_03_outbox_claims`
 - 环境边界：Windows 11 + Python 3.13 + SQLite。SQLite 结果只辅助验证 P0 schema/幂等协议，不代表 PostgreSQL、多 worker 或生产并发能力。
 
 ## 当前 commit 点与外部 I/O
@@ -42,7 +43,7 @@
 2. outbox worker 每次领取和投递使用独立 Session，不复用请求 Session。
 3. 网络 I/O 发生在数据库事务外；投递结果用短事务回写。
 4. 通知失败不反向回滚 F007/F021/F005/F006，但必须留下 retry/dead-letter 证据。
-5. 同步 SMTP 和 fire-and-forget 的剥离属于后续 Step 4/5，本轮不修改。
+5. 外部邮件/Webhook 的崩溃边界取决于接收方能力：若接收方不支持幂等令牌，则在“外部已接收、数据库尚未写回 `delivered`”时崩溃只能保证 **at-least-once**，不得声称 exactly-once。
 
 ## Step 2 最小 schema
 
@@ -62,7 +63,7 @@
 ```text
 cd src/backend
 python -m alembic -c alembic.ini heads
-# exit 0: r2_03_replan_tasks (head)
+# exit 0: r2_03_outbox_claims (head)
 
 python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py
 # exit 0: 3 passed in 0.42s
@@ -94,7 +95,7 @@ python -m pytest -q -p no:cacheprovider tests/migration tests/unit/core/test_mod
 ```text
 cd src/backend
 python -m alembic -c alembic.ini heads
-# exit 0: r2_03_replan_tasks (head)
+# exit 0: r2_03_outbox_claims (head)
 
 python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py
 # exit 0: 12 passed in 0.56s
@@ -119,7 +120,7 @@ python -m pytest -q -p no:cacheprovider tests/unit/models/test_replan_task.py te
 ```text
 cd src/backend
 python -m alembic -c alembic.ini heads
-# exit 0: r2_03_outbox_events (head)
+# exit 0: r2_03_outbox_claims (head)
 
 python -m pytest -q -p no:cacheprovider tests/unit/services/test_outbox.py
 # 首次 exit 1: 5 passed, 1 failed（测试复用 worker Session 导致 request Session 被关闭）
@@ -161,7 +162,7 @@ python -m pytest -q -p no:cacheprovider tests/unit/services/test_outbox.py tests
 ```text
 cd src/backend
 python -m alembic -c alembic.ini heads
-# exit 0: r2_03_outbox_events (head)
+# exit 0: r2_03_outbox_claims (head)
 
 python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py tests/unit/services/test_outbox.py tests/unit/services/test_exception_service.py tests/migration tests/unit/core/test_model_registry.py
 # exit 0: 90 passed, 3 warnings in 22.92s
@@ -187,10 +188,67 @@ python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_ser
 # exit 0: 93 passed, 3 warnings in 15.86s
 ```
 
+## Round 8～11 收口证据
+
+### 第一优先：`3965855` Saga 恢复加固
+
+- HTTP 层将 `X-Idempotency-Key` 贯通到重规划 Saga。
+- 补偿成功后恢复 `current_step`，避免任务停留在错误推进状态。
+- 持久化并重放任务产物引用，避免完成任务丢失返回对象。
+- redispatch 版本链覆盖 `1 → 2 → 3`。
+- 聚焦测试结果：**114 passed**。
+
+### 第二优先：`ffba2f0` 真实集成覆盖
+
+- `tests/integration/test_exception_replan.py` 已移除 TODO/空 `pass`。
+- 使用真实 HTTP 请求与 `X-Idempotency-Key` 验证重放、恢复和错误边界。
+- `tests/integration/test_exception_replan.py` 与 `tests/api/test_exceptions.py` 合计：**20 passed**。
+
+### 第三优先：`71e7506` leased outbox claims
+
+- outbox 增加 `processing`、`claim_token` 与 lease 字段。
+- worker 通过原子 claim 防止并发领取同一事件；过期租约可回收。
+- 新增独立 Session worker：`src/backend/scripts/outbox_worker.py`。
+- 聚焦测试结果：**101 passed**。
+- Alembic 当前唯一 head 推进为 `r2_03_outbox_claims`。
+
+### 第四优先：`ffec6bb` 完整后端回归
+
+- `test_release_migrate.py` 的发布迁移期望 head 更新为 `r2_03_outbox_claims`。
+- 完整后端测试（不同于上述聚焦测试）：
+
+```text
+cd src/backend
+python -m pytest -q -p no:cacheprovider tests
+# exit 0: 899 passed, 269 warnings in 173.43s
+
+python -m alembic -c alembic.ini heads
+# exit 0: r2_03_outbox_claims (head)
+```
+
+**证据分层说明**：114、20、101 passed 分别证明特定功能与故障边界；899 passed 是完整后端回归。不得将这些数字混写成同一组测试结果，也不得用完整回归替代聚焦场景说明。
+
+## 功能分支提交（`87190d2` 之后，oldest → newest）
+
+- `e8f3203` — `feat: add R2-03 replan task skeleton`
+- `9aeabe4` — `feat: add replan task recovery orchestration`
+- `f652947` — `feat: add transactional outbox delivery`
+- `8b8bc61` — `feat: route replan notifications through outbox`
+- `e7ad8ff` — `feat: wire replan saga short transactions`
+- `fa716dc` — `docs: record R2-03 saga implementation evidence`
+- `9e78068` — `feat: wire reroute through replan saga`
+- `3965855` — `fix: harden replan saga recovery`
+- `ffba2f0` — `test: add real replan saga integration coverage`
+- `71e7506` — `fix: add leased outbox delivery claims`
+- `ffec6bb` — `test: update release migration head expectation`
+
+远程分支已存在：`origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`；与本地 HEAD 为 0/0。当前尚无 R2-03 PR。
+
 ## 明确未覆盖
 
 - `redispatch(draft_only=True)` 仍走旧路径，不属于已接入 Saga 的非 draft 主链；
-- 已将重规划成功路径迁到 outbox；尚未接入真实 SMTP/Webhook worker sender；
+- 已将重规划成功路径迁到 outbox，并提供独立 Session worker；尚未执行真实 SMTP/Webhook 投递验证；
+- 若外部邮件/Webhook 不支持幂等令牌，worker 在外部成功后、`delivered` 写回前崩溃可能造成重复投递，因此语义为 at-least-once，不是 exactly-once；
 - 未剥离其他非重规划调用点的 fire-and-forget 或同步 SMTP；
-- 未执行 PostgreSQL/Redis/Docker/真实 SMTP 验证；
-- R2-03 计划卡最多保持 `in_progress`，不得标记完成。
+- 未执行 PostgreSQL/Redis/Docker/真实 SMTP 验证，R2-05 保持 `blocked`；
+- R2-03 计划卡保持 `pending`，直到授权创建 PR、CI 通过并 merge；下一动作仅为待授权后创建 R2-03 PR，不开始 R2-04B。

@@ -82,7 +82,7 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 
 ### 已实现状态机与事务边界
 
-- Alembic 单 head：`r2_03_outbox_events`，由 `r2_03_replan_tasks` 派生。
+- Alembic 当前唯一 head：`r2_03_outbox_claims`；迁移链依次包含 `r2_03_replan_tasks`、`r2_03_outbox_events` 与 leased claims 增量。
 - `replan_tasks` 以唯一 `idempotency_key` 记录 `F007 → F021 → F005 → F006 → NOTIFICATION → COMPLETED`、重试、错误、版本及 `manual_required`。
 - `redispatch()` 非 draft 主链通过 `start()` 与 `resume_async()` 按持久化 `current_step` 推进；F007/F021/F005/F006 下层调用使用 `commit=False`，业务写入与 task 步骤由编排层逐步提交。
 - `reroute()` 通过同一套 `start()` / `resume_async()` 推进 F006 与 NOTIFICATION；route 下层使用 `commit=False`，重复 key 重放完成结果。
@@ -103,29 +103,38 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 | reroute route 写入后、commit 前异常 | 新 route rollback，task 停留 F006 |
 | reroute 已执行后异常 | task 进入 `manual_required` |
 
-验证命令：
+### 分层验证证据
 
-```text
-cd src/backend
-python -m alembic -c alembic.ini heads
-# exit 0: r2_03_outbox_events (head)
+聚焦测试与完整后端测试是不同层级的证据，数字不得合并：
 
-python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py tests/unit/services/test_outbox.py tests/unit/services/test_exception_service.py tests/migration tests/unit/core/test_model_registry.py
-# exit 0: 93 passed, 3 warnings in 15.86s
-```
+1. `3965855`（第一优先）：HTTP 幂等贯通、补偿后 `current_step` 恢复、任务产物引用、redispatch 版本链 `1→2→3`；聚焦测试 **114 passed**。
+2. `ffba2f0`（第二优先）：`tests/integration/test_exception_replan.py` 已无 TODO/空 `pass`，覆盖真实 HTTP + `X-Idempotency-Key`；该文件与 `test_exceptions.py` 合计 **20 passed**。
+3. `71e7506`（第三优先）：outbox 增加 `processing` / `claim_token` / lease、原子 claim、租约回收，以及独立 Session worker `src/backend/scripts/outbox_worker.py`；聚焦测试 **101 passed**；Alembic head 推进为 `r2_03_outbox_claims`。
+4. `ffec6bb`（第四优先）：`test_release_migrate.py` 的期望 head 更新为 `r2_03_outbox_claims`；完整后端命令 `python -m pytest -q -p no:cacheprovider tests` 结果为 **899 passed, 269 warnings in 173.43s**；`alembic heads` 唯一输出 `r2_03_outbox_claims (head)`。
+
+完整后端测试中的 899 passed 不替代上述各组聚焦测试的场景说明；聚焦测试数字也不声称等同于完整回归。
 
 详细记录：[20260829-R2-03-replan-saga-outbox.md](./experiments/20260829-R2-03-replan-saga-outbox.md)。
 
-### 功能分支提交
+### 功能分支提交（`87190d2` 之后，oldest → newest）
 
 - `e8f3203` — `feat: add R2-03 replan task skeleton`
 - `9aeabe4` — `feat: add replan task recovery orchestration`
 - `f652947` — `feat: add transactional outbox delivery`
 - `8b8bc61` — `feat: route replan notifications through outbox`
 - `e7ad8ff` — `feat: wire replan saga short transactions`
+- `fa716dc` — `docs: record R2-03 saga implementation evidence`
+- `9e78068` — `feat: wire reroute through replan saga`
+- `3965855` — `fix: harden replan saga recovery`
+- `ffba2f0` — `test: add real replan saga integration coverage`
+- `71e7506` — `fix: add leased outbox delivery claims`
+- `ffec6bb` — `test: update release migration head expectation`
 
-### 剩余缺口
+远程分支已存在：`origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`；当前尚无 R2-03 PR。
+
+### 语义边界与剩余缺口
 
 - `redispatch(draft_only=True)` 仍走旧路径，不属于当前 Saga 主链。
-- 真实 PostgreSQL、独立 worker 进程重启、外部超时和真实 SMTP 失败仍归 R2-05；当前环境未执行，因此保持 `blocked`，SQLite 结果不替代 P1 证据。
-- 尚无授权 PR、CI 或 merge 记录，禁止据此将 R2-03 标为 `done`。
+- outbox 的数据库去重、claim 与 lease 控制内部并发和重放；若外部邮件/Webhook 不支持幂等令牌，进程在“外部已接收、数据库尚未写回 delivered”之间崩溃时只能保证 **at-least-once**，不得声称 exactly-once。
+- 真实 PostgreSQL、独立 worker 进程重启、外部超时和真实 SMTP 失败仍归 R2-05；当前环境未执行，因此 R2-05 保持 `blocked`，SQLite 结果不替代 P1 证据。
+- R2-03 计划卡保持 `pending`，直到获得授权创建 PR，并完成 CI 与 merge；当前下一动作仅是待授权后创建 R2-03 PR，不开始 R2-04B。
