@@ -85,6 +85,7 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 - Alembic 单 head：`r2_03_outbox_events`，由 `r2_03_replan_tasks` 派生。
 - `replan_tasks` 以唯一 `idempotency_key` 记录 `F007 → F021 → F005 → F006 → NOTIFICATION → COMPLETED`、重试、错误、版本及 `manual_required`。
 - `redispatch()` 非 draft 主链通过 `start()` 与 `resume_async()` 按持久化 `current_step` 推进；F007/F021/F005/F006 下层调用使用 `commit=False`，业务写入与 task 步骤由编排层逐步提交。
+- `reroute()` 通过同一套 `start()` / `resume_async()` 推进 F006 与 NOTIFICATION；route 下层使用 `commit=False`，重复 key 重放完成结果。
 - `NOTIFICATION` 将任务完成与唯一 outbox 事件同行提交；请求路径不执行 SMTP/Webhook，独立 Session worker 负责 retry、delivered、dead-letter。
 - D-R2-SAGA 已覆盖：F007 draft 可补偿；F021 提交后转人工；F005 未发车可作废、`in_transit` 转人工；F006 未执行可删、已执行转人工。
 
@@ -98,6 +99,9 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 | 通知投递失败 | 业务/task 保持完成，outbox 保留为 retry；耗尽后 dead-letter |
 | 重复 deliver | delivered 事件不再调用 sender，不重复外部副作用 |
 | worker Session | 使用独立 Session，不复用请求 Session |
+| reroute 重复 idempotency key | 返回同一 task，不重复创建 route/outbox |
+| reroute route 写入后、commit 前异常 | 新 route rollback，task 停留 F006 |
+| reroute 已执行后异常 | task 进入 `manual_required` |
 
 验证命令：
 
@@ -107,7 +111,7 @@ python -m alembic -c alembic.ini heads
 # exit 0: r2_03_outbox_events (head)
 
 python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py tests/unit/services/test_outbox.py tests/unit/services/test_exception_service.py tests/migration tests/unit/core/test_model_registry.py
-# exit 0: 90 passed, 3 warnings in 22.92s
+# exit 0: 93 passed, 3 warnings in 15.86s
 ```
 
 详细记录：[20260829-R2-03-replan-saga-outbox.md](./experiments/20260829-R2-03-replan-saga-outbox.md)。
@@ -122,7 +126,6 @@ python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_ser
 
 ### 剩余缺口
 
-- `reroute()` 仍是旧的多 commit 路径，尚未接入 `start()` / `resume()`。
 - `redispatch(draft_only=True)` 仍走旧路径，不属于当前 Saga 主链。
 - 真实 PostgreSQL、独立 worker 进程重启、外部超时和真实 SMTP 失败仍归 R2-05；当前环境未执行，因此保持 `blocked`，SQLite 结果不替代 P1 证据。
 - 尚无授权 PR、CI 或 merge 记录，禁止据此将 R2-03 标为 `done`。

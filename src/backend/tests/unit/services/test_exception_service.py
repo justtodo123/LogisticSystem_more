@@ -641,6 +641,106 @@ class TestReplanService:
         assert task.manual_required is True
 
 
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_reroute_same_idempotency_key_does_not_duplicate_route_or_outbox(
+        self, db_session, test_nodes
+    ):
+        original_code = await self._create_reroute_fixture(db_session, test_nodes, "IDEM")
+        first = await ReplanService.reroute(
+            db_session, original_code, "idem reroute", idempotency_key="reroute-idem"
+        )
+        counts = (db_session.query(Route).count(), db_session.query(OutboxEvent).count())
+        second = await ReplanService.reroute(
+            db_session, original_code, "idem reroute", idempotency_key="reroute-idem"
+        )
+        assert first["code"] == second["code"] == 0, (first, second)
+        assert first["data"]["task_id"] == second["data"]["task_id"]
+        assert counts == (db_session.query(Route).count(), db_session.query(OutboxEvent).count())
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_reroute_commit_before_failure_rolls_back_route(
+        self, db_session, test_nodes
+    ):
+        original_code = await self._create_reroute_fixture(db_session, test_nodes, "ROLLBACK")
+        from services.route_service import RouteService
+        original_executor = RouteService.create_route_planning
+
+        async def fail_after_write(*args, **kwargs):
+            result = await original_executor(*args, **kwargs)
+            assert result["code"] == 0
+            raise RuntimeError("injected before route commit")
+
+        with patch.object(RouteService, "create_route_planning", new=fail_after_write):
+            result = await ReplanService.reroute(
+                db_session, original_code, "rollback reroute",
+                idempotency_key="reroute-rollback",
+            )
+        assert result["code"] != 0
+        original = db_session.query(Route).filter_by(route_code=original_code).one()
+        assert db_session.query(Route).filter(Route.parent_id == original.id).count() == 0
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_reroute_executed_route_requires_manual(self, db_session, test_nodes):
+        original_code = await self._create_reroute_fixture(db_session, test_nodes, "MANUAL")
+
+        def after_commit(step, _task):
+            if step == "F006":
+                raise RuntimeError("route already executed")
+
+        result = await ReplanService.reroute(
+            db_session, original_code, "manual reroute",
+            idempotency_key="reroute-manual",
+            _after_commit_hook=after_commit,
+        )
+        assert result["code"] == 40901, result
+        task = db_session.query(ReplanTask).filter_by(idempotency_key="reroute-manual").one()
+        assert task.manual_required is True
+
+    @staticmethod
+    async def _create_reroute_fixture(db_session, test_nodes, suffix):
+        import json
+        node = list(test_nodes.values())[0]
+        vehicle = Vehicle(
+            vehicle_code=f"V_RR_{suffix}", model="truck", vehicle_type="normal",
+            energy_type="fuel", status="idle", capacity=100,
+            node_id=node.id, last_arrived_node_id=node.id,
+        )
+        driver = Driver(
+            driver_code=f"D_RR_{suffix}", name="driver", phone=f"139{suffix:0>8}"[-11:],
+            license_type="B2", shift="day", status="idle", node_id=node.id,
+        )
+        db_session.add_all([vehicle, driver])
+        schedule = GlobalSchedule(
+            schedule_code=f"GS_RR_{suffix}", order_codes=["O001"], goods_schedules=[],
+            total_distance=1, total_time=1, total_goods=1, score=1,
+        )
+        db_session.add(schedule); db_session.flush()
+        batch = DispatchBatch(
+            batch_code=f"DB_RR_{suffix}", global_schedule_id=schedule.id,
+            status="pending", l0_l1_dispatch_count=1, l1_l2_dispatch_count=0,
+        )
+        db_session.add(batch); db_session.flush()
+        dispatch = NodeDispatch(
+            dispatch_code=f"ND_RR_{suffix}", dispatch_batch_id=batch.id,
+            vehicle_id=vehicle.id, driver_id=driver.id, level_phase=0,
+            tasks=json.dumps([{
+                "from_node_code": "SC001",
+                "to_node_code": "SO001",
+                "package_codes": [],
+            }]), total_distance=1, total_time=1,
+        )
+        db_session.add(dispatch); db_session.flush()
+        route = Route(
+            route_code=f"RT_RR_{suffix}", dispatch_id=dispatch.id, vehicle_id=vehicle.id,
+            route_segments=[], total_distance=1, total_time=1, total_emission=1,
+        )
+        db_session.add(route); db_session.commit()
+        return route.route_code
+
+
 class TestExceptionTriggerReplan:
     """ExceptionService.trigger_replan 集成测试"""
 

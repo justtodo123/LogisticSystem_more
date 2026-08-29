@@ -292,6 +292,14 @@ async def resume_async(
                         task_id,
                         f"F021 提交后失败：{exc}",
                     )
+                if step == "F006" and notification_payload and notification_payload.get(
+                    "strategy"
+                ) == "reroute":
+                    return _mark_manual_required(
+                        db,
+                        task_id,
+                        f"F006 已执行后失败：{exc}",
+                    )
                 raise StepExecutionError(
                     str(exc),
                     committed=True,

@@ -169,9 +169,26 @@ python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_ser
 
 新增真实链路测试覆盖：相同 key 重放无重复业务行、F007 下层真实写入后 commit 前异常整体 rollback、F021 已提交后注入异常进入 `manual_required`。通知失败时 outbox 保留由既有 `test_outbox.py` 回归覆盖。3 条 warning 是既有 Pydantic v2 class Config 弃用提示。
 
+## Step 7 reroute 收口
+
+- `reroute()` 复用 `replan_tasks` 的 `start()` / `resume_async()`，首次将任务从 F007 定位到 F006，再按 F006 → NOTIFICATION → COMPLETED 推进。
+- RouteService 使用 `commit=False`；route 版本链与 task 步骤由编排层一次提交。NOTIFICATION 与 outbox 同行提交。
+- 相同 idempotency key 完成后重放持久化 route 结果，不重复创建 route/outbox。
+- F006 route 写入后、commit 前异常整体 rollback；提交后检测为已执行的异常进入 `manual_required`，未执行路线可由补偿器删除。
+
+## Round 7 验证结果
+
+```text
+cd src/backend
+python -m pytest -q -p no:cacheprovider tests/unit/services/test_exception_service.py -k reroute
+# exit 0: 7 passed, 32 deselected in 0.68s
+
+python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py tests/unit/services/test_outbox.py tests/unit/services/test_exception_service.py tests/migration tests/unit/core/test_model_registry.py
+# exit 0: 93 passed, 3 warnings in 15.86s
+```
+
 ## 明确未覆盖
 
-- `reroute()` 仍有多次 commit，尚未接入 `start()` / `resume()`；
 - `redispatch(draft_only=True)` 仍走旧路径，不属于已接入 Saga 的非 draft 主链；
 - 已将重规划成功路径迁到 outbox；尚未接入真实 SMTP/Webhook worker sender；
 - 未剥离其他非重规划调用点的 fire-and-forget 或同步 SMTP；

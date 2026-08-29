@@ -670,6 +670,8 @@ class ReplanService:
         replan_reason: str,
         excluded_vehicles: Optional[List[str]] = None,
         custom_weights: Optional[Dict[str, Any]] = None,
+        idempotency_key: Optional[str] = None,
+        _after_commit_hook=None,
     ) -> Dict[str, Any]:
         """
         重路径规划（F006）
@@ -725,60 +727,97 @@ class ReplanService:
                     message=f"原路径规划关联的调度批次不存在",
                 )
 
-            # 3. 获取同批次下所有 dispatch_codes（仅重规划当前 dispatch 的路线）
+            # 3. 当前 reroute 只规划一个 dispatch 的路线。
             dispatch_codes = [dispatch.dispatch_code]
+            key = idempotency_key or f"reroute:{original_route_code}:{replan_reason}"
+            task = start(db, key)
+            state: Dict[str, Any] = {"route_codes": []}
 
-            # 4. 调用现有路径规划服务（不修改它）
+            if task.current_step == "F007":
+                task.current_step = "F006"
+                task.status = "RUNNING"
+                task.version += 1
+                db.commit()
+            if task.current_step in {"NOTIFICATION", "COMPLETED"}:
+                routes = db.query(Route).filter(
+                    Route.parent_id == original_route.id,
+                    Route.is_replan.is_(True),
+                ).all()
+                state["route_codes"] = [route.route_code for route in routes]
+
             from services.route_service import RouteService
 
-            route_result = await RouteService.create_route_planning(
-                batch_code=batch.batch_code,
-                dispatch_codes=dispatch_codes,
-                db=db,
-                excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
-                custom_weights=custom_weights,  # AI驱动的自定义权重
-            )
+            async def f006(step_db: Session, _task):
+                route_result = await RouteService.create_route_planning(
+                    batch_code=batch.batch_code,
+                    dispatch_codes=dispatch_codes,
+                    db=step_db,
+                    excluded_vehicles=excluded_vehicles or None,
+                    custom_weights=custom_weights,
+                    commit=False,
+                )
+                if route_result.get("code") != 0:
+                    raise StepExecutionError(
+                        route_result.get("message", "F006 reroute failed")
+                    )
+                state["route_codes"] = [
+                    item["route_code"]
+                    for item in route_result["data"].get("routes", [])
+                ]
+                for route_code in state["route_codes"]:
+                    route = step_db.query(Route).filter(
+                        Route.route_code == route_code
+                    ).first()
+                    if route:
+                        route.version = original_route.version + 1
+                        route.parent_id = original_route.id
+                        route.replan_reason = replan_reason
+                        route.is_replan = True
 
-            # 检查路径规划是否成功
-            if route_result.get("code") != 0:
-                return route_result
+            async def notification(_db: Session, _task):
+                return None
 
-            new_routes_data = route_result["data"].get("routes", [])
-            new_route_codes = [r["route_code"] for r in new_routes_data]
+            def compensate_f006(step_db: Session, _task) -> None:
+                if batch.status in {"in_transit", "completed"}:
+                    raise RuntimeError("路线已执行，不能自动删除")
+                routes = step_db.query(Route).filter(
+                    Route.parent_id == original_route.id,
+                    Route.is_replan.is_(True),
+                ).all()
+                for route in routes:
+                    step_db.delete(route)
 
-            # 5. 更新新路径规划的版本链字段
-            for rc in new_route_codes:
-                new_route = db.query(Route).filter(
-                    Route.route_code == rc
-                ).first()
-                if new_route:
-                    new_route.version = original_route.version + 1
-                    new_route.parent_id = original_route.id
-                    new_route.replan_reason = replan_reason
-                    new_route.is_replan = True
+            payload = {
+                "original_schedule_code": batch.batch_code,
+                "new_schedule_code": state["route_codes"][0]
+                if state["route_codes"] else None,
+                "strategy": "reroute",
+                "replan_reason": replan_reason,
+                "diff_summary": None,
+            }
+            while task.current_step != "COMPLETED" and not task.manual_required:
+                task = await resume_async(
+                    db,
+                    task.id,
+                    executors={"F006": f006, "NOTIFICATION": notification},
+                    compensators={"F006": compensate_f006},
+                    after_commit_hook=_after_commit_hook,
+                    notification_payload=payload,
+                )
+                if state["route_codes"]:
+                    payload["new_schedule_code"] = state["route_codes"][0]
 
-            db.commit()
-
-            new_route_code = new_route_codes[0] if new_route_codes else None
-
-            # 重路径规划通知只入队，不在请求路径调用同步 SMTP/Webhook。
-            enqueue_outbox(
-                db,
-                dedup_key=f"replan-route:{new_route_code}:completed",
-                event_type="replan.completed",
-                payload={
-                    "original_schedule_code": batch.batch_code,
-                    "new_schedule_code": new_route_code,
-                    "strategy": "reroute",
-                    "replan_reason": replan_reason,
-                    "diff_summary": None,
-                },
-            )
-            db.commit()
-
+            if task.manual_required:
+                return error_response(
+                    code=40901,
+                    message="重路径规划已进入人工处理",
+                    data={"task_id": task.id, "current_step": task.current_step},
+                )
+            new_route_code = state["route_codes"][0] if state["route_codes"] else None
             return success_response(data={
+                "task_id": task.id,
                 "batch_code": batch.batch_code,
-                "route_codes": new_route_codes,
+                "route_codes": state["route_codes"],
                 "new_route_code": new_route_code,
                 "version": original_route.version + 1,
                 "is_replan": True,
