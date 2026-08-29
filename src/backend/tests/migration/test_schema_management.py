@@ -19,7 +19,7 @@ from utils.schema_management import (
 )
 
 
-HEAD_REVISION = "r2_03_outbox_events"
+HEAD_REVISION = "r2_03_replan_task_refs"
 
 
 def _upgrade(path: Path, revision: str = "head") -> None:
@@ -171,6 +171,16 @@ def test_replan_tasks_table_added_from_r2_02b(tmp_path: Path):
     assert columns == {
         "id",
         "idempotency_key",
+        "request_fingerprint",
+        "operation_type",
+        "original_resource_id",
+        "original_resource_code",
+        "new_schedule_id",
+        "new_schedule_code",
+        "dispatch_batch_id",
+        "dispatch_batch_code",
+        "new_route_id",
+        "new_route_code",
         "status",
         "current_step",
         "retry_count",

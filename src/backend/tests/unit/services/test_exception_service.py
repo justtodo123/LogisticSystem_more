@@ -660,6 +660,45 @@ class TestReplanService:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
+    async def test_reroute_tasks_on_same_route_keep_owned_artifact_refs(
+        self, db_session, test_nodes
+    ):
+        original_code = await self._create_reroute_fixture(db_session, test_nodes, "OWNED")
+
+        first = await ReplanService.reroute(
+            db_session,
+            original_code,
+            "parallel reroute",
+            idempotency_key="reroute-owned-a",
+        )
+        second = await ReplanService.reroute(
+            db_session,
+            original_code,
+            "parallel reroute",
+            idempotency_key="reroute-owned-b",
+        )
+        replay_first = await ReplanService.reroute(
+            db_session,
+            original_code,
+            "parallel reroute",
+            idempotency_key="reroute-owned-a",
+        )
+
+        assert first["code"] == second["code"] == replay_first["code"] == 0
+        tasks = {
+            task.idempotency_key: task
+            for task in db_session.query(ReplanTask).filter(
+                ReplanTask.idempotency_key.in_(["reroute-owned-a", "reroute-owned-b"])
+            )
+        }
+        assert tasks["reroute-owned-a"].new_route_id is not None
+        assert tasks["reroute-owned-b"].new_route_id is not None
+        assert tasks["reroute-owned-a"].new_route_id != tasks["reroute-owned-b"].new_route_id
+        assert replay_first["data"]["new_route_code"] == tasks["reroute-owned-a"].new_route_code
+        assert replay_first["data"]["new_route_code"] != tasks["reroute-owned-b"].new_route_code
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_reroute_commit_before_failure_rolls_back_route(
         self, db_session, test_nodes
     ):
@@ -680,6 +719,46 @@ class TestReplanService:
         assert result["code"] != 0
         original = db_session.query(Route).filter_by(route_code=original_code).one()
         assert db_session.query(Route).filter(Route.parent_id == original.id).count() == 0
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_redispatch_version_chain_is_1_2_3_and_preserves_parents(
+        self, db_session, test_orders, test_nodes, test_goods, test_vehicles, test_drivers
+    ):
+        original = GlobalSchedule(
+            schedule_code="GS_VERSION_CHAIN_001",
+            order_codes=list(test_orders.keys())[:1], goods_schedules=[],
+            total_distance=1, total_time=1, total_goods=1, score=1,
+            algorithm_type="traditional", version=1, is_replan=False,
+        )
+        db_session.add(original)
+        test_orders[original.order_codes[0]].status = "in_transit"
+        db_session.commit()
+
+        first = await ReplanService.redispatch(
+            db_session, original.schedule_code, "version one", idempotency_key="version-chain-1"
+        )
+        first_schedule = db_session.query(GlobalSchedule).filter_by(
+            schedule_code=first["data"]["new_schedule_code"]
+        ).one()
+        assert first_schedule.version == 2
+
+        test_orders[original.order_codes[0]].status = "in_transit"
+        for goods in test_orders[original.order_codes[0]].goods:
+            goods.status = "pending_pack"
+        db_session.commit()
+
+        second = await ReplanService.redispatch(
+            db_session, first_schedule.schedule_code, "version two", idempotency_key="version-chain-2"
+        )
+        second_schedule = db_session.query(GlobalSchedule).filter_by(
+            schedule_code=second["data"]["new_schedule_code"]
+        ).one()
+        assert second_schedule.version == 3
+        assert second_schedule.parent_id == first_schedule.id
+        assert first_schedule.parent_id == original.id
+        assert original.version == 1
+        assert original.is_replan is False
 
     @pytest.mark.unit
     @pytest.mark.asyncio

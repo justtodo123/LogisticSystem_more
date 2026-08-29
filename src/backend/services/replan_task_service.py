@@ -1,11 +1,13 @@
 from collections.abc import Callable
 from dataclasses import dataclass
+import hashlib
+import json
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from core.error_codes import CODE_STATE_CONFLICT
+from core.error_codes import CODE_IDEMPOTENCY_PAYLOAD_MISMATCH, CODE_STATE_CONFLICT
 from core.errors import DomainError
 from models.replan_task import ReplanTask
 from services.outbox_service import complete_notification_step
@@ -32,15 +34,37 @@ class ReplanTaskPreflight:
 def get_or_create_replan_task(
     db: Session,
     idempotency_key: str,
+    *,
+    request_fingerprint: str | None = None,
+    operation_type: str | None = None,
+    original_resource_id: int | None = None,
+    original_resource_code: str | None = None,
 ) -> tuple[ReplanTask, bool]:
     """获取或创建任务，不提交调用方事务。"""
     existing = db.scalar(
         select(ReplanTask).where(ReplanTask.idempotency_key == idempotency_key)
     )
     if existing is not None:
+        if request_fingerprint is not None:
+            if (
+                existing.request_fingerprint is not None
+                and existing.request_fingerprint != request_fingerprint
+            ):
+                raise DomainError(CODE_IDEMPOTENCY_PAYLOAD_MISMATCH)
+            if existing.request_fingerprint is None:
+                existing.request_fingerprint = request_fingerprint
+                existing.operation_type = operation_type
+                existing.original_resource_id = original_resource_id
+                existing.original_resource_code = original_resource_code
         return existing, False
 
-    task = ReplanTask(idempotency_key=idempotency_key)
+    task = ReplanTask(
+        idempotency_key=idempotency_key,
+        request_fingerprint=request_fingerprint,
+        operation_type=operation_type,
+        original_resource_id=original_resource_id,
+        original_resource_code=original_resource_code,
+    )
     try:
         with db.begin_nested():
             db.add(task)
@@ -115,9 +139,35 @@ StepExecutor = Callable[[Session, ReplanTask], StepResult | None]
 Compensator = Callable[[Session, ReplanTask], None]
 
 
-def start(db: Session, idempotency_key: str) -> ReplanTask:
-    """在短事务中创建任务；同一幂等键冲突时返回已有任务。"""
-    task, created = get_or_create_replan_task(db, idempotency_key)
+def build_request_fingerprint(payload: dict[str, object]) -> str:
+    """对规范化 Saga 输入生成稳定指纹。"""
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def start(
+    db: Session,
+    idempotency_key: str,
+    *,
+    request_fingerprint: str | None = None,
+    operation_type: str | None = None,
+    original_resource_id: int | None = None,
+    original_resource_code: str | None = None,
+) -> ReplanTask:
+    """在短事务中创建任务；同一键仅允许回放相同请求。"""
+    task, created = get_or_create_replan_task(
+        db,
+        idempotency_key,
+        request_fingerprint=request_fingerprint,
+        operation_type=operation_type,
+        original_resource_id=original_resource_id,
+        original_resource_code=original_resource_code,
+    )
     if created:
         db.commit()
     return task
@@ -156,6 +206,7 @@ def _compensate_after_commit(
         return _mark_manual_required(db, task_id, f"{step} 缺少可靠补偿：{error}")
     try:
         compensator(db, task)
+        task.current_step = step
         task.status = "RUNNING"
         task.retry_count += 1
         task.last_error = str(error)[:256]

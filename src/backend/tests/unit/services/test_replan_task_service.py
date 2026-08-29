@@ -1,15 +1,17 @@
 import pytest
 from sqlalchemy import event
 
-from core.error_codes import CODE_STATE_CONFLICT
+from core.error_codes import CODE_IDEMPOTENCY_PAYLOAD_MISMATCH, CODE_STATE_CONFLICT
 from core.errors import DomainError
 from models.notification_config import NotificationConfig
 from models.replan_task import ReplanTask
 from services.replan_task_service import (
     StepExecutionError,
+    build_request_fingerprint,
     check_replan_task_preconditions,
     get_or_create_replan_task,
     resume,
+    resume_async,
     start,
 )
 
@@ -78,7 +80,22 @@ def test_start_reuses_existing_task(db_session):
     assert db_session.query(ReplanTask).count() == 1
 
 
+def test_start_rejects_same_key_with_different_fingerprint(db_session):
+    fingerprint = build_request_fingerprint({"reason": "one"})
+    start(db_session, "replan-fingerprint", request_fingerprint=fingerprint)
+
+    with pytest.raises(DomainError) as caught:
+        start(
+            db_session,
+            "replan-fingerprint",
+            request_fingerprint=build_request_fingerprint({"reason": "two"}),
+        )
+
+    assert caught.value.code == CODE_IDEMPOTENCY_PAYLOAD_MISMATCH
+
+
 def test_resume_rolls_back_business_and_task_on_precommit_failure(db_session):
+
     task = start(db_session, "replan-precommit-failure")
 
     def fail_before_commit(db, _task):
@@ -208,3 +225,63 @@ def test_compensatable_postcommit_failure_runs_compensator(
     assert result.current_step == step
     assert result.status == "RUNNING"
     assert result.retry_count == 1
+
+    calls = []
+
+    def retry_successfully(_db, _task):
+        calls.append(step)
+
+    resumed = resume(
+        db_session,
+        task.id,
+        executors={step: retry_successfully},
+    )
+
+    assert calls == [step]
+    assert resumed.current_step != step
+    assert resumed.retry_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("step", ["F007", "F005", "F006"])
+async def test_resume_async_compensation_rewinds_and_retries_step(db_session, step):
+    task = start(db_session, f"replan-async-{step}-compensate")
+    task.current_step = step
+    task.status = "PENDING" if step == "F007" else "RUNNING"
+    db_session.commit()
+    fail_once = True
+    calls = []
+
+    async def execute(_db, _task):
+        nonlocal fail_once
+        calls.append(step)
+        if fail_once:
+            fail_once = False
+            return None
+
+    def fail_after_first_commit(committed_step, _task):
+        if committed_step == step and len(calls) == 1:
+            raise RuntimeError(f"injected {step} after commit")
+
+    compensated = []
+    first = await resume_async(
+        db_session,
+        task.id,
+        executors={step: execute},
+        compensators={step: lambda _db, _task: compensated.append(step)},
+        after_commit_hook=fail_after_first_commit,
+    )
+
+    assert compensated == [step]
+    assert first.current_step == step
+    assert first.retry_count == 1
+
+    second = await resume_async(
+        db_session,
+        task.id,
+        executors={step: execute},
+    )
+
+    assert calls == [step, step]
+    assert second.current_step != step
+    assert second.retry_count == 0
