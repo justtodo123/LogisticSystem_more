@@ -9,6 +9,7 @@ EXPECTED_MODEL_TABLES = {
     "storage_centers",
     "sorting_centers",
     "orders",
+    "outbox_events",
     "goods",
     "packages",
     "vehicles",
@@ -17,6 +18,7 @@ EXPECTED_MODEL_TABLES = {
     "dispatch_batches",
     "node_dispatches",
     "routes",
+    "replan_tasks",
     "exception_events",
     "idempotency_records",
     "notification_configs",
@@ -26,7 +28,7 @@ EXPECTED_MODEL_TABLES = {
 
 
 def test_model_registry_is_complete_and_unique():
-    assert len(MODEL_REGISTRY) == 19
+    assert len(MODEL_REGISTRY) == 21
     assert len(set(MODEL_REGISTRY)) == len(MODEL_REGISTRY)
     assert MODEL_TABLE_NAMES == EXPECTED_MODEL_TABLES
 

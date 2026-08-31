@@ -19,7 +19,7 @@ from utils.schema_management import (
 )
 
 
-HEAD_REVISION = "r2_02b_code_range_allocation"
+HEAD_REVISION = "r2_03_replan_task_claims"
 
 
 def _upgrade(path: Path, revision: str = "head") -> None:
@@ -88,6 +88,175 @@ def _create_stamped_legacy_exception_db(path: Path, *, populated: bool) -> None:
             ("phase7_exception_fields",),
         )
         connection.commit()
+
+
+def test_outbox_events_table_added_from_replan_tasks(tmp_path: Path):
+    database = tmp_path / "outbox-events.db"
+    _upgrade(database, "r2_03_replan_tasks")
+    with sqlite3.connect(database) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert "outbox_events" not in tables
+
+    _upgrade(database)
+    with sqlite3.connect(database) as connection:
+        columns = {
+            item[1]
+            for item in connection.execute("PRAGMA table_info(outbox_events)")
+        }
+        indexes = {
+            item[1]: bool(item[2])
+            for item in connection.execute("PRAGMA index_list(outbox_events)")
+        }
+
+    assert columns == {
+        "id",
+        "dedup_key",
+        "event_type",
+        "payload",
+        "status",
+        "retry_count",
+        "last_error",
+        "available_at",
+        "claim_token",
+        "claimed_by",
+        "claimed_at",
+        "lease_until",
+        "delivered_at",
+        "created_at",
+        "updated_at",
+    }
+    assert indexes["uq_outbox_events_dedup_key"] is True
+    assert indexes["ix_outbox_events_status_available_at"] is False
+    assert indexes["ix_outbox_events_status_lease_until"] is False
+    assert _version(database) == HEAD_REVISION
+
+    command.downgrade(
+        alembic_config(sqlite_database_url(database)),
+        "r2_03_replan_tasks",
+    )
+    with sqlite3.connect(database) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+    assert "outbox_events" not in tables
+    assert _version(database) == "r2_03_replan_tasks"
+
+
+def test_replan_task_execution_claims_are_migrated(tmp_path: Path):
+    database = tmp_path / "replan-task-claims.db"
+    _upgrade(database, "r2_03_outbox_claims")
+
+    with sqlite3.connect(database) as connection:
+        before = {
+            item[1]
+            for item in connection.execute("PRAGMA table_info(replan_tasks)")
+        }
+    assert "claim_token" not in before
+
+    _upgrade(database)
+    with sqlite3.connect(database) as connection:
+        columns = {
+            item[1]
+            for item in connection.execute("PRAGMA table_info(replan_tasks)")
+        }
+        indexes = {
+            item[1]: bool(item[2])
+            for item in connection.execute("PRAGMA index_list(replan_tasks)")
+        }
+
+    assert {"claim_token", "claimed_by", "claimed_step", "claimed_at", "lease_until"} <= columns
+    assert indexes["ix_replan_tasks_status_lease_until"] is False
+    assert _version(database) == HEAD_REVISION
+
+    command.downgrade(
+        alembic_config(sqlite_database_url(database)),
+        "r2_03_outbox_claims",
+    )
+    with sqlite3.connect(database) as connection:
+        after = {
+            item[1]
+            for item in connection.execute("PRAGMA table_info(replan_tasks)")
+        }
+    assert "claim_token" not in after
+    assert _version(database) == "r2_03_outbox_claims"
+
+
+def test_replan_tasks_table_added_from_r2_02b(tmp_path: Path):
+    database = tmp_path / "replan-tasks.db"
+    _upgrade(database, "r2_02b_code_range_allocation")
+    with sqlite3.connect(database) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert "replan_tasks" not in tables
+
+    _upgrade(database)
+    with sqlite3.connect(database) as connection:
+        columns = {
+            item[1]
+            for item in connection.execute("PRAGMA table_info(replan_tasks)")
+        }
+        indexes = {
+            item[1]: bool(item[2])
+            for item in connection.execute("PRAGMA index_list(replan_tasks)")
+        }
+
+    assert columns == {
+        "id",
+        "idempotency_key",
+        "request_fingerprint",
+        "operation_type",
+        "original_resource_id",
+        "original_resource_code",
+        "new_schedule_id",
+        "new_schedule_code",
+        "dispatch_batch_id",
+        "dispatch_batch_code",
+        "new_route_id",
+        "new_route_code",
+        "status",
+        "current_step",
+        "retry_count",
+        "last_error",
+        "version",
+        "manual_required",
+        "claim_token",
+        "claimed_by",
+        "claimed_step",
+        "claimed_at",
+        "lease_until",
+        "created_at",
+        "updated_at",
+    }
+    assert indexes["uq_replan_tasks_idempotency_key"] is True
+    assert indexes["ix_replan_tasks_status_step"] is False
+    assert indexes["ix_replan_tasks_status_lease_until"] is False
+    assert _version(database) == HEAD_REVISION
+
+    command.downgrade(
+        alembic_config(sqlite_database_url(database)),
+        "r2_02b_code_range_allocation",
+    )
+    with sqlite3.connect(database) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+    assert "replan_tasks" not in tables
+    assert _version(database) == "r2_02b_code_range_allocation"
 
 
 def test_code_ranges_table_added_from_r2_02a(tmp_path: Path):

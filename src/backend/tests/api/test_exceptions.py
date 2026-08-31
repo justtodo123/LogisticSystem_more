@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from datetime import datetime
 import json
+from unittest.mock import patch
 
 from main import app
 from models.exception_event import ExceptionEvent
@@ -22,6 +23,9 @@ from models.driver import Driver
 from models.global_schedule import GlobalSchedule
 from models.dispatch_batch import DispatchBatch
 from models.node_dispatch import NodeDispatch
+from models.replan_task import ReplanTask
+from services.replan_service import ReplanService
+from utils.response import success_response
 
 
 @pytest.fixture
@@ -296,7 +300,62 @@ class TestExceptionAPI:
         else:
             assert data["code"] == 40001, f"重规划返回非预期错误: {data}"
     
+    def test_replan_http_key_replay_conflict_and_isolation(
+        self, client, auth_headers, setup_exception_data, db_session
+    ):
+        """HTTP 幂等键贯通 Saga：回放、载荷冲突和不同键隔离。"""
+        event_code = setup_exception_data["exception_event"].event_code
+        body = {"action": "reroute", "reason": "HTTP key propagation"}
+        calls = []
+
+        async def fake_reroute(*, db, original_route_code, replan_reason, **kwargs):
+            key = kwargs["idempotency_key"]
+            task = ReplanTask(
+                idempotency_key=key,
+                request_fingerprint=f"fp:{replan_reason}",
+                operation_type="reroute",
+                original_resource_code=original_route_code,
+                status="COMPLETED",
+                current_step="COMPLETED",
+            )
+            db.add(task)
+            db.commit()
+            calls.append(key)
+            return success_response(data={"task_id": task.id, "new_route_code": key})
+
+        with patch.object(ReplanService, "reroute", new=fake_reroute):
+            first = client.post(
+                f"/api/exceptions/{event_code}/replan",
+                json=body,
+                headers={**auth_headers, "X-Idempotency-Key": "http-saga-key-one"},
+            )
+            replay = client.post(
+                f"/api/exceptions/{event_code}/replan",
+                json=body,
+                headers={**auth_headers, "X-Idempotency-Key": "http-saga-key-one"},
+            )
+            mismatch = client.post(
+                f"/api/exceptions/{event_code}/replan",
+                json={**body, "reason": "different payload"},
+                headers={**auth_headers, "X-Idempotency-Key": "http-saga-key-one"},
+            )
+            isolated = client.post(
+                f"/api/exceptions/{event_code}/replan",
+                json=body,
+                headers={**auth_headers, "X-Idempotency-Key": "http-saga-key-two"},
+            )
+
+        assert first.status_code == replay.status_code == isolated.status_code == 200
+        assert replay.json() == first.json()
+        assert mismatch.status_code == 409
+        assert mismatch.json()["code"] == 40903
+        assert calls == ["http-saga-key-one", "http-saga-key-two"]
+        assert db_session.query(ReplanTask).filter(
+            ReplanTask.idempotency_key.in_(["http-saga-key-one", "http-saga-key-two"])
+        ).count() == 2
+
     def test_replan_exception_not_found(self, client, auth_headers):
+
         """测试异常事件不存在时触发重规划"""
         # 执行
         response = client.post(
