@@ -113,6 +113,7 @@ class DispatchService:
         excluded_vehicles: Optional[List[str]] = None,
         is_replan: bool = False,
         custom_weights: Optional[Dict[str, Any]] = None,
+        commit: bool = True,
     ) -> Dict[str, Any]:
         """
         编排 F005 算法 → 写库（单事务）
@@ -158,8 +159,11 @@ class DispatchService:
             #     (_write_dispatches() → update_state_after_f005())
             batch_code = dispatch_result["batch_code"]
             
-            # 4. 提交事务
-            db.commit()
+            # 4. 由调用方选择事务边界
+            if commit:
+                db.commit()
+            else:
+                db.flush()
             
             # 5. 返回结果
             return success_response(data={
