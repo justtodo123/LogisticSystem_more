@@ -12,8 +12,6 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from core.errors import DomainError
-
 from models.exception_event import ExceptionEvent
 from models.global_schedule import GlobalSchedule
 from models.node_dispatch import NodeDispatch
@@ -339,7 +337,6 @@ class ExceptionService:
         action: str,
         replan_reason: str,
         strategy: Optional[str] = None,
-        idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         触发重规划
@@ -392,7 +389,6 @@ class ExceptionService:
                     replan_reason=replan_reason,
                     event=event,  # 传递异常事件以提取排除参数
                     strategy=strategy or "full",  # T3-1 重规划策略
-                    idempotency_key=idempotency_key,
                 )
 
             elif action == "reroute":
@@ -427,7 +423,6 @@ class ExceptionService:
                     original_route_code=route.route_code,
                     replan_reason=replan_reason,
                     excluded_vehicles=excluded_vehicles if excluded_vehicles else None,
-                    idempotency_key=idempotency_key,
                 )
             else:
                 return error_response(
@@ -444,9 +439,6 @@ class ExceptionService:
 
             return result
 
-        except DomainError:
-            db.rollback()
-            raise
         except Exception as e:
             db.rollback()
             return error_response(code=40001, message=f"重规划失败: {str(e)}")

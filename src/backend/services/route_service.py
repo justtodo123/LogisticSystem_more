@@ -29,7 +29,6 @@ class RouteService:
         db: Session,
         excluded_vehicles: Optional[List[str]] = None,
         custom_weights: Optional[Dict[str, Any]] = None,
-        commit: bool = True,
     ) -> Dict[str, Any]:
         """
         编排 F006 算法 → 写库（单事务）
@@ -95,11 +94,8 @@ class RouteService:
                 db.add(route)
                 routes.append(route_data)
             
-            # 由调用方选择事务边界
-            if commit:
-                db.commit()
-            else:
-                db.flush()
+            # 添加提交逻辑
+            db.commit()
             
             # 5. 构建响应（移除内部 id，仅暴露 _code 业务编号）
             api_routes = []

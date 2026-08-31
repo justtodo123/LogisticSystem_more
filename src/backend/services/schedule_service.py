@@ -151,7 +151,6 @@ class ScheduleService:
         excluded_nodes: Optional[List[str]] = None,
         is_replan: bool = False,
         custom_weights: Optional[Dict[str, Any]] = None,
-        commit: bool = True,
     ) -> Dict[str, Any]:
         """
         创建全局调度方案（预览模式）
@@ -227,10 +226,7 @@ class ScheduleService:
                 explanation_data=explanation,
             )
             db.add(global_schedule_obj)
-            if commit:
-                db.commit()
-            else:
-                db.flush()
+            db.commit()
             
             # 4. 计算 score_display（归一化百分制）
             raw_score = float(schedule_result["score"])
