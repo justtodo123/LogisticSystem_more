@@ -10,7 +10,7 @@
 
 阶段7实现。
 """
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -169,7 +169,6 @@ async def trigger_batch_replan(
 async def trigger_replan(
     event_code: str,
     body: TriggerReplanRequest,
-    request: Request,
     current_user: User = Depends(require_dispatcher_with_idempotency),
     db: Session = Depends(get_db),
 ):
@@ -193,7 +192,6 @@ async def trigger_replan(
         action=body.action,
         replan_reason=body.reason,
         strategy=body.strategy,
-        idempotency_key=request.headers.get("X-Idempotency-Key"),
     )
 
     # 记录埋点
