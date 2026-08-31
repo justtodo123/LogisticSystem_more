@@ -78,7 +78,7 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 
 ## 完成记录
 
-> 当前状态仍为 `pending`：以下是功能分支上的实现与本地验证证据，不代表 PR、CI、合并或发布已完成。
+> 当前状态仍为 `pending`：以下是功能分支上的实现与本地验证证据。PR #13 已创建，CI 进行中，尚未 merge。
 
 ### 已实现状态机与事务边界
 
@@ -140,11 +140,11 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 - `ea4415a` — `feat: add replan task execution claims`
 - `c7f49aa` — `test: cover concurrent replan task execution`
 
-远程分支已存在：`origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`；本地相对远程 ahead 4。当前尚无 R2-03 PR，未执行 push。
+远程分支已存在：`origin/feat/R2-03-replan-saga-outbox` @ `c89b992`。R2-03 PR 已创建：https://github.com/justtodo123/LogisticSystem_more/pull/13 ；CI 进行中，尚未 merge。
 
 ### 语义边界与剩余缺口
 
 - `redispatch(draft_only=True)` 仍走旧路径，不属于当前 Saga 主链。
 - outbox 的数据库去重、claim 与 lease 控制内部并发和重放；若外部邮件/Webhook 不支持幂等令牌，进程在“外部已接收、数据库尚未写回 delivered”之间崩溃时只能保证 **at-least-once**，不得声称 exactly-once。
 - 真实 PostgreSQL、独立 worker 进程重启、外部超时、真实 SMTP/Webhook 失败仍归 R2-05；当前环境未执行，因此 R2-05 保持 `blocked`，SQLite 结果不替代 P1 证据。
-- R2-03 计划卡保持 `pending`，直到获得授权创建 PR，并完成 CI 与 merge；当前下一动作仅是待授权后创建 R2-03 PR，不开始 R2-04B。未获明确授权前不执行 `git push` 或创建 GitHub PR。
+- R2-03 计划卡保持 `pending`，直到 PR #13 CI 通过并 merge；不开始 R2-04B。

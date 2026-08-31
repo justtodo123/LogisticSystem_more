@@ -4,7 +4,7 @@
 - 分支：`feat/R2-03-replan-saga-outbox`；远程分支 `origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`
 - 基线：`origin/main` @ `87190d2`；当前相对基线 ahead 15 / behind 0
 - 决策：`D-R2-SAGA`（`v2026-08-25-r2-freeze`）
-- 状态：`pending`；功能实现与本地验证已完成，尚无 R2-03 PR，必须等待 PR 授权、CI 与 merge 后才能标记 `done`
+- 状态：`pending`；功能实现与本地验证已完成，PR #13 已创建，必须等待 CI 与 merge 后才能标记 `done`
 - 当前唯一 Alembic head：`r2_03_replan_task_claims`
 - 环境边界：Windows 11 + Python 3.13 + SQLite。SQLite 结果只辅助验证 P0 schema/幂等/租约协议，不代表 PostgreSQL、多 worker 或生产并发能力。
 
@@ -277,7 +277,7 @@ python -m alembic -c alembic.ini heads
 - `ea4415a` — `feat: add replan task execution claims`
 - `c7f49aa` — `test: cover concurrent replan task execution`
 
-远程分支已存在：`origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`；本地相对远程 ahead 4。当前尚无 R2-03 PR，未执行 push。
+远程分支已存在：`origin/feat/R2-03-replan-saga-outbox` @ `c89b992`。R2-03 PR 已创建：https://github.com/justtodo123/LogisticSystem_more/pull/13 ；CI 进行中，尚未 merge。
 
 ## 明确未覆盖
 
@@ -286,4 +286,4 @@ python -m alembic -c alembic.ini heads
 - 若外部邮件/Webhook 不支持幂等令牌，worker 在外部成功后、`delivered` 写回前崩溃可能造成重复投递，因此语义为 at-least-once，不是 exactly-once；
 - 未剥离其他非重规划调用点的 fire-and-forget 或同步 SMTP；
 - 未执行 PostgreSQL/Redis/Docker/真实 SMTP/Webhook 验证，也未做独立 worker 进程重启；R2-05 保持 `blocked`；
-- R2-03 计划卡保持 `pending`，直到授权创建 PR、CI 通过并 merge；下一动作仅为待授权后创建 R2-03 PR，不开始 R2-04B。未获明确授权前不执行 `git push` 或创建 GitHub PR。
+- R2-03 计划卡保持 `pending`，直到 PR #13 CI 通过并 merge；不开始 R2-04B。
