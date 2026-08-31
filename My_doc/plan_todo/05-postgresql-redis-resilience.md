@@ -88,4 +88,4 @@ docker compose -f docker-compose.p1.yml -p logistics-r2 up -d --build
 - 第一刀：`psycopg[binary]`、`docker-compose.p1.yml`、CI job `P1 PostgreSQL + Redis 基线`、Postgres 迁移到唯一 head + Redis ping。
 - 本机：未执行 Docker / PostgreSQL / Redis；P1 测试在无 `P1_DATABASE_URL` 时 skip。
 - 未做：CAS/幂等/号段/Saga 在 PostgreSQL 复跑、多 worker 故障注入、备份恢复、跨 worker 登录限流。
-- Commit/PR/CI：尚无
+- 实现提交：`03a3436`。PR：[PR #18](https://github.com/justtodo123/LogisticSystem_more/pull/18)，尚未合并。CI：进行中；未通过、未合并不得标 done。

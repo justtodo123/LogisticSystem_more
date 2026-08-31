@@ -8,8 +8,8 @@
 - 执行人：Codex
 - 层级：P1 外部拓扑（第一刀，未验收完成）
 - Git 分支：feat/R2-05-postgres-redis-gha
-- Commit SHA：尚无
-- PR URL：尚无
+- Commit SHA：03a3436790a7d98342ba04e35386358718c08891
+- PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/18
 - CI run URL（如有）：尚无
 
 ## Schema 与数据来源
@@ -43,11 +43,11 @@ python -m pytest -q -p no:cacheprovider tests/unit/core/test_database_url.py tes
 ## 原始结果与产物
 
 - 命令是否实际执行：本机仅跑不依赖 Postgres 的单元测试；P1 live 测试在无 P1_DATABASE_URL 时 skip
-- GHA Postgres/Redis job：尚未运行
+- GHA Postgres/Redis job：PR #18 已创建，CI 进行中
 - 脱敏检查：已检查；无凭据入库（compose 使用示例口令 logistics/logistics，仅 P1 实验栈）
 
 ## 结论
 
 - 状态：in_progress；未执行 Docker Compose，不得标 done
 - 已知限制：登录限流仍为进程内计数；SQLite StaticPool 不是跨 worker 证明
-- 下一步：提交 PR，用 GHA 跑 Postgres 迁移与 Redis ping；随后复跑 CAS/幂等/Saga/撤权
+- 下一步：等待 PR #18 CI；随后复跑 CAS/幂等/Saga/撤权
