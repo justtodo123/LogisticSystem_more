@@ -20,9 +20,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema: rebuild log_events with new columns."""
-    # SQLite 不支持 ALTER TABLE DROP COLUMN，使用重建策略
-    # 1. 创建新表（使用原始 SQL 确保 AUTOINCREMENT）
-    op.execute("""
+    bind = op.get_bind()
+    if bind.dialect.name == "sqlite":
+        op.execute("""
         CREATE TABLE log_events_new (
             id              INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             event_name      VARCHAR(64) NOT NULL,
@@ -32,8 +32,24 @@ def upgrade() -> None:
             created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
-    """)
-    # 2. 迁移旧数据（将旧字段映射到新字段）
+        """)
+    else:
+        op.create_table(
+            "log_events_new",
+            sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+            sa.Column("event_name", sa.String(length=64), nullable=False),
+            sa.Column("user_id", sa.Integer(), nullable=False),
+            sa.Column("role", sa.String(length=32), nullable=False),
+            sa.Column("event_data", sa.JSON(), nullable=True),
+            sa.Column(
+                "created_at",
+                sa.DateTime(),
+                server_default=sa.text("(CURRENT_TIMESTAMP)"),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.PrimaryKeyConstraint("id"),
+        )
     op.execute("""
         INSERT INTO log_events_new (id, event_name, user_id, role, event_data, created_at)
         SELECT
@@ -45,16 +61,15 @@ def upgrade() -> None:
             created_at
         FROM log_events
     """)
-    # 3. 删除旧表
-    op.drop_table('log_events')
-    # 4. 重命名新表
-    op.rename_table('log_events_new', 'log_events')
-    # ### end Alembic commands ###
+    op.drop_table("log_events")
+    op.rename_table("log_events_new", "log_events")
 
 
 def downgrade() -> None:
     """Downgrade schema: revert to old log_events columns."""
-    op.execute("""
+    bind = op.get_bind()
+    if bind.dialect.name == "sqlite":
+        op.execute("""
         CREATE TABLE log_events_old (
             id              INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             event_type      VARCHAR(32) NOT NULL,
@@ -62,7 +77,22 @@ def downgrade() -> None:
             description     TEXT,
             created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+        """)
+    else:
+        op.create_table(
+            "log_events_old",
+            sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+            sa.Column("event_type", sa.String(length=32), nullable=False),
+            sa.Column("username", sa.String(length=64), nullable=True),
+            sa.Column("description", sa.Text(), nullable=True),
+            sa.Column(
+                "created_at",
+                sa.DateTime(),
+                server_default=sa.text("(CURRENT_TIMESTAMP)"),
+                nullable=False,
+            ),
+            sa.PrimaryKeyConstraint("id"),
+        )
     op.execute("""
         INSERT INTO log_events_old (id, event_type, username, description, created_at)
         SELECT
@@ -73,6 +103,5 @@ def downgrade() -> None:
             created_at
         FROM log_events
     """)
-    op.drop_table('log_events')
-    op.rename_table('log_events_old', 'log_events')
-    # ### end Alembic commands ###
+    op.drop_table("log_events")
+    op.rename_table("log_events_old", "log_events")
