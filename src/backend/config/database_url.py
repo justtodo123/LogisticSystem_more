@@ -5,12 +5,18 @@ from pathlib import Path
 from sqlalchemy.engine import URL, make_url
 
 
+_POSTGRES_DRIVERS = {"postgresql", "postgres", "postgresql+psycopg2"}
+
+
 def resolve_database_url(configured_url: str) -> str:
     """校验并规范化配置的数据库 URL，供运行时和 Alembic 共用。"""
     value = configured_url.strip()
     if not value:
         raise ValueError("DATABASE_URL 不能为空")
-    return make_url(value).render_as_string(hide_password=False)
+    url = make_url(value)
+    if url.drivername in _POSTGRES_DRIVERS:
+        url = url.set(drivername="postgresql+psycopg")
+    return url.render_as_string(hide_password=False)
 
 
 def sqlite_file_path(database_url: str) -> Path | None:
@@ -41,6 +47,24 @@ def engine_connect_args(database_url: str) -> dict[str, object]:
     return {}
 
 
+def engine_create_kwargs(
+    database_url: str,
+    *,
+    pool_size: int = 5,
+    max_overflow: int = 10,
+) -> dict[str, object]:
+    """创建引擎参数：SQLite 仅方言 connect_args，PostgreSQL 启用连接池预检。"""
+    kwargs: dict[str, object] = {"connect_args": engine_connect_args(database_url)}
+    url = make_url(database_url)
+    if not url.drivername.startswith("sqlite"):
+        kwargs.update(
+            pool_pre_ping=True,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+        )
+    return kwargs
+
+
 def redact_database_url(database_url: str) -> str:
     """生成可安全写入日志的 URL，隐藏口令。"""
     url: URL = make_url(database_url)
@@ -49,6 +73,7 @@ def redact_database_url(database_url: str) -> str:
 
 __all__ = [
     "engine_connect_args",
+    "engine_create_kwargs",
     "ensure_sqlite_parent_dir",
     "redact_database_url",
     "resolve_database_url",

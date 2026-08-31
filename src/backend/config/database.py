@@ -4,10 +4,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from config.database_url import (
-    engine_connect_args,
+    engine_create_kwargs,
     ensure_sqlite_parent_dir,
     resolve_database_url,
-    sqlite_file_path,
 )
 from config.settings import settings  # noqa: F401  # 向后兼容：其他模块通过 from config.database import settings 使用
 from models.base import Base
@@ -21,7 +20,11 @@ DATABASE_URL = resolve_database_url(settings.DATABASE_URL)
 ensure_sqlite_parent_dir(DATABASE_URL)
 engine = create_engine(
     DATABASE_URL,
-    connect_args=engine_connect_args(DATABASE_URL),
+    **engine_create_kwargs(
+        DATABASE_URL,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+    ),
 )
 
 # 创建会话工厂

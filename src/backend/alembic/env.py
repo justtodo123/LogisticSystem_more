@@ -55,7 +55,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
-            compare_server_default=True,
+            compare_server_default=connection.dialect.name == "sqlite",
             render_as_batch=connection.dialect.name == "sqlite",
         )
 

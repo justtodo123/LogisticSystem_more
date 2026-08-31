@@ -4,7 +4,7 @@
 > **参考依据**：[大厂后端 SP 标准差距与优化路线图](../reference/大厂后端SP标准差距与优化路线图.md)。
 > **决策基线**：[decisions.md](./decisions.md)（协议冻结 `v2026-08-25-r2-freeze`；治理增补 `v2026-08-25-r2-governance`）。冲突时：代码与验证证据 > 版本化决策 > 本 README > 单卡正文。
 > **第一轮归档**：[第一轮优化计划](../post_plan/第一轮优化计划/)。第一轮文档只追溯，不承担第二轮实时状态。
-> **修订日期**：2026-08-31。R2-02 已通过 PR #10 / #11 / #12 验证并合并；R2-03 已通过 PR #15 / CI 验证并合并；R2-04B 已通过 PR #16 / CI 验证并合并。
+> **修订日期**：2026-08-31。R2-02 已通过 PR #10 / #11 / #12 验证并合并；R2-03 已通过 PR #15 / CI 验证并合并；R2-04B 已通过 PR #16 / CI 验证并合并。R2-05 已启动 GHA Postgres/Redis 第一刀，仍不得标 done。
 
 ## 阅读与状态规则
 
@@ -42,7 +42,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | 02 | P0 | P0 | done | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | R2-02A/B 经 PR #10 / #11 / #12、CI 验证并合并；数据库幂等状态机与原子号段协议完成 |
 | 03 | P0 | P0 | done | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | PR #15 / CI 通过并合并；Saga/outbox 协议与本地故障注入已验证 |
 | 04B | P0 并行 | P0 | done | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | PR #16 / CI 通过并合并；权限矩阵、token version、前后端 can() 已验证 |
-| 05 | P1 | P1 | blocked | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | 真实数据库/缓存/多 worker 集成证据 |
+| 05 | P1 | P1 | in_progress | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | GHA Postgres/Redis 基线进行中；未完成故障注入与多 worker 验收 |
 | 06 | P1/P2 | P1 | pending | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | 最小观测 + load/spike；soak 为 P2 |
 
 ## 依赖主链
@@ -54,11 +54,11 @@ R2-00 (done)
 
 R2-00A + R2-04A -> R2-01 (done) -> R2-02 (done) -> R2-03 (done)
 R2-00A + R2-04A -> R2-04B (done)
-R2-00A + R2-01 + R2-02 + R2-03 -> R2-05
+R2-00A + R2-01 + R2-02 + R2-03 -> R2-05 (in_progress)
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：R2-04B 已通过 PR #16 / CI 并合并。下一张可执行卡为 **R2-05**，但 PostgreSQL/Redis/多 worker 环境仍未就绪，因此保持 `blocked`，不得用 SQLite 结果替代。
+当前下一动作：P0 已全部完成。开展 **R2-05** 第一刀（GHA Postgres/Redis + PostgreSQL 驱动）。故障注入、多 worker 复跑完成前本卡不得标 `done`，不得用 SQLite 结果替代。
 
 ## 当前证据边界
 

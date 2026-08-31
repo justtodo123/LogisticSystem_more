@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     # ── 数据库 ──
     DATABASE_URL: str = "sqlite:///./data/logistics.db"
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
 
     # ── JWT 认证 ──
     JWT_SECRET: str = "default-secret-key-change-in-env"

@@ -9,6 +9,7 @@ python-multipart>=0.0.9
 # ---------- 数据库 ----------
 sqlalchemy>=2.0.0
 alembic>=1.13.0
+psycopg[binary]>=3.2.0
 
 # ---------- 配置与校验 ----------
 pydantic>=2.0.0
