@@ -768,16 +768,13 @@ class ReplanService:
                 operation_type="reroute",
                 original_resource_id=original_route.id,
                 original_resource_code=original_route_code,
+                initial_step="F006",
+                initial_status="RUNNING",
             )
             state: Dict[str, Any] = {
                 "route_codes": [task.new_route_code] if task.new_route_code else []
             }
 
-            if task.current_step == "F007":
-                task.current_step = "F006"
-                task.status = "RUNNING"
-                task.version += 1
-                db.commit()
             if task.current_step in {"NOTIFICATION", "COMPLETED"}:
                 state["route_codes"] = (
                     [task.new_route_code] if task.new_route_code else []

@@ -20,6 +20,7 @@ class ReplanTask(Base):
         CheckConstraint("version >= 1", name="ck_replan_tasks_version"),
         Index("uq_replan_tasks_idempotency_key", "idempotency_key", unique=True),
         Index("ix_replan_tasks_status_step", "status", "current_step"),
+        Index("ix_replan_tasks_status_lease_until", "status", "lease_until"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -40,6 +41,11 @@ class ReplanTask(Base):
     last_error = Column(Text, nullable=True)
     version = Column(Integer, nullable=False, default=1, server_default="1")
     manual_required = Column(Boolean, nullable=False, default=False, server_default="0")
+    claim_token = Column(String(64), nullable=True)
+    claimed_by = Column(String(128), nullable=True)
+    claimed_step = Column(String(16), nullable=True)
+    claimed_at = Column(DateTime, nullable=True)
+    lease_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(
         DateTime,

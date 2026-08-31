@@ -49,6 +49,7 @@ def complete_notification_step(
     *,
     event_type: str,
     payload: Mapping[str, Any],
+    commit: bool = True,
 ) -> OutboxEvent:
     """在同一短事务中完成任务并写入唯一 outbox 事件。"""
     event = enqueue_outbox(
@@ -57,12 +58,13 @@ def complete_notification_step(
         event_type=event_type,
         payload=payload,
     )
-    task.current_step = "COMPLETED"
-    task.status = "COMPLETED"
-    task.last_error = None
-    task.retry_count = 0
-    task.version += 1
-    db.commit()
+    if commit:
+        task.current_step = "COMPLETED"
+        task.status = "COMPLETED"
+        task.last_error = None
+        task.retry_count = 0
+        task.version += 1
+        db.commit()
     return event
 
 

@@ -8,7 +8,7 @@ from scripts.release_migrate import migrate_release_database
 from utils.schema_management import alembic_config, file_sha256, sqlite_database_url
 
 
-HEAD_REVISION = "r2_03_outbox_claims"
+HEAD_REVISION = "r2_03_replan_task_claims"
 
 
 def _version(path: Path) -> str:

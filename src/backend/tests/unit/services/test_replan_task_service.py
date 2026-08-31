@@ -94,9 +94,32 @@ def test_start_rejects_same_key_with_different_fingerprint(db_session):
     assert caught.value.code == CODE_IDEMPOTENCY_PAYLOAD_MISMATCH
 
 
+def test_start_commits_existing_task_fingerprint_backfill(db_session):
+    task = start(db_session, "replan-backfill")
+    assert task.request_fingerprint is None
+
+    fingerprint = build_request_fingerprint({"reason": "backfill"})
+    start(
+        db_session,
+        "replan-backfill",
+        request_fingerprint=fingerprint,
+        operation_type="redispatch",
+        original_resource_id=42,
+        original_resource_code="GS-BACKFILL",
+    )
+
+    db_session.expire_all()
+    persisted = db_session.get(ReplanTask, task.id)
+    assert persisted.request_fingerprint == fingerprint
+    assert persisted.operation_type == "redispatch"
+    assert persisted.original_resource_id == 42
+    assert persisted.original_resource_code == "GS-BACKFILL"
+
+
 def test_resume_rolls_back_business_and_task_on_precommit_failure(db_session):
 
     task = start(db_session, "replan-precommit-failure")
+    initial_version = task.version
 
     def fail_before_commit(db, _task):
         db.add(NotificationConfig(enabled_channels=["console"]))
@@ -109,7 +132,8 @@ def test_resume_rolls_back_business_and_task_on_precommit_failure(db_session):
     persisted = db_session.get(ReplanTask, task.id)
     assert persisted.current_step == "F007"
     assert persisted.status == "PENDING"
-    assert persisted.version == 1
+    assert persisted.version == initial_version + 2
+    assert persisted.claim_token is None
     assert db_session.query(NotificationConfig).count() == 0
 
 
@@ -120,8 +144,10 @@ def test_resume_continues_from_step_after_f007(db_session):
     def finish_f007(_db, _task):
         calls.append("F007")
 
+    initial_version = task.version
     resumed = resume(db_session, task.id, executors={"F007": finish_f007})
     assert resumed.current_step == "F021"
+    assert resumed.version == initial_version + 2
 
     def finish_f021(_db, _task):
         calls.append("F021")
@@ -130,7 +156,8 @@ def test_resume_continues_from_step_after_f007(db_session):
     assert calls == ["F007", "F021"]
     assert resumed.current_step == "F005"
     assert resumed.status == "RUNNING"
-    assert resumed.version == 3
+    assert resumed.version == initial_version + 4
+    assert resumed.claim_token is None
 
 
 def test_f021_postcommit_failure_requires_manual_and_blocks_resume(db_session):
