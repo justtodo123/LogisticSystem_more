@@ -1,0 +1,111 @@
+# P1 topology: PostgreSQL + Redis + multi-worker backend + outbox worker.
+# This is NOT the default docker compose stack. Do not treat SQLite compose as P1.
+# Start on Linux / GHA / VM:
+#   docker compose -f docker-compose.p1.yml -p logistics-r2 up -d --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: logistics-p1-postgres
+    environment:
+      POSTGRES_USER: logistics
+      POSTGRES_PASSWORD: logistics
+      POSTGRES_DB: logistics
+    ports:
+      - "5432:5432"
+    volumes:
+      - logistics-p1-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logistics -d logistics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: logistics-p1-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - logistics-p1-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: logistics-backend:latest
+    container_name: logistics-p1-migrate
+    command: ["python", "scripts/release_migrate.py"]
+    environment:
+      ENV: dev
+      DATABASE_URL: postgresql+psycopg://logistics:logistics@postgres:5432/logistics
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    image: logistics-backend:latest
+    container_name: logistics-p1-backend
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    environment:
+      ENV: dev
+      DATABASE_URL: postgresql+psycopg://logistics:logistics@postgres:5432/logistics
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
+      CORS_ORIGINS: http://localhost:8080
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  outbox-worker:
+    image: logistics-backend:latest
+    container_name: logistics-p1-outbox-worker
+    command: ["python", "scripts/outbox_worker.py", "--worker-id", "compose-outbox-1"]
+    environment:
+      ENV: dev
+      DATABASE_URL: postgresql+psycopg://logistics:logistics@postgres:5432/logistics
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
+      CORS_ORIGINS: http://localhost:8080
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: logistics-frontend:latest
+    container_name: logistics-p1-frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  logistics-p1-pgdata:
+  logistics-p1-redis:

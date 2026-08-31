@@ -1,11 +1,11 @@
 ---
 plan_id: "R2-05"
 title: PostgreSQL、Redis 与故障韧性验证
-status: blocked
+status: in_progress
 priority: P1
 owner: justtodo123
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-31
 depends_on: ["R2-00A", "R2-01", "R2-02", "R2-03"]
 ---
 
@@ -15,7 +15,7 @@ depends_on: ["R2-00A", "R2-01", "R2-02", "R2-03"]
 
 开发默认 SQLite；Redis 失败回退进程内缓存。Compose 当前是 SQLite + 单 worker，**不是**本卡目标拓扑。本机 2026-08-25：无 Docker / WSL / PostgreSQL / Redis。第一轮 02B 仍为 `mitigated`。
 
-**blocked 原因**：P1 环境三条路径均未就绪（见 [D-R2-ENV](./decisions.md)）。解阻条件：GitHub Actions 加上 Postgres/Redis services，或 Linux VM/云主机 Docker Engine 可用。
+**当前动作**：按 [D-R2-ENV](./decisions.md) 走首选路径，给 GitHub Actions 增加 Postgres/Redis service，并补齐 PostgreSQL 驱动。本机仍无 Docker/WSL/PostgreSQL，因此故障注入、多 worker 复跑和备份恢复尚未执行；在这些证据出现前本卡不得标 `done`。
 
 ## 问题与目标
 
@@ -63,11 +63,13 @@ depends_on: ["R2-00A", "R2-01", "R2-02", "R2-03"]
 环境就绪后按实际拓扑记录。**当前仓库 `docker compose up` 仍是 SQLite，不能当本卡命令。** 示例（GHA 或 Linux）：
 
 ```bash
-# 仅在 P1 环境执行
-docker compose -f docker-compose.yml -f docker-compose.p1.yml -p logistics-r2 up -d --build
+# GHA P1 job uses postgres:16-alpine + redis:7-alpine services
 cd src/backend
-python scripts/smoke_local.py --base-url http://127.0.0.1:8000
-python -m pytest -q -p no:cacheprovider
+python scripts/release_migrate.py
+python -m pytest -q -p no:cacheprovider tests/p1 tests/unit/core/test_database_url.py
+
+# Linux / VM only; current Windows host has no Docker
+docker compose -f docker-compose.p1.yml -p logistics-r2 up -d --build
 ```
 
 记录 `docker version` 或 GHA run URL、compose ps、镜像 ID、退出码。
@@ -82,6 +84,8 @@ python -m pytest -q -p no:cacheprovider
 
 ## 完成记录
 
-- 状态：`blocked`（2026-08-25）
-- 阻塞：本机无 Docker/WSL/PostgreSQL/Redis；未配置 GHA Postgres service；第一轮 02B 未完成
-- 解阻后填写：拓扑、版本、数据量、故障矩阵、Commit/PR
+- 状态：`in_progress`（2026-08-31）。不得标 `done`。
+- 第一刀：`psycopg[binary]`、`docker-compose.p1.yml`、CI job `P1 PostgreSQL + Redis 基线`、Postgres 迁移到唯一 head + Redis ping。
+- 本机：未执行 Docker / PostgreSQL / Redis；P1 测试在无 `P1_DATABASE_URL` 时 skip。
+- 未做：CAS/幂等/号段/Saga 在 PostgreSQL 复跑、多 worker 故障注入、备份恢复、跨 worker 登录限流。
+- 实现提交：`03a3436`。PR：[PR #18](https://github.com/justtodo123/LogisticSystem_more/pull/18)，尚未合并。CI：进行中；未通过、未合并不得标 done。

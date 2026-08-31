@@ -9,15 +9,35 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from alembic import command
+from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from sqlalchemy import create_engine
 
-from config.database_url import resolve_database_url, sqlite_file_path
+from config.database_url import engine_create_kwargs, resolve_database_url, sqlite_file_path
 from config.settings import settings
 from utils.schema_management import (
     SchemaKind,
     alembic_config,
     classify_sqlite,
 )
+
+
+def _assert_at_unique_head(config, database_url: str) -> None:
+    """Verify a non-SQLite database reached the unique Alembic head."""
+    head = ScriptDirectory.from_config(config).get_current_head()
+    if head is None:
+        raise RuntimeError("Alembic 迁移图没有唯一 head")
+    engine = create_engine(database_url, **engine_create_kwargs(database_url))
+    try:
+        with engine.connect() as connection:
+            current = MigrationContext.configure(connection).get_current_revision()
+    finally:
+        engine.dispose()
+    if current != head:
+        raise RuntimeError(
+            "PostgreSQL 未到达唯一 head: "
+            f"current={current or '-'}, head={head}"
+        )
 
 
 def migrate_release_database(database_url: str) -> None:
@@ -28,7 +48,7 @@ def migrate_release_database(database_url: str) -> None:
 
     if sqlite_path is None:
         command.upgrade(config, "head")
-        command.check(config)
+        _assert_at_unique_head(config, resolved_url)
         return
 
     classification = classify_sqlite(sqlite_path)

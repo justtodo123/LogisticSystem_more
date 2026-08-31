@@ -12,7 +12,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from config.database import Base, settings
-from config.database_url import engine_connect_args, ensure_sqlite_parent_dir, resolve_database_url
+from config.database_url import engine_create_kwargs, ensure_sqlite_parent_dir, resolve_database_url
 from models.user import User
 from services.auth_service import get_password_hash
 
@@ -22,7 +22,7 @@ def init_users():
     # 创建数据库引擎和会话
     database_url = resolve_database_url(settings.DATABASE_URL)
     ensure_sqlite_parent_dir(database_url)
-    engine = create_engine(database_url, connect_args=engine_connect_args(database_url))
+    engine = create_engine(database_url, **engine_create_kwargs(database_url))
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = SessionLocal()
 
