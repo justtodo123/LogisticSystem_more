@@ -10,7 +10,7 @@
 - Git 分支：feat/R2-04B-rbac-jwt-and-frontend
 - Commit SHA：d6430bea461c457e95a0138f30e90c56924a4207
 - PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/16
-- CI run URL：尚无
+- CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33367522329
 
 ## Schema 与数据来源
 
@@ -58,5 +58,5 @@ npm.cmd run build
 
 ## 结论
 
-- 状态：实现已提交并创建 PR #16，计划卡保持 in_progress，待 CI 通过并 merge 后再标 done
-- 下一步：等待 PR #16 CI 与 merge
+- 状态：done。PR #16 已于 2026-08-31 07:56:10 UTC 合并，merge 520b599，CI run 33367522329 三项均成功。
+- 下一步：R2-05 仍为 blocked；PostgreSQL / Redis / 多 worker 复跑不得用 SQLite 结果替代。
