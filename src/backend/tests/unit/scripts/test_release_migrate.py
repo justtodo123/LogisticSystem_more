@@ -8,6 +8,9 @@ from scripts.release_migrate import migrate_release_database
 from utils.schema_management import alembic_config, file_sha256, sqlite_database_url
 
 
+HEAD_REVISION = "r2_03_replan_task_claims"
+
+
 def _version(path: Path) -> str:
     with sqlite3.connect(path) as connection:
         row = connection.execute(
@@ -22,7 +25,7 @@ def test_release_gate_creates_fresh_database(tmp_path: Path):
 
     migrate_release_database(sqlite_database_url(database))
 
-    assert _version(database) == "r2_02b_code_range_allocation"
+    assert _version(database) == HEAD_REVISION
 
 
 def test_release_gate_accepts_current_head(tmp_path: Path):
@@ -33,7 +36,7 @@ def test_release_gate_accepts_current_head(tmp_path: Path):
 
     migrate_release_database(database_url)
 
-    assert _version(database) == "r2_02b_code_range_allocation"
+    assert _version(database) == HEAD_REVISION
     assert file_sha256(database) == before_hash
 
 
@@ -64,5 +67,5 @@ def test_release_gate_rejects_head_revision_with_schema_drift(
     with pytest.raises(RuntimeError, match="不允许由发布门禁原地修改"):
         migrate_release_database(database_url)
 
-    assert _version(database) == "r2_02b_code_range_allocation"
+    assert _version(database) == HEAD_REVISION
     assert file_sha256(database) == before_hash
