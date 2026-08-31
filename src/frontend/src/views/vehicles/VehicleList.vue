@@ -216,7 +216,7 @@ function statusTag(status: VehicleStatus): string {
         </el-select>
       </template>
       <template #actions>
-        <el-button v-if="authStore.isDispatcher" type="primary" @click="openCreate">
+        <el-button v-if="authStore.can('vehicles:write')" type="primary" @click="openCreate">
           新增车辆
         </el-button>
       </template>
@@ -253,7 +253,7 @@ function statusTag(status: VehicleStatus): string {
           >
             查看
           </el-button>
-          <template v-if="authStore.isDispatcher">
+          <template v-if="authStore.can('vehicles:write')">
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
             <el-button
               type="danger"

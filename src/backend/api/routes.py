@@ -14,7 +14,7 @@ from schemas.route import (  # noqa: F401
 from services.route_service import RouteService
 from services.log_service import LogService, build_route_plan_event_data
 from config.database import get_db
-from api.dependencies import get_current_user, require_dispatcher_with_optional_idempotency
+from api.dependencies import require_permission, require_permission_with_optional_idempotency
 from models.user import User
 
 
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/routes", tags=["路径规划"])
 async def plan_routes(
     request: RoutePlanRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
+    current_user: User = Depends(require_permission_with_optional_idempotency("schedule:execute")),
 ):
     """
     手动触发路径规划（F006）
@@ -61,7 +61,7 @@ async def get_routes(
     page: int = Query(1, description="页码，从 1 开始"),
     page_size: int = Query(20, description="每页数量，默认 20，最大 200"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("schedule:read")),
 ):
     """
     查询路线列表
@@ -82,7 +82,7 @@ async def get_routes(
 async def get_route_detail(
     route_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("schedule:read")),
 ):
     """
     查询路线详情
@@ -101,7 +101,7 @@ async def get_route_coordinates(
     vehicle_code: str,
     batch_code: Optional[str] = Query(None, description="批次编码"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("schedule:read")),
 ):
     """
     查询车辆路线坐标（供前端可视化）

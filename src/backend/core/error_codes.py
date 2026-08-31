@@ -23,6 +23,7 @@ CODE_INTERNAL_ERROR = 50000
 CODE_DATABASE_ERROR = 50001
 CODE_REQUEST_TIMEOUT = 50400
 CODE_REQUEST_BODY_TOO_LARGE = 41300
+CODE_LOGIN_RATE_LIMITED = 42900
 
 # 业务错误码
 CODE_ORDER_NOT_FOUND = 40001
@@ -130,6 +131,13 @@ _ERROR_DEFINITIONS = (
         "idempotency",
         "idempotency_middleware",
     ),
+    _definition(
+        CODE_LOGIN_RATE_LIMITED,
+        HTTPStatus.TOO_MANY_REQUESTS,
+        "登录尝试过于频繁，请稍后重试",
+        "R2-04B",
+        "auth",
+    ),
     _definition(CODE_ORDER_NOT_FOUND, HTTPStatus.NOT_FOUND, "订单不存在", "orders"),
     _definition(CODE_ORDER_STATUS_NOT_ALLOWED, HTTPStatus.CONFLICT, "订单状态不允许当前操作", "orders"),
     _definition(CODE_GOODS_NOT_FOUND, HTTPStatus.NOT_FOUND, "货物不存在", "goods"),
@@ -165,6 +173,7 @@ _STATUS_DEFAULT_CODES: Mapping[int, int] = MappingProxyType(
         HTTPStatus.CONFLICT: CODE_CONFLICT,
         HTTPStatus.UNPROCESSABLE_ENTITY: CODE_PARAM_ERROR,
         HTTPStatus.REQUEST_ENTITY_TOO_LARGE: CODE_REQUEST_BODY_TOO_LARGE,
+        HTTPStatus.TOO_MANY_REQUESTS: CODE_LOGIN_RATE_LIMITED,
         HTTPStatus.INTERNAL_SERVER_ERROR: CODE_INTERNAL_ERROR,
         HTTPStatus.GATEWAY_TIMEOUT: CODE_REQUEST_TIMEOUT,
     }

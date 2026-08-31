@@ -184,7 +184,7 @@ async function deliverPackage(row: PackageItem): Promise<void> {
             查看
           </el-button>
           <el-button
-            v-if="authStore.isDispatcher && row.status === 'in_transit'"
+            v-if="authStore.can('simulation:write') && row.status === 'in_transit'"
             type="primary"
             link
             :loading="deliveringCode === row.package_code"

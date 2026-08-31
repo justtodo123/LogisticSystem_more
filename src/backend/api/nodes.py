@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
 from api.dependencies import (
-    get_current_user,
-    require_dispatcher_with_optional_idempotency,
+    require_permission,
+    require_permission_with_optional_idempotency,
 )
 from schemas.node import StorageCenterCreate, StorageCenterUpdate, SortingCenterCreate, SortingCenterUpdate
 from services.node_service import NodeService
@@ -45,7 +45,7 @@ async def list_nodes(
     node_type: Optional[str] = None,
     level: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("nodes:read"))
 ):
     """节点列表"""
     result = await _load_nodes(page, page_size, node_type, level, db)
@@ -56,7 +56,7 @@ async def list_nodes(
 async def create_storage_center(
     center: StorageCenterCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("nodes:write"))
 ):
     """新增存储中心"""
     result = await NodeService.create_storage_center(center.dict(), db)
@@ -70,7 +70,7 @@ async def update_storage_center(
     node_code: str,
     center: StorageCenterUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("nodes:write"))
 ):
     """编辑存储中心"""
     result = await NodeService.update_storage_center(node_code, center.dict(exclude_unset=True), db)
@@ -83,7 +83,7 @@ async def update_storage_center(
 async def delete_storage_center(
     node_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("nodes:write"))
 ):
     """删除存储中心"""
     result = await NodeService.delete_storage_center(node_code, db)
@@ -96,7 +96,7 @@ async def delete_storage_center(
 async def create_sorting_center(
     center: SortingCenterCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("nodes:write"))
 ):
     """新增分拣中心"""
     result = await NodeService.create_sorting_center(center.dict(), db)
@@ -110,7 +110,7 @@ async def update_sorting_center(
     node_code: str,
     center: SortingCenterUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("nodes:write"))
 ):
     """编辑分拣中心"""
     result = await NodeService.update_sorting_center(node_code, center.dict(exclude_unset=True), db)
@@ -123,7 +123,7 @@ async def update_sorting_center(
 async def delete_sorting_center(
     node_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("nodes:write"))
 ):
     """删除分拣中心"""
     result = await NodeService.delete_sorting_center(node_code, db)
@@ -136,7 +136,7 @@ async def delete_sorting_center(
 async def get_node(
     node_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("nodes:read"))
 ):
     """节点详情"""
     result = await NodeService.get_node(node_code, db)

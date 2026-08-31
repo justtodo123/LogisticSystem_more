@@ -255,14 +255,14 @@ async function handleClose(row: Order): Promise<void> {
       </template>
       <template #actions>
         <el-upload
-          v-if="authStore.isDispatcher"
+          v-if="authStore.can('orders:import')"
           :show-file-list="false"
           :http-request="handleImport"
           accept=".xlsx,.xls,.csv"
         >
           <el-button :loading="importing">Excel 导入</el-button>
         </el-upload>
-        <el-button v-if="authStore.isDispatcher" type="primary" @click="openCreate">
+        <el-button v-if="authStore.can('orders:write')" type="primary" @click="openCreate">
           新增订单
         </el-button>
       </template>
@@ -301,12 +301,12 @@ async function handleClose(row: Order): Promise<void> {
           <el-button type="primary" link @click="openOrderDetail(row.order_code, `订单 · ${row.order_code}`)">
             查看
           </el-button>
-          <template v-if="authStore.isDispatcher && canMutateOrder(row.status)">
+          <template v-if="authStore.can('orders:write') && canMutateOrder(row.status)">
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
           <el-button
-            v-if="authStore.isDispatcher && canCloseOrder(row.status)"
+            v-if="authStore.can('orders:write') && canCloseOrder(row.status)"
             type="warning"
             link
             @click="handleClose(row)"

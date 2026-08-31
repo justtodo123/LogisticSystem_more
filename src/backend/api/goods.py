@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
-from api.dependencies import get_current_user, require_dispatcher_with_optional_idempotency
+from api.dependencies import require_permission, require_permission_with_optional_idempotency
 from schemas.goods import GoodsUpdate
 from services.goods_service import GoodsService
 from config.database import get_db
@@ -25,7 +25,7 @@ async def list_goods(
     node_code: Optional[str] = None,
     order_code: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("goods:read"))
 ):
     """货物列表"""
     result = await GoodsService.get_goods(page, page_size, status, node_code, order_code, db)
@@ -36,7 +36,7 @@ async def list_goods(
 async def get_good(
     goods_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("goods:read"))
 ):
     """货物详情"""
     result = await GoodsService.get_good(goods_code, db)
@@ -48,7 +48,7 @@ async def update_good(
     goods_code: str,
     goods: GoodsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("goods:write"))
 ):
     """编辑货物"""
     result = await GoodsService.update_good(goods_code, goods, db)

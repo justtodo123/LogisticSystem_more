@@ -23,9 +23,9 @@ from services.log_service import LogService, build_global_schedule_event_data
 from schemas.dispatch import NodeDispatchRequest, DispatchBatchListResponse, DispatchBatchResponse
 from config.database import get_db
 from api.dependencies import (
-    get_current_user,
-    require_dispatcher_with_optional_idempotency,
-    require_dispatcher_with_idempotency,
+    require_permission,
+    require_permission_with_optional_idempotency,
+    require_permission_with_idempotency,
 )
 from models.user import User
 
@@ -51,7 +51,7 @@ class GlobalScheduleRequest(BaseModel):
 @router.post("/global")
 async def create_global_schedule(
     body: GlobalScheduleRequest,
-    current_user: User = Depends(require_dispatcher_with_idempotency),
+    current_user: User = Depends(require_permission_with_idempotency("schedule:execute")),
     db: Session = Depends(get_db),
 ):
     """
@@ -94,7 +94,7 @@ async def list_global_schedules(
     page_size: int = Query(default=20, ge=1, le=100, description="每页数量"),
     order_code: Optional[str] = Query(default=None, description="按订单编号筛选"),
     status: Optional[str] = Query(default=None, description="按状态筛选（active/draft，默认过滤 draft）"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("schedule:read")),
     db: Session = Depends(get_db),
 ):
     """
@@ -114,7 +114,7 @@ async def list_global_schedules(
 @router.get("/global/{schedule_code}")
 async def get_global_schedule(
     schedule_code: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("schedule:read")),
     db: Session = Depends(get_db),
 ):
     """
@@ -131,7 +131,7 @@ async def get_global_schedule(
 @router.post("/node-dispatch")
 async def create_node_dispatch(
     body: NodeDispatchRequest,
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
+    current_user: User = Depends(require_permission_with_optional_idempotency("schedule:execute")),
     db: Session = Depends(get_db),
 ):
     """
@@ -172,7 +172,7 @@ async def create_node_dispatch(
 async def list_dispatch_batches(
     schedule_code: Optional[str] = Query(default=None, description="按调度方案筛选"),
     status: Optional[str] = Query(default=None, description="按状态筛选"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("schedule:read")),
     db: Session = Depends(get_db),
 ):
     """
@@ -192,7 +192,7 @@ async def get_dispatch_batch_detail(
     batch_code: str,
     vehicle_code: Optional[str] = Query(default=None, description="按车辆编码过滤"),
     level_phase: Optional[int] = Query(default=None, description="按层级阶段过滤（0=L0→L1，1=L1→L2）"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("schedule:read")),
     db: Session = Depends(get_db),
 ):
     """
@@ -212,7 +212,7 @@ async def get_batch_dispatches(
     batch_code: str,
     vehicle_code: Optional[str] = Query(default=None, description="按车辆编码过滤"),
     level_phase: Optional[int] = Query(default=None, description="按层级阶段过滤（0=L0→L1，1=L1→L2）"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("schedule:read")),
     db: Session = Depends(get_db),
 ):
     """
@@ -232,7 +232,7 @@ async def get_schedule_dispatches(
     schedule_code: str,
     vehicle_code: Optional[str] = Query(default=None, description="按车辆编码过滤"),
     level_phase: Optional[int] = Query(default=None, description="按层级阶段过滤（0=L0→L1，1=L1→L2）"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("schedule:read")),
     db: Session = Depends(get_db),
 ):
     """
@@ -252,7 +252,7 @@ async def get_schedule_dispatches(
 @router.get("/dispatches/{dispatch_code}")
 async def get_dispatch_detail(
     dispatch_code: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("schedule:read")),
     db: Session = Depends(get_db),
 ):
     """
@@ -269,7 +269,7 @@ async def get_dispatch_detail(
 @router.post("/confirm/{schedule_code}")
 async def confirm_schedule(
     schedule_code: str,
-    current_user: User = Depends(require_dispatcher_with_idempotency),
+    current_user: User = Depends(require_permission_with_idempotency("schedule:confirm")),
     db: Session = Depends(get_db),
 ):
     """
@@ -286,7 +286,7 @@ async def confirm_schedule(
 @router.delete("/draft/{schedule_code}")
 async def discard_draft(
     schedule_code: str,
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
+    current_user: User = Depends(require_permission_with_optional_idempotency("schedule:execute")),
     db: Session = Depends(get_db),
 ):
     """

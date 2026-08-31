@@ -27,6 +27,7 @@ from api.export import router as export_router
 from api.erp_webhook import router as erp_webhook_router
 from api.reports import router as reports_router
 from api.ai_confirmation import router as ai_confirmation_router
+from api.users import router as users_router
 from config.settings import settings
 from core.error_codes import (
     CODE_DATABASE_ERROR,
@@ -101,6 +102,7 @@ app.add_middleware(AuditLogMiddleware)
 
 # 注册认证路由
 app.include_router(auth_router)
+app.include_router(users_router)
 
 # 注册基础数据管理路由
 app.include_router(orders_router)
@@ -158,9 +160,14 @@ async def domain_exception_handler(request: Request, exc: DomainError):
             type(exc.cause).__name__,
             request_log_context(request),
         )
+    headers = {}
+    retry_after = exc.meta.get("retry_after") if isinstance(exc.meta, dict) else None
+    if isinstance(retry_after, (int, float)) and retry_after >= 0:
+        headers["Retry-After"] = str(int(retry_after))
     return JSONResponse(
         status_code=exc.http_status,
         content=error_response(exc.code, exc.public_message, meta=exc.meta),
+        headers=headers or None,
     )
 
 

@@ -19,10 +19,17 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from config.database import get_db, settings
-from core.error_codes import CODE_SUCCESS
+from core.error_codes import (
+    CODE_FORBIDDEN,
+    CODE_SUCCESS,
+    CODE_TOKEN_EXPIRED,
+    CODE_UNAUTHORIZED,
+)
 from schemas.order import GoodsCreate, OrderCreate
 from services.order_service import OrderService
 from services.auth_service import get_user_by_username
+from core.errors import DomainError
+from core.permissions import user_has_permission
 from middleware.idempotency import claim_idempotency
 
 router = APIRouter(prefix="/api/erp", tags=["ERP 对接"])
@@ -59,23 +66,32 @@ async def verify_erp_auth(
         return ErpPrincipal(caller_scope=f"erp-api-key:{key_identity}")
 
     if credentials is None:
-        raise HTTPException(status_code=401, detail="未登录或缺少认证")
+        raise DomainError(CODE_UNAUTHORIZED)
     try:
         payload = jwt.decode(credentials.credentials, settings.JWT_SECRET, algorithms=["HS256"])
         username = payload.get("sub")
         if not username:
-            raise HTTPException(status_code=401, detail="未登录或 Token 无效")
+            raise DomainError(CODE_UNAUTHORIZED)
         user = get_user_by_username(db, username)
         if user is None or not user.is_active:
-            raise HTTPException(status_code=401, detail="未登录或 Token 无效")
-        if user.role not in ("dispatcher", "admin"):
-            raise HTTPException(status_code=403, detail="无权限推送订单（仅 dispatcher/admin）")
+            raise DomainError(CODE_UNAUTHORIZED)
+        raw_tv = payload.get("tv", 0)
+        try:
+            token_version = int(raw_tv)
+        except (TypeError, ValueError):
+            token_version = 0
+        if token_version != int(user.token_version or 0):
+            raise DomainError(CODE_UNAUTHORIZED)
+        if not user_has_permission(user, "orders:write"):
+            raise DomainError(CODE_FORBIDDEN)
         request.state.current_user = user
         return ErpPrincipal(caller_scope=f"user:{user.username}")
+    except DomainError:
+        raise
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token 已过期，请重新登录")
+        raise DomainError(CODE_TOKEN_EXPIRED)
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="未登录或 Token 无效")
+        raise DomainError(CODE_UNAUTHORIZED)
 
 
 async def verify_erp_auth_with_optional_idempotency(

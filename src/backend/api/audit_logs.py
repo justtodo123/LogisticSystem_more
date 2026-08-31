@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from config.database import get_db
-from api.dependencies import get_current_user
+from api.dependencies import require_permission
 from models.user import User
 from services.log_service import LogService
 from utils.response import success_response, error_response
@@ -25,14 +25,10 @@ async def list_audit_logs(
     end_time: Optional[datetime] = Query(None, description="结束时间（ISO 8601）"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("audit:read")),
     db: Session = Depends(get_db),
 ):
     """查询审计日志（分页）"""
-    # 权限检查：仅 admin / dispatcher 可查看审计日志
-    if current_user.role not in ("admin", "dispatcher"):
-        return error_response(code=40301, message="无审计日志查询权限")
-
     events = LogService.get_events(
         user_id=user_id,
         event_name=event_name,

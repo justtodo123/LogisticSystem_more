@@ -29,22 +29,27 @@ interface MenuItem {
   index: string
   label: string
   icon: Component
+  permission?: string
 }
 
 const menuItems: MenuItem[] = [
-  { index: '/dashboard', label: '调度工作台', icon: Monitor },
-  { index: '/orders', label: '订单管理', icon: ShoppingCart },
-  { index: '/goods', label: '货物管理', icon: Box },
-  { index: '/packages', label: '包裹管理', icon: SetUp },
-  { index: '/vehicles', label: '车辆管理', icon: Van },
-  { index: '/drivers', label: '司机管理', icon: User },
-  { index: '/nodes/storage', label: '存储中心', icon: OfficeBuilding },
-  { index: '/nodes/sorting', label: '分拣中心', icon: Location },
-  { index: '/arrival-confirm', label: '节点到货确认', icon: DocumentChecked },
-  { index: '/exceptions', label: '异常管理', icon: Warning },
-  { index: '/notifications', label: '消息通知', icon: Bell },
-  { index: '/reports', label: '报表分析', icon: TrendCharts },
+  { index: '/dashboard', label: '调度工作台', icon: Monitor, permission: 'schedule:read' },
+  { index: '/orders', label: '订单管理', icon: ShoppingCart, permission: 'orders:read' },
+  { index: '/goods', label: '货物管理', icon: Box, permission: 'goods:read' },
+  { index: '/packages', label: '包裹管理', icon: SetUp, permission: 'packages:read' },
+  { index: '/vehicles', label: '车辆管理', icon: Van, permission: 'vehicles:read' },
+  { index: '/drivers', label: '司机管理', icon: User, permission: 'drivers:read' },
+  { index: '/nodes/storage', label: '存储中心', icon: OfficeBuilding, permission: 'nodes:read' },
+  { index: '/nodes/sorting', label: '分拣中心', icon: Location, permission: 'nodes:read' },
+  { index: '/arrival-confirm', label: '节点到货确认', icon: DocumentChecked, permission: 'arrivals:confirm' },
+  { index: '/exceptions', label: '异常管理', icon: Warning, permission: 'exceptions:read' },
+  { index: '/notifications', label: '消息通知', icon: Bell, permission: 'notifications:read' },
+  { index: '/reports', label: '报表分析', icon: TrendCharts, permission: 'reports:read' },
 ]
+
+const visibleMenuItems = computed(() =>
+  menuItems.filter((item) => !item.permission || authStore.can(item.permission)),
+)
 
 const menuTitleMap = Object.fromEntries(menuItems.map((item) => [item.index, item.label]))
 
@@ -87,7 +92,7 @@ function handleLogout() {
           :active-text-color="'var(--layout-sidebar-active-text)'"
         >
           <el-menu-item
-            v-for="item in menuItems"
+            v-for="item in visibleMenuItems"
             :key="item.index"
             :index="item.index"
           >

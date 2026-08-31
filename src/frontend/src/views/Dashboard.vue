@@ -157,7 +157,7 @@ async function onAiDraftCreated(scheduleCode: string): Promise<void> {
         </p>
       </div>
       <div class="dashboard-toolbar">
-        <template v-if="authStore.isDispatcher">
+        <template v-if="authStore.can('schedule:execute')">
           <el-button
             type="primary"
             :loading="generating"
@@ -226,7 +226,7 @@ async function onAiDraftCreated(scheduleCode: string): Promise<void> {
     </div>
 
     <OrderSelectPanel
-      v-if="authStore.isDispatcher"
+      v-if="authStore.can('schedule:execute')"
       @selection-change="onOrderSelectionChange"
     />
 
@@ -267,7 +267,7 @@ async function onAiDraftCreated(scheduleCode: string): Promise<void> {
 
       <el-divider content-position="left">节点间调度</el-divider>
 
-      <div v-if="authStore.isDispatcher" class="dispatch-toolbar">
+      <div v-if="authStore.can('schedule:execute')" class="dispatch-toolbar">
         <el-tooltip content="课堂演示：跳过 L1 等待，一次看到 L0→L1 与 L1→L2 任务">
           <div class="demo-switch">
             <span>demo_mode</span>
@@ -300,7 +300,7 @@ async function onAiDraftCreated(scheduleCode: string): Promise<void> {
       <UnallocatedAlert :codes="batchDetail?.unallocated_packages" />
 
       <div
-        v-if="authStore.isDispatcher && batchDetail"
+        v-if="authStore.can('schedule:execute') && batchDetail"
         class="simulation-toolbar"
       >
         <el-tooltip
@@ -332,7 +332,7 @@ async function onAiDraftCreated(scheduleCode: string): Promise<void> {
       <el-divider content-position="left">路线可视化</el-divider>
 
       <div
-        v-if="authStore.isDispatcher && showPlanButton"
+        v-if="authStore.can('schedule:execute') && showPlanButton"
         class="route-toolbar"
       >
         <el-button
@@ -387,7 +387,7 @@ async function onAiDraftCreated(scheduleCode: string): Promise<void> {
             {{ selectedPackage.total_time.toFixed(0) }} min
           </el-descriptions-item>
         </el-descriptions>
-        <div v-if="authStore.isDispatcher && selectedPackage" class="drawer-actions">
+        <div v-if="authStore.can('schedule:execute') && selectedPackage" class="drawer-actions">
           <el-button
             type="primary"
             plain
@@ -434,7 +434,7 @@ async function onAiDraftCreated(scheduleCode: string): Promise<void> {
     </template>
 
     <AiAssistantPanel
-      v-if="authStore.isDispatcher"
+      v-if="authStore.can('schedule:execute')"
       :schedules="schedules"
       :selected-schedule-code="selectedCode"
       @draft-created="onAiDraftCreated"

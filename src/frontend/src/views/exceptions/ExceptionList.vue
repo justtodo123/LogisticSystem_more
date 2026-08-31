@@ -331,7 +331,7 @@ function statusInfo(status: ExceptionStatus) {
       </template>
       <template #actions>
         <el-button
-          v-if="authStore.isDispatcher"
+          v-if="authStore.can('exceptions:write')"
           type="warning"
           :loading="batchReplanning"
           :disabled="selectedOpenCodes.length === 0"
@@ -339,7 +339,7 @@ function statusInfo(status: ExceptionStatus) {
         >
           批量重规划{{ selectedOpenCodes.length ? `（${selectedOpenCodes.length}）` : '' }}
         </el-button>
-        <el-button v-if="authStore.isDispatcher" type="primary" @click="openCreate">
+        <el-button v-if="authStore.can('exceptions:write')" type="primary" @click="openCreate">
           录入异常
         </el-button>
       </template>
@@ -405,7 +405,7 @@ function statusInfo(status: ExceptionStatus) {
           >
             查看
           </el-button>
-          <template v-if="authStore.isDispatcher && row.status === 'open'">
+          <template v-if="authStore.can('exceptions:write') && row.status === 'open'">
             <el-button
               type="primary"
               link

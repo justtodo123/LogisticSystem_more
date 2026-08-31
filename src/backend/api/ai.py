@@ -23,7 +23,7 @@ from services.dispatch_service import DispatchService
 from services.exception_service import ExceptionService
 from services.ai_suggestion_service import create_suggestion
 from core.ai_guard import classify_suggestion_level
-from api.dependencies import get_current_user_with_optional_idempotency
+from api.dependencies import require_permission_with_optional_idempotency
 from models.user import User
 from utils.response import success_response, error_response
 
@@ -35,7 +35,7 @@ router = APIRouter(prefix="/api/ai", tags=["AI 助手"])
 @router.post("/parse", response_model=Dict[str, Any])
 async def parse_natural_language(
     request: AiParseRequest,
-    current_user: User = Depends(get_current_user_with_optional_idempotency),
+    current_user: User = Depends(require_permission_with_optional_idempotency("ai:use")),
     db: Session = Depends(get_db)
 ):
     """
@@ -344,7 +344,7 @@ async def _execute_replan(
 @router.post("/explain")
 async def explain_schedule(
     request: AiExplainRequest,
-    current_user: User = Depends(get_current_user_with_optional_idempotency),
+    current_user: User = Depends(require_permission_with_optional_idempotency("ai:use")),
     db: Session = Depends(get_db)
 ):
     """
@@ -409,7 +409,7 @@ async def explain_schedule(
 @router.post("/review")
 async def review_schedule(
     request: AiReviewRequest,
-    current_user: User = Depends(get_current_user_with_optional_idempotency),
+    current_user: User = Depends(require_permission_with_optional_idempotency("ai:use")),
     db: Session = Depends(get_db)
 ):
     """
@@ -469,7 +469,7 @@ async def review_schedule(
 @router.post("/analyze-exception")
 async def analyze_exception(
     request: AiAnalyzeExceptionRequest,
-    current_user: User = Depends(get_current_user_with_optional_idempotency),
+    current_user: User = Depends(require_permission_with_optional_idempotency("ai:use")),
     db: Session = Depends(get_db)
 ):
     """

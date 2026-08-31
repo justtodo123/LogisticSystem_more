@@ -1,74 +1,85 @@
-"""
-权限控制模块
+"""Permission catalog and role mapping for R2-04B."""
+from __future__ import annotations
 
-定义权限位、角色-权限映射。
+from typing import Iterable
 
-FastAPI 权限依赖工厂（require_role / require_permission）
-位于 api/dependencies.py 中，避免循环导入。
-"""
-from typing import List
 from models.user import User
 
 
-# ── 权限位定义 ──
-
 PERMISSIONS: dict[str, str] = {
-    "orders:read":       "查看订单",
-    "orders:write":      "创建/编辑订单",
-    "orders:import":     "批量导入订单",
-    "schedule:read":     "查看调度方案",
-    "schedule:execute":  "执行调度",
-    "schedule:confirm":  "确认调度方案",
-    "vehicles:read":     "查看车辆",
-    "vehicles:write":    "管理车辆",
-    "drivers:read":      "查看司机",
-    "drivers:write":     "管理司机",
-    "nodes:read":        "查看节点",
-    "nodes:write":       "管理节点",
-    "packages:read":     "查看包裹",
-    "exceptions:read":   "查看异常",
-    "exceptions:write":  "操作异常/重规划",
-    "simulation:write":  "执行模拟",
-    "ai:use":            "调用 AI 助手",
-    "audit:read":        "查看审计日志",
-    "admin:users":       "管理用户",
+    "orders:read": "view orders",
+    "orders:write": "create or edit orders",
+    "orders:import": "import orders",
+    "goods:read": "view goods",
+    "goods:write": "edit goods",
+    "schedule:read": "view schedules",
+    "schedule:execute": "execute schedules",
+    "schedule:confirm": "confirm schedules",
+    "arrivals:confirm": "confirm arrivals",
+    "vehicles:read": "view vehicles",
+    "vehicles:write": "manage vehicles",
+    "drivers:read": "view drivers",
+    "drivers:write": "manage drivers",
+    "nodes:read": "view nodes",
+    "nodes:write": "manage nodes",
+    "packages:read": "view packages",
+    "packages:write": "repack packages",
+    "exceptions:read": "view exceptions",
+    "exceptions:write": "handle exceptions and replans",
+    "simulation:write": "run simulation",
+    "ai:use": "use AI assistant",
+    "audit:read": "view audit logs",
+    "export:read": "export reports",
+    "reports:read": "view reports",
+    "notifications:read": "view notification config",
+    "notifications:write": "change notification config",
+    "admin:users": "manage users",
 }
 
-
-# ── 角色-权限映射 ──
-
-# 仓库管理员（warehouse_operator）与 manager 等价，共用同一权限集，避免两处漂移
-WAREHOUSE_OPERATOR_PERMISSIONS: List[str] = [
-    "orders:read", "orders:write", "orders:import",
-    "packages:read", "nodes:read",
-    "vehicles:read", "drivers:read",
+WAREHOUSE_OPERATOR_PERMISSIONS: list[str] = [
+    "orders:read",
+    "orders:write",
+    "orders:import",
+    "goods:read",
+    "packages:read",
+    "nodes:read",
+    "vehicles:read",
+    "drivers:read",
+    "reports:read",
+    "notifications:read",
 ]
 
-ROLE_PERMISSIONS: dict[str, List[str]] = {
+VIEWER_PERMISSIONS: list[str] = [
+    "orders:read",
+    "goods:read",
+    "schedule:read",
+    "vehicles:read",
+    "drivers:read",
+    "nodes:read",
+    "packages:read",
+    "exceptions:read",
+    "reports:read",
+    "notifications:read",
+]
+
+ROLE_PERMISSIONS: dict[str, list[str]] = {
     "admin": list(PERMISSIONS.keys()),
-    "dispatcher": [
-        "orders:read", "orders:write", "orders:import",
-        "schedule:read", "schedule:execute", "schedule:confirm",
-        "vehicles:read", "vehicles:write",
-        "drivers:read", "drivers:write",
-        "nodes:read",
-        "packages:read",
-        "exceptions:read", "exceptions:write",
-        "simulation:write",
-        "ai:use",
-        "audit:read",
-    ],
-    "viewer": [
-        "orders:read", "schedule:read",
-        "vehicles:read", "drivers:read",
-        "nodes:read", "packages:read",
-        "exceptions:read",
-    ],
+    "dispatcher": [perm for perm in PERMISSIONS if perm != "admin:users"],
+    "viewer": VIEWER_PERMISSIONS,
     "warehouse_operator": WAREHOUSE_OPERATOR_PERMISSIONS,
-    "manager": WAREHOUSE_OPERATOR_PERMISSIONS,
+    "manager": list(WAREHOUSE_OPERATOR_PERMISSIONS),
 }
 
+KNOWN_ROLES = frozenset(ROLE_PERMISSIONS)
 
-def get_user_permissions(user: User) -> List[str]:
-    """获取用户的有效权限列表"""
-    return ROLE_PERMISSIONS.get(user.role, [])
+
+def normalize_permissions(permissions: Iterable[str]) -> list[str]:
+    return sorted(set(permissions))
+
+
+def get_user_permissions(user: User) -> list[str]:
+    return normalize_permissions(ROLE_PERMISSIONS.get(user.role, []))
+
+
+def user_has_permission(user: User, permission: str) -> bool:
+    return permission in get_user_permissions(user)

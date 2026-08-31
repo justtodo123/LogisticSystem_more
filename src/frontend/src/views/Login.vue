@@ -35,8 +35,10 @@ async function handleSubmit() {
   loading.value = true
   try {
     await authStore.login(form.username, form.password)
-    const redirect = (route.query.redirect as string) || '/dashboard'
-    await router.push(redirect)
+    const redirect = route.query.redirect as string | undefined
+    const fallback = authStore.firstAllowedPath()
+    const target = redirect && redirect !== '/login' ? redirect : fallback
+    await router.push(target)
   } catch (error) {
     const message = error instanceof Error ? error.message : '登录失败'
     ElMessage.error(message)
