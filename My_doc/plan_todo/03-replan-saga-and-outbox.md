@@ -5,7 +5,7 @@ status: pending
 priority: P0
 owner: justtodo123
 created: 2026-08-25
-updated: 2026-08-29
+updated: 2026-08-31
 depends_on: ["R2-01", "R2-02"]
 ---
 
@@ -82,10 +82,11 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 
 ### 已实现状态机与事务边界
 
-- Alembic 当前唯一 head：`r2_03_outbox_claims`；迁移链依次包含 `r2_03_replan_tasks`、`r2_03_outbox_events` 与 leased claims 增量。
+- Alembic 当前唯一 head：`r2_03_replan_task_claims`；迁移链依次包含 `r2_03_replan_tasks`、`r2_03_outbox_events`、`r2_03_outbox_claims` 与 `r2_03_replan_task_claims`。
 - `replan_tasks` 以唯一 `idempotency_key` 记录 `F007 → F021 → F005 → F006 → NOTIFICATION → COMPLETED`、重试、错误、版本及 `manual_required`。
+- `replan_tasks` 增加 `claim_token` / `claimed_by` / `claimed_step` / `claimed_at` / `lease_until`。步骤执行先按条件更新抢占租约，再用 claim token fencing 推进、补偿或转人工；默认租约 300 秒，过期可回收，过期后的旧 token 不能 finalize 或提交业务写入。
 - `redispatch()` 非 draft 主链通过 `start()` 与 `resume_async()` 按持久化 `current_step` 推进；F007/F021/F005/F006 下层调用使用 `commit=False`，业务写入与 task 步骤由编排层逐步提交。
-- `reroute()` 通过同一套 `start()` / `resume_async()` 推进 F006 与 NOTIFICATION；route 下层使用 `commit=False`，重复 key 重放完成结果。
+- `reroute()` 通过 `start(initial_step="F006", initial_status="RUNNING")` 与 `resume_async()` 直接从 F006 初始化并推进 NOTIFICATION；route 下层使用 `commit=False`，重复 key 重放完成结果。
 - `NOTIFICATION` 将任务完成与唯一 outbox 事件同行提交；请求路径不执行 SMTP/Webhook，独立 Session worker 负责 retry、delivered、dead-letter。
 - D-R2-SAGA 已覆盖：F007 draft 可补偿；F021 提交后转人工；F005 未发车可作废、`in_transit` 转人工；F006 未执行可删、已执行转人工。
 
@@ -102,6 +103,11 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 | reroute 重复 idempotency key | 返回同一 task，不重复创建 route/outbox |
 | reroute route 写入后、commit 前异常 | 新 route rollback，task 停留 F006 |
 | reroute 已执行后异常 | task 进入 `manual_required` |
+| 活跃 task lease | 第二 worker 无法抢占同一当前步骤 |
+| 过期 task lease | 可被回收，新 token 继续执行 |
+| 过期后的旧 claim token | 不能 finalize 步骤，也不能提交业务写入 |
+| 并发 resume 同一步骤 | 仅执行一次 |
+| 并发 NOTIFICATION | 只创建一条 outbox 事件 |
 
 ### 分层验证证据
 
@@ -110,9 +116,10 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 1. `3965855`（第一优先）：HTTP 幂等贯通、补偿后 `current_step` 恢复、任务产物引用、redispatch 版本链 `1→2→3`；聚焦测试 **114 passed**。
 2. `ffba2f0`（第二优先）：`tests/integration/test_exception_replan.py` 已无 TODO/空 `pass`，覆盖真实 HTTP + `X-Idempotency-Key`；该文件与 `test_exceptions.py` 合计 **20 passed**。
 3. `71e7506`（第三优先）：outbox 增加 `processing` / `claim_token` / lease、原子 claim、租约回收，以及独立 Session worker `src/backend/scripts/outbox_worker.py`；聚焦测试 **101 passed**；Alembic head 推进为 `r2_03_outbox_claims`。
-4. `ffec6bb`（第四优先）：`test_release_migrate.py` 的期望 head 更新为 `r2_03_outbox_claims`；完整后端命令 `python -m pytest -q -p no:cacheprovider tests` 结果为 **899 passed, 269 warnings in 173.43s**；`alembic heads` 唯一输出 `r2_03_outbox_claims (head)`。
+4. `ffec6bb`（第四优先）：`test_release_migrate.py` 的期望 head 更新为 `r2_03_outbox_claims`；当时完整后端命令结果为 **899 passed, 269 warnings in 173.43s**；当时 `alembic heads` 唯一输出 `r2_03_outbox_claims (head)`。
+5. `ea4415a` / `c7f49aa`（第五优先）：`replan_tasks` 增加 leased execution claims 与 token fencing；`reroute()` 直接从 F006 初始化；Alembic head 推进为 `r2_03_replan_task_claims`。并发/任务聚焦测试 **24 passed**（`test_replan_task_service.py` 17 项 + `test_replan_task_concurrency.py` 7 项）。完整后端命令 `python -m pytest -q -p no:cacheprovider tests` 结果为 **908 passed, 271 warnings in 184.88s**；`alembic heads` 唯一输出 `r2_03_replan_task_claims (head)`。
 
-完整后端测试中的 899 passed 不替代上述各组聚焦测试的场景说明；聚焦测试数字也不声称等同于完整回归。
+完整后端测试中的 908 passed 不替代上述各组聚焦测试的场景说明；聚焦测试数字也不声称等同于完整回归。SQLite 结果只辅助验证 P0 schema、幂等和租约协议，不代表 PostgreSQL、多 worker 或生产并发能力。
 
 详细记录：[20260829-R2-03-replan-saga-outbox.md](./experiments/20260829-R2-03-replan-saga-outbox.md)。
 
@@ -129,12 +136,15 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 - `ffba2f0` — `test: add real replan saga integration coverage`
 - `71e7506` — `fix: add leased outbox delivery claims`
 - `ffec6bb` — `test: update release migration head expectation`
+- `17b4f73` — `docs: record R2-03 implementation evidence`
+- `ea4415a` — `feat: add replan task execution claims`
+- `c7f49aa` — `test: cover concurrent replan task execution`
 
-远程分支已存在：`origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`；当前尚无 R2-03 PR。
+远程分支已存在：`origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`；本地相对远程 ahead 4。当前尚无 R2-03 PR，未执行 push。
 
 ### 语义边界与剩余缺口
 
 - `redispatch(draft_only=True)` 仍走旧路径，不属于当前 Saga 主链。
 - outbox 的数据库去重、claim 与 lease 控制内部并发和重放；若外部邮件/Webhook 不支持幂等令牌，进程在“外部已接收、数据库尚未写回 delivered”之间崩溃时只能保证 **at-least-once**，不得声称 exactly-once。
-- 真实 PostgreSQL、独立 worker 进程重启、外部超时和真实 SMTP 失败仍归 R2-05；当前环境未执行，因此 R2-05 保持 `blocked`，SQLite 结果不替代 P1 证据。
-- R2-03 计划卡保持 `pending`，直到获得授权创建 PR，并完成 CI 与 merge；当前下一动作仅是待授权后创建 R2-03 PR，不开始 R2-04B。
+- 真实 PostgreSQL、独立 worker 进程重启、外部超时、真实 SMTP/Webhook 失败仍归 R2-05；当前环境未执行，因此 R2-05 保持 `blocked`，SQLite 结果不替代 P1 证据。
+- R2-03 计划卡保持 `pending`，直到获得授权创建 PR，并完成 CI 与 merge；当前下一动作仅是待授权后创建 R2-03 PR，不开始 R2-04B。未获明确授权前不执行 `git push` 或创建 GitHub PR。

@@ -1,12 +1,12 @@
 # R2-03 实验记录：重规划 Saga、transactional outbox 与 leased claims
 
-- 日期：2026-08-29
+- 日期：2026-08-31
 - 分支：`feat/R2-03-replan-saga-outbox`；远程分支 `origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`
-- 基线：`origin/main` @ `87190d2`；当前相对基线 ahead 11 / behind 0
+- 基线：`origin/main` @ `87190d2`；当前相对基线 ahead 15 / behind 0
 - 决策：`D-R2-SAGA`（`v2026-08-25-r2-freeze`）
 - 状态：`pending`；功能实现与本地验证已完成，尚无 R2-03 PR，必须等待 PR 授权、CI 与 merge 后才能标记 `done`
-- 当前唯一 Alembic head：`r2_03_outbox_claims`
-- 环境边界：Windows 11 + Python 3.13 + SQLite。SQLite 结果只辅助验证 P0 schema/幂等协议，不代表 PostgreSQL、多 worker 或生产并发能力。
+- 当前唯一 Alembic head：`r2_03_replan_task_claims`
+- 环境边界：Windows 11 + Python 3.13 + SQLite。SQLite 结果只辅助验证 P0 schema/幂等/租约协议，不代表 PostgreSQL、多 worker 或生产并发能力。
 
 ## 当前 commit 点与外部 I/O
 
@@ -172,7 +172,7 @@ python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_ser
 
 ## Step 7 reroute 收口
 
-- `reroute()` 复用 `replan_tasks` 的 `start()` / `resume_async()`，首次将任务从 F007 定位到 F006，再按 F006 → NOTIFICATION → COMPLETED 推进。
+- `reroute()` 复用 `replan_tasks` 的 `start(initial_step="F006", initial_status="RUNNING")` / `resume_async()`，直接从 F006 初始化，再按 F006 → NOTIFICATION → COMPLETED 推进。
 - RouteService 使用 `commit=False`；route 版本链与 task 步骤由编排层一次提交。NOTIFICATION 与 outbox 同行提交。
 - 相同 idempotency key 完成后重放持久化 route 结果，不重复创建 route/outbox。
 - F006 route 写入后、commit 前异常整体 rollback；提交后检测为已执行的异常进入 `manual_required`，未执行路线可由补偿器删除。
@@ -226,7 +226,39 @@ python -m alembic -c alembic.ini heads
 # exit 0: r2_03_outbox_claims (head)
 ```
 
-**证据分层说明**：114、20、101 passed 分别证明特定功能与故障边界；899 passed 是完整后端回归。不得将这些数字混写成同一组测试结果，也不得用完整回归替代聚焦场景说明。
+**证据分层说明**：114、20、101、24 passed 分别证明特定功能与故障边界；908 passed 是当前完整后端回归。不得将这些数字混写成同一组测试结果，也不得用完整回归替代聚焦场景说明。SQLite 结果只辅助验证 P0 schema/幂等/租约协议，不代表 PostgreSQL、多 worker 或生产并发能力。
+
+## Round 12 task execution claims 收口
+
+### 第五优先：`ea4415a` replan task execution claims
+
+- `replan_tasks` 增加 `claim_token`、`claimed_by`、`claimed_step`、`claimed_at` 与 `lease_until`。
+- 步骤执行通过条件更新抢占租约；默认租约 300 秒，过期可回收。
+- 推进、补偿与 `manual_required` 均以 claim token + version fencing；过期后的旧 token 不能 finalize，也不能提交业务写入。
+- `reroute()` 改为 `start(initial_step="F006", initial_status="RUNNING")`，不再先创建 F007 再改写步骤。
+- Alembic 当前唯一 head 推进为 `r2_03_replan_task_claims`。
+
+### 并发/任务聚焦测试：`c7f49aa`
+
+```text
+cd src/backend
+python -m pytest -q -p no:cacheprovider tests/unit/services/test_replan_task_service.py tests/unit/services/test_replan_task_concurrency.py
+# exit 0: 24 passed, 2 warnings in 1.60s
+```
+
+24 项 = `test_replan_task_service.py` 17 项 + `test_replan_task_concurrency.py` 7 项。
+覆盖活跃 lease 阻塞、过期 lease 回收、旧 token fencing、并发 resume 只执行一次、并发 NOTIFICATION 只写一条 outbox，以及相同/不同 fingerprint 的并发 start。
+
+### 完整后端回归
+
+```text
+cd src/backend
+python -m pytest -q -p no:cacheprovider tests
+# exit 0: 908 passed, 271 warnings in 184.88s
+
+python -m alembic -c alembic.ini heads
+# exit 0: r2_03_replan_task_claims (head)
+```
 
 ## 功能分支提交（`87190d2` 之后，oldest → newest）
 
@@ -241,8 +273,11 @@ python -m alembic -c alembic.ini heads
 - `ffba2f0` — `test: add real replan saga integration coverage`
 - `71e7506` — `fix: add leased outbox delivery claims`
 - `ffec6bb` — `test: update release migration head expectation`
+- `17b4f73` — `docs: record R2-03 implementation evidence`
+- `ea4415a` — `feat: add replan task execution claims`
+- `c7f49aa` — `test: cover concurrent replan task execution`
 
-远程分支已存在：`origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`；与本地 HEAD 为 0/0。当前尚无 R2-03 PR。
+远程分支已存在：`origin/feat/R2-03-replan-saga-outbox` @ `ffec6bb`；本地相对远程 ahead 4。当前尚无 R2-03 PR，未执行 push。
 
 ## 明确未覆盖
 
@@ -250,5 +285,5 @@ python -m alembic -c alembic.ini heads
 - 已将重规划成功路径迁到 outbox，并提供独立 Session worker；尚未执行真实 SMTP/Webhook 投递验证；
 - 若外部邮件/Webhook 不支持幂等令牌，worker 在外部成功后、`delivered` 写回前崩溃可能造成重复投递，因此语义为 at-least-once，不是 exactly-once；
 - 未剥离其他非重规划调用点的 fire-and-forget 或同步 SMTP；
-- 未执行 PostgreSQL/Redis/Docker/真实 SMTP 验证，R2-05 保持 `blocked`；
-- R2-03 计划卡保持 `pending`，直到授权创建 PR、CI 通过并 merge；下一动作仅为待授权后创建 R2-03 PR，不开始 R2-04B。
+- 未执行 PostgreSQL/Redis/Docker/真实 SMTP/Webhook 验证，也未做独立 worker 进程重启；R2-05 保持 `blocked`；
+- R2-03 计划卡保持 `pending`，直到授权创建 PR、CI 通过并 merge；下一动作仅为待授权后创建 R2-03 PR，不开始 R2-04B。未获明确授权前不执行 `git push` 或创建 GitHub PR。
