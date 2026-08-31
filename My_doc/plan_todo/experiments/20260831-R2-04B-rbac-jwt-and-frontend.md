@@ -8,8 +8,8 @@
 - 执行人：Codex
 - 层级：P0 本机协议
 - Git 分支：feat/R2-04B-rbac-jwt-and-frontend
-- Commit SHA：尚无
-- PR URL：尚无
+- Commit SHA：d6430bea461c457e95a0138f30e90c56924a4207
+- PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/16
 - CI run URL：尚无
 
 ## Schema 与数据来源
@@ -58,5 +58,5 @@ npm.cmd run build
 
 ## 结论
 
-- 状态：实现已在功能分支落地，计划卡保持 in_progress，待 PR/CI 后再标 done
-- 下一步：按 Git 协作规范提交并创建 PR
+- 状态：实现已提交并创建 PR #16，计划卡保持 in_progress，待 CI 通过并 merge 后再标 done
+- 下一步：等待 PR #16 CI 与 merge

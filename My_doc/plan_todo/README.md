@@ -41,7 +41,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | 01 | P0 | P0 | done | [关键状态转移并发控制](./01-concurrency-state-transitions.md) | PR #8 / CI 通过并合并；并发确认最多一次成功且无重复副作用 |
 | 02 | P0 | P0 | done | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | R2-02A/B 经 PR #10 / #11 / #12、CI 验证并合并；数据库幂等状态机与原子号段协议完成 |
 | 03 | P0 | P0 | done | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | PR #15 / CI 通过并合并；Saga/outbox 协议与本地故障注入已验证 |
-| 04B | P0 并行 | P0 | in_progress | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | 权限矩阵、token version、前后端权限一致 |
+| 04B | P0 并行 | P0 | in_progress | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | PR #16 已创建，待 CI 通过并合并；权限矩阵、token version、前后端权限一致 |
 | 05 | P1 | P1 | blocked | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | 真实数据库/缓存/多 worker 集成证据 |
 | 06 | P1/P2 | P1 | pending | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | 最小观测 + load/spike；soak 为 P2 |
 
