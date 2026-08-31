@@ -15,9 +15,10 @@ metadata:
 - 执行人：justtodo123
 - 层级：P0 本机协议
 - Git 分支：`feat/R2-02B-code-range-allocation`
-- Commit SHA：尚无（当前工作树未提交）
-- PR URL：尚无
-- CI run URL：尚无
+- Commit SHA：`6b8a8d2c8c2e0a65a3c11b11f71172dd254737fe`
+- PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/11
+- CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33157404527
+- Merge SHA：`87190d23de8a28fa2a84f9abb50b18a2e6ddf167`
 
 ## Schema 与数据来源
 
@@ -77,7 +78,7 @@ python scripts/release_migrate.py
 - 并发摘要：20 与 100 个独立 Session 均得到互不重复的 `GS20260828xxx`；落库行数等于并发数；号段 `next_value` 分别为 21 与 101
 - 生成量摘要：同一 Session 连续分配 200 个包裹编号无重复，`next_value=201`
 - 追踪内摘要路径：本文件
-- 外部原始产物位置 / CI artifact URL：尚无；本机 pytest 输出为临时文件，不追踪
+- 外部原始产物位置 / CI artifact URL：CI run https://github.com/justtodo123/LogisticSystem_more/actions/runs/33157404527；本机 pytest 输出为临时文件，不追踪
 - 产物大小 / SHA-256：未登记（临时输出不作为持久 artifact）
 - 保留期限 / 删除日期：会话临时输出，由工具运行环境管理
 - 脱敏检查：已检查摘要；不含 DSN、JWT、口令、个人数据或原始业务请求体
@@ -85,8 +86,8 @@ python scripts/release_migrate.py
 
 ## 结论
 
-- 状态：R2-02B 本机实现与验证通过；尚未 commit/PR/CI/merge
+- 状态：R2-02B 已通过本机验证、PR #11 与 CI，并合并到 `main`
 - 结论与对应证据：号段表、条件更新抢号、已有编码 seed、占用编号有限重试、耗尽/冲突登记错误码、生成函数委托 allocator、fresh/legacy 迁移与 downgrade 均有测试覆盖
 - 已知限制：SQLite 写锁可能串行化竞争；本结果只证明 P0 协议辅助验证，不能证明 PostgreSQL 或多 worker 的锁与容量行为。PostgreSQL 拓扑复跑归 R2-05
-- 未通过项 / 未执行项：Commit、PR、CI、merge 尚无；前端未改，未重跑 `vue-tsc` / `npm run build`
-- 下一步：提交 R2-02B Commit / PR；合并后将整个 R2-02 标为 `done` 并回填真实 SHA/PR/CI
+- 未执行项：PostgreSQL + 多 worker 拓扑复验归 R2-05；本机未单独重跑前端，但 PR CI 的“前端类型检查 + 构建”已通过
+- 后续：整个 R2-02 closeout 后进入 R2-03；在 R2-05 复跑生产拓扑验证

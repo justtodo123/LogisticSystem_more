@@ -1,7 +1,7 @@
 # My_doc 文档索引
 
 > **用途**：本目录是仓库正式追踪的治理、计划、历史和实验索引；现行计划入口为 [plan_todo/README.md](plan_todo/README.md)。运行时产物、凭据、依赖目录和大型原始实验结果仍按根目录与 [My_doc/.gitignore](.gitignore) 排除，不把“文件可见”当成“实验已通过”。
-> **事实日期**：2026-08-26
+> **事实日期**：2026-08-28
 
 ## 阅读顺序
 
@@ -26,7 +26,8 @@
 - `R2-00` 已于 2026-08-25 完成：治理提交经 [PR #3](https://github.com/justtodo123/LogisticSystem_more/pull/3) 合并到 `main`，合并提交为 `8e19aa1fa65e2fb4e6e079ed1e1925c1989a2f6a`，前端构建、后端测试和镜像构建 Checks 均成功。
 - `R2-00A` 已于 2026-08-26 完成：经 [PR #5](https://github.com/justtodo123/LogisticSystem_more/pull/5) 合并到 `main`，merge commit 为 `8431fd8d66905d548e62e27ffea21bb1949d5f48`，数据库迁移基线、后端测试和前端构建 Checks 均成功。
 - `R2-04A` 已于 2026-08-26 完成：经 [PR #6](https://github.com/justtodo123/LogisticSystem_more/pull/6) 合并到 `main`，merge commit 为 `ea6d8c5cb184040c2dde35d51d90df1d7fdc2d7c`，数据库迁移基线、后端测试和前端构建 Checks 均成功；兼容层按清单保留。
-- 当前主链入口为 `R2-02`：R2-02A 已合并，R2-02B 本机验证完成待发布；可并行 `R2-04B`。
+- `R2-01` 已于 2026-08-27 完成：经 [PR #8](https://github.com/justtodo123/LogisticSystem_more/pull/8) 合并到 `main`，并发确认最多一次成功且无重复副作用，三组 CI checks 均成功。
+- `R2-02` 已于 2026-08-28 完成：R2-02A 经 [PR #10](https://github.com/justtodo123/LogisticSystem_more/pull/10) 合并，R2-02B 经 [PR #11](https://github.com/justtodo123/LogisticSystem_more/pull/11) 合并；两次 CI 的数据库迁移基线、后端测试和前端检查均成功。当前主链进入 `R2-03`，可并行 `R2-04B`。
 - 原 R2-04 已拆为 [R2-04B](plan_todo/04B-rbac-jwt-and-frontend.md)，只负责 RBAC、JWT 撤权和前端权限。
 - `R2-05` 因本机没有 P1 外部拓扑保持 `blocked`；SQLite 结果不能替代 PostgreSQL + Redis + 多 worker 证据。
 
