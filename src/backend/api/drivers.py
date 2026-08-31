@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
-from api.dependencies import get_current_user, require_dispatcher_with_optional_idempotency
+from api.dependencies import require_permission, require_permission_with_optional_idempotency
 from schemas.driver import DriverCreate, DriverUpdate
 from services.driver_service import DriverService
 from config.database import get_db
@@ -26,7 +26,7 @@ async def list_drivers(
     status: Optional[str] = None,
     node_code: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("drivers:read"))
 ):
     """司机列表"""
     result = await DriverService.get_drivers(page, page_size, status, node_code, db)
@@ -37,7 +37,7 @@ async def list_drivers(
 async def create_driver(
     driver: DriverCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("drivers:write"))
 ):
     """新增司机"""
     result = await DriverService.create_driver(driver, db)
@@ -48,7 +48,7 @@ async def create_driver(
 async def get_driver(
     driver_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("drivers:read"))
 ):
     """司机详情"""
     result = await DriverService.get_driver(driver_code, db)
@@ -60,7 +60,7 @@ async def update_driver(
     driver_code: str,
     driver: DriverUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("drivers:write"))
 ):
     """编辑司机"""
     result = await DriverService.update_driver(driver_code, driver, db)
@@ -71,7 +71,7 @@ async def update_driver(
 async def delete_driver(
     driver_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("drivers:write"))
 ):
     """删除司机"""
     result = await DriverService.delete_driver(driver_code, db)

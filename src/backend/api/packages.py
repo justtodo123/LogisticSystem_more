@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
-from api.dependencies import get_current_user, require_dispatcher_with_optional_idempotency
+from api.dependencies import require_permission, require_permission_with_optional_idempotency
 from schemas.package import PackageRepack
 from services.package_service import PackageService
 from config.database import get_db
@@ -25,7 +25,7 @@ async def list_packages(
     from_node_code: Optional[str] = None,
     to_node_code: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("packages:read"))
 ):
     """包裹列表"""
     result = await PackageService.get_packages(page, page_size, status, from_node_code, to_node_code, db)
@@ -36,7 +36,7 @@ async def list_packages(
 async def get_package(
     package_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("packages:read"))
 ):
     """包裹详情"""
     result = await PackageService.get_package(package_code, db)
@@ -48,7 +48,7 @@ async def repack_package(
     package_code: str,
     repack: PackageRepack,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("packages:write"))
 ):
     """手动重新打包"""
     result = await PackageService.repack_package(package_code, repack, db)

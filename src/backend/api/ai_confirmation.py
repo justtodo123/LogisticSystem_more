@@ -13,9 +13,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.dependencies import (
-    get_current_user,
-    require_dispatcher,
-    require_dispatcher_with_idempotency,
+    require_permission,
+    require_permission_with_idempotency,
 )
 from config.database import get_db
 from models.user import User
@@ -38,7 +37,7 @@ class SuggestionDecisionRequest(BaseModel):
 @router.get("")
 async def get_suggestions(
     status: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("ai:use")),
     db: Session = Depends(get_db),
 ):
     """列出 AI 建议（默认全部，可按 status=pending/confirmed/rejected 过滤）"""
@@ -49,7 +48,7 @@ async def get_suggestions(
 async def confirm_suggestion_endpoint(
     suggestion_id: int,
     request: Optional[SuggestionDecisionRequest] = None,
-    current_user: User = Depends(require_dispatcher_with_idempotency),
+    current_user: User = Depends(require_permission_with_idempotency("schedule:confirm")),
     db: Session = Depends(get_db),
 ):
     """
@@ -71,7 +70,7 @@ async def confirm_suggestion_endpoint(
 async def reject_suggestion_endpoint(
     suggestion_id: int,
     request: Optional[SuggestionDecisionRequest] = None,
-    current_user: User = Depends(require_dispatcher_with_idempotency),
+    current_user: User = Depends(require_permission_with_idempotency("schedule:confirm")),
     db: Session = Depends(get_db),
 ):
     """拒绝 AI 建议（仅记录审计，不触发任何调度修改）"""

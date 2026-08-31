@@ -1,11 +1,11 @@
 ---
 plan_id: "R2-04B"
 title: RBAC、JWT 撤权与前端权限
-status: pending
+status: in_progress
 priority: P0
 owner: justtodo123
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-08-31
 depends_on: ["R2-00A", "R2-04A"]
 ---
 
@@ -88,4 +88,12 @@ npm run build
 
 ## 完成记录
 
-- 尚未开始。完成时填写权限矩阵版本、token 策略、限流边界、后端/前端测试结果、Commit/PR。
+- 已在分支 `feat/R2-04B-rbac-jwt-and-frontend` 落地，状态仍为 in_progress（待 CI 通过并 merge 后再标 done）。
+- 权限矩阵：[04B-rbac-permission-matrix.md](./04B-rbac-permission-matrix.md)
+- 实验记录：[20260831-R2-04B-rbac-jwt-and-frontend.md](./experiments/20260831-R2-04B-rbac-jwt-and-frontend.md)
+- Alembic head：`r2_04b_token_version`
+- 本地聚焦测试：RBAC 矩阵 / 撤权 / 限流 / 到货 / 导出 / ERP 回退已通过；登录限流为进程内计数
+- 前端：`npx.cmd vue-tsc --noEmit` 通过；`npm.cmd run build` 生成 dist
+- 实现提交：`d6430be`
+- PR：[PR #16](https://github.com/justtodo123/LogisticSystem_more/pull/16)，尚未合并。
+- CI：进行中；未通过、未合并不得标 done。

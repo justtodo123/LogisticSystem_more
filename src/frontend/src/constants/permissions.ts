@@ -1,0 +1,66 @@
+import type { Permission, UserRole } from '@/types/auth'
+
+export const MOCK_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
+  admin: [
+    'orders:read', 'orders:write', 'orders:import',
+    'goods:read', 'goods:write',
+    'schedule:read', 'schedule:execute', 'schedule:confirm',
+    'arrivals:confirm',
+    'vehicles:read', 'vehicles:write',
+    'drivers:read', 'drivers:write',
+    'nodes:read', 'nodes:write',
+    'packages:read', 'packages:write',
+    'exceptions:read', 'exceptions:write',
+    'simulation:write',
+    'ai:use', 'audit:read', 'export:read', 'reports:read',
+    'notifications:read', 'notifications:write',
+    'admin:users',
+  ],
+  dispatcher: [
+    'orders:read', 'orders:write', 'orders:import',
+    'goods:read', 'goods:write',
+    'schedule:read', 'schedule:execute', 'schedule:confirm',
+    'arrivals:confirm',
+    'vehicles:read', 'vehicles:write',
+    'drivers:read', 'drivers:write',
+    'nodes:read', 'nodes:write',
+    'packages:read', 'packages:write',
+    'exceptions:read', 'exceptions:write',
+    'simulation:write',
+    'ai:use', 'audit:read', 'export:read', 'reports:read',
+    'notifications:read', 'notifications:write',
+  ],
+  viewer: [
+    'orders:read', 'goods:read', 'schedule:read',
+    'vehicles:read', 'drivers:read', 'nodes:read',
+    'packages:read', 'exceptions:read', 'reports:read',
+    'notifications:read',
+  ],
+  manager: [
+    'orders:read', 'orders:write', 'orders:import',
+    'goods:read', 'packages:read', 'nodes:read',
+    'vehicles:read', 'drivers:read', 'reports:read',
+    'notifications:read',
+  ],
+  warehouse_operator: [
+    'orders:read', 'orders:write', 'orders:import',
+    'goods:read', 'packages:read', 'nodes:read',
+    'vehicles:read', 'drivers:read', 'reports:read',
+    'notifications:read',
+  ],
+}
+
+export const ROUTE_PERMISSIONS: Record<string, Permission | undefined> = {
+  '/dashboard': 'schedule:read',
+  '/orders': 'orders:read',
+  '/goods': 'goods:read',
+  '/packages': 'packages:read',
+  '/vehicles': 'vehicles:read',
+  '/drivers': 'drivers:read',
+  '/nodes/storage': 'nodes:read',
+  '/nodes/sorting': 'nodes:read',
+  '/exceptions': 'exceptions:read',
+  '/arrival-confirm': 'arrivals:confirm',
+  '/notifications': 'notifications:read',
+  '/reports': 'reports:read',
+}

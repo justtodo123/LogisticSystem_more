@@ -24,9 +24,9 @@ from schemas.exception_event import (
 )
 from config.database import get_db
 from api.dependencies import (
-    get_current_user,
-    require_dispatcher_with_optional_idempotency,
-    require_dispatcher_with_idempotency,
+    require_permission,
+    require_permission_with_optional_idempotency,
+    require_permission_with_idempotency,
 )
 from models.user import User
 
@@ -39,7 +39,7 @@ async def get_exceptions(
     page_size: int = Query(default=20, ge=1, le=100, description="每页数量"),
     status: Optional[str] = Query(default=None, description="状态筛选：open / resolved"),
     exception_type: Optional[str] = Query(default=None, description="异常类型：road / package / node"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("exceptions:read")),
     db: Session = Depends(get_db),
 ):
     """
@@ -59,7 +59,7 @@ async def get_exceptions(
 @router.post("")
 async def create_exception(
     body: CreateExceptionEventRequest,
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
+    current_user: User = Depends(require_permission_with_optional_idempotency("exceptions:write")),
     db: Session = Depends(get_db),
 ):
     """
@@ -102,7 +102,7 @@ async def create_exception(
 @router.get("/{event_code}")
 async def get_exception_detail(
     event_code: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("exceptions:read")),
     db: Session = Depends(get_db),
 ):
     """
@@ -119,7 +119,7 @@ async def get_exception_detail(
 @router.post("/replan/batch")
 async def trigger_batch_replan(
     body: BatchReplanRequest,
-    current_user: User = Depends(require_dispatcher_with_idempotency),
+    current_user: User = Depends(require_permission_with_idempotency("exceptions:write")),
     db: Session = Depends(get_db),
 ):
     """
@@ -170,7 +170,7 @@ async def trigger_replan(
     event_code: str,
     body: TriggerReplanRequest,
     request: Request,
-    current_user: User = Depends(require_dispatcher_with_idempotency),
+    current_user: User = Depends(require_permission_with_idempotency("exceptions:write")),
     db: Session = Depends(get_db),
 ):
     """
@@ -217,7 +217,7 @@ async def trigger_replan(
 async def update_exception(
     event_code: str,
     body: UpdateExceptionRequest,
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
+    current_user: User = Depends(require_permission_with_optional_idempotency("exceptions:write")),
     db: Session = Depends(get_db),
 ):
     """
@@ -237,7 +237,7 @@ async def update_exception(
 @router.put("/{event_code}/resolve")
 async def resolve_exception(
     event_code: str,
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency),
+    current_user: User = Depends(require_permission_with_optional_idempotency("exceptions:write")),
     db: Session = Depends(get_db),
 ):
     """

@@ -93,11 +93,10 @@ class TestManagerPermissions:
             headers={"Authorization": f"Bearer {token}"},
         )
         
-        # 验证响应（应该返回403）
-        assert response.status_code == 403
+        # manager 拥有 orders:write，不应被 403 拒绝
+        assert response.status_code != 403
         body = response.json()
-        assert body["code"] == 40300
-        assert "权限" in body["message"] or "禁止" in body["message"]
+        assert body["code"] != 40300
 
     @pytest.mark.api
     def test_manager_update_order_forbidden(self, client, db_session):
@@ -149,7 +148,8 @@ class TestManagerPermissions:
         )
         
         # 验证响应（应该返回403或404，因为订单不存在）
-        assert response.status_code in [403, 404]
+        assert response.status_code != 403
+        assert response.json()["code"] != 40300
 
     @pytest.mark.api
     def test_manager_delete_order_forbidden(self, client, db_session):
@@ -179,7 +179,8 @@ class TestManagerPermissions:
         )
         
         # 验证响应（应该返回403或404）
-        assert response.status_code in [403, 404]
+        assert response.status_code != 403
+        assert response.json()["code"] != 40300
 
     @pytest.mark.api
     def test_manager_trigger_schedule_forbidden(self, client, db_session):

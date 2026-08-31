@@ -1,7 +1,7 @@
 ---
 plan_id: "R2-03"
 title: 重规划 Saga 与事务消息可靠性
-status: pending
+status: done
 priority: P0
 owner: justtodo123
 created: 2026-08-25
@@ -78,7 +78,9 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 
 ## 完成记录
 
-> 当前状态仍为 `pending`：以下是功能分支上的实现与本地验证证据。PR #13 已创建，CI 进行中，尚未 merge。
+- 状态：`done`。恢复提交：`d55bfdd`；合并提交：`4e14e7b9baa193437adb7b1a82f7856846f01798`。
+- PR：[PR #15](https://github.com/justtodo123/LogisticSystem_more/pull/15)，已于 2026-08-31 03:31:59 UTC 合并。原 PR #13 曾合入后为先合并 R2-02 文档关闭卡 #12 而回退（PR #14）；本卡以恢复 PR #15 为准。
+- CI：[run 33353797380](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33353797380)，`数据库迁移基线`、`后端测试 (pytest)`、`前端类型检查 + 构建` 均成功。
 
 ### 已实现状态机与事务边界
 
@@ -140,11 +142,11 @@ python -m pytest -q tests/unit/services tests/integration -p no:cacheprovider
 - `ea4415a` — `feat: add replan task execution claims`
 - `c7f49aa` — `test: cover concurrent replan task execution`
 
-远程分支已存在：`origin/feat/R2-03-replan-saga-outbox` @ `c89b992`。R2-03 PR 已创建：https://github.com/justtodo123/LogisticSystem_more/pull/13 ；CI 进行中，尚未 merge。
+远程分支：`origin/feat/restore-r2-03` @ `d55bfdd`。原功能分支 `origin/feat/R2-03-replan-saga-outbox` 与回退前的 PR #13 仅作历史；现行合入证据以 PR #15 为准。
 
 ### 语义边界与剩余缺口
 
 - `redispatch(draft_only=True)` 仍走旧路径，不属于当前 Saga 主链。
 - outbox 的数据库去重、claim 与 lease 控制内部并发和重放；若外部邮件/Webhook 不支持幂等令牌，进程在“外部已接收、数据库尚未写回 delivered”之间崩溃时只能保证 **at-least-once**，不得声称 exactly-once。
 - 真实 PostgreSQL、独立 worker 进程重启、外部超时、真实 SMTP/Webhook 失败仍归 R2-05；当前环境未执行，因此 R2-05 保持 `blocked`，SQLite 结果不替代 P1 证据。
-- R2-03 计划卡保持 `pending`，直到 PR #13 CI 通过并 merge；不开始 R2-04B。
+- R2-03 已通过 PR #15 CI 并合并。SQLite 结果仍不替代 R2-05 的 PostgreSQL / 多 worker / 真实 SMTP 证据；下一动作为 R2-04B。

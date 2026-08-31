@@ -22,6 +22,7 @@ class UserResponse(BaseModel):
     role: str
     display_name: str | None = None
     is_active: bool = True
+    permissions: list[str] = []
 
     class Config:
         from_attributes = True

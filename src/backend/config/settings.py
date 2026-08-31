@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     # 外部 ERP 推送订单 Webhook 的 API Key；为空时回退到 Bearer JWT 认证（便于本地联调）
     ERP_API_KEY: str = ""
 
+    # R2-04B login rate limit (process-local; not cross-worker)
+    LOGIN_RATE_LIMIT_ATTEMPTS: int = 5
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS: int = 60
+
     # ── 地图服务（T5-2）──
     # MAP_PROVIDER: amap（高德）/ baidu（百度）；为空或未配置 MAP_API_KEY 时降级直线距离
     MAP_PROVIDER: str = ""

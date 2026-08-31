@@ -16,7 +16,7 @@ from schemas.arrival_confirm import (
 from core.error_codes import CODE_SUCCESS, CODE_INTERNAL_ERROR
 from core.errors import DomainError
 from config.database import get_db
-from api.dependencies import require_dispatcher, require_dispatcher_with_idempotency
+from api.dependencies import require_permission, require_permission_with_idempotency
 from models.user import User
 from utils.response import error_response
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 async def confirm_arrival(
     request: ArrivalConfirmRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_idempotency),
+    current_user: User = Depends(require_permission_with_idempotency("arrivals:confirm")),
 ) -> Dict[str, Any]:
     """
     单个到货确认
@@ -77,7 +77,7 @@ async def confirm_arrival(
 async def confirm_arrival_batch(
     request: BatchArrivalConfirmRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_idempotency),
+    current_user: User = Depends(require_permission_with_idempotency("arrivals:confirm")),
 ) -> Dict[str, Any]:
     """
     批量到货确认（事务性，任一失败则全部回滚）
@@ -118,7 +118,7 @@ async def get_arrival_packages(
     schedule_code: str,
     node_code: str = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher),
+    current_user: User = Depends(require_permission("arrivals:confirm")),
 ) -> Dict[str, Any]:
     """
     查询到站包裹（状态为 in_transit 或 delivered 的包裹）

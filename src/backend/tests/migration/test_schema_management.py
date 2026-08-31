@@ -19,7 +19,7 @@ from utils.schema_management import (
 )
 
 
-HEAD_REVISION = "r2_03_replan_task_claims"
+HEAD_REVISION = "r2_04b_token_version"
 
 
 def _upgrade(path: Path, revision: str = "head") -> None:

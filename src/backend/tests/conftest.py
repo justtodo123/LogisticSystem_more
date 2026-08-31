@@ -638,3 +638,12 @@ def dispatcher_token():
 def manager_token():
     """生成 manager 角色的 JWT Token"""
     return create_jwt_token("manager", "manager")
+
+
+@pytest.fixture(autouse=True)
+def reset_login_rate_limiter_between_tests():
+    from core.login_rate_limit import reset_login_rate_limiter
+
+    reset_login_rate_limiter()
+    yield
+    reset_login_rate_limiter()

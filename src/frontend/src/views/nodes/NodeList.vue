@@ -195,7 +195,7 @@ async function handleDelete(row: NodeItem): Promise<void> {
   <div class="page-card">
     <PageToolbar :title="pageTitle">
       <template #actions>
-        <el-button v-if="authStore.isDispatcher" type="primary" @click="openCreate">
+        <el-button v-if="authStore.can('nodes:write')" type="primary" @click="openCreate">
           新增
         </el-button>
       </template>
@@ -236,7 +236,7 @@ async function handleDelete(row: NodeItem): Promise<void> {
           >
             查看
           </el-button>
-          <template v-if="authStore.isDispatcher">
+          <template v-if="authStore.can('nodes:write')">
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>

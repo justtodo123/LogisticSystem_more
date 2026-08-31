@@ -66,7 +66,7 @@ function goDashboard(): void {
       </template>
 
       <el-alert
-        v-if="authStore.isDispatcher && !mockMode"
+        v-if="authStore.can('arrivals:confirm') && !mockMode"
         type="info"
         show-icon
         :closable="false"
@@ -78,7 +78,7 @@ function goDashboard(): void {
       </el-alert>
 
       <el-alert
-        v-if="!authStore.isDispatcher"
+        v-if="!authStore.can('arrivals:confirm')"
         type="warning"
         show-icon
         :closable="false"
@@ -86,7 +86,7 @@ function goDashboard(): void {
         class="role-alert"
       />
 
-      <div v-if="authStore.isDispatcher" class="filter-bar">
+      <div v-if="authStore.can('arrivals:confirm')" class="filter-bar">
         <el-select
           v-model="scheduleCode"
           placeholder="选择调度方案"
@@ -131,7 +131,7 @@ function goDashboard(): void {
       </div>
 
       <el-table
-        v-if="authStore.isDispatcher && packages.length > 0"
+        v-if="authStore.can('arrivals:confirm') && packages.length > 0"
         v-loading="fetchLoading"
         :data="packages"
         border
@@ -193,11 +193,11 @@ function goDashboard(): void {
       </el-table>
 
       <el-empty
-        v-else-if="authStore.isDispatcher && !fetchLoading"
+        v-else-if="authStore.can('arrivals:confirm') && !fetchLoading"
         description="请选择方案与节点后加载待确认包裹"
       />
 
-      <div v-if="authStore.isDispatcher && packages.length > 0" class="submit-bar">
+      <div v-if="authStore.can('arrivals:confirm') && packages.length > 0" class="submit-bar">
         <el-button
           type="primary"
           size="large"

@@ -8,13 +8,23 @@ from config.database import settings
 from models.user import User
 
 
-def create_access_token(username: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
-    """签发JWT Token"""
+def create_access_token(
+    username: str,
+    role: str,
+    token_version: int = 0,
+    expires_delta: Optional[timedelta] = None,
+) -> str:
+    """Issue a JWT access token carrying the current token_version."""
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(seconds=settings.JWT_EXPIRE_SECONDS)
-    to_encode = {"sub": username, "role": role, "exp": expire}
+    to_encode = {
+        "sub": username,
+        "role": role,
+        "tv": int(token_version or 0),
+        "exp": expire,
+    }
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm="HS256")
     return encoded_jwt
 
@@ -49,3 +59,31 @@ def authenticate_user(db: Session, username: str, password: str) -> User | None:
 def get_user_by_username(db: Session, username: str) -> User | None:
     """根据用户名获取用户"""
     return db.query(User).filter(User.username == username).first()
+
+
+def bump_token_version(db: Session, user: User, *, commit: bool = True) -> User:
+    """Atomically increment token_version so previously issued access tokens fail closed."""
+    db.query(User).filter(User.id == user.id).update(
+        {User.token_version: User.token_version + 1},
+        synchronize_session="fetch",
+    )
+    if commit:
+        db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_user_security_state(
+    db: Session,
+    user: User,
+    *,
+    role: str | None = None,
+    is_active: bool | None = None,
+    commit: bool = True,
+) -> User:
+    """Change role/active flag and revoke outstanding tokens in one transaction."""
+    if role is not None:
+        user.role = role
+    if is_active is not None:
+        user.is_active = is_active
+    return bump_token_version(db, user, commit=commit)

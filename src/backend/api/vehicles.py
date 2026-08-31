@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 
-from api.dependencies import get_current_user, require_dispatcher_with_optional_idempotency
+from api.dependencies import require_permission, require_permission_with_optional_idempotency
 from schemas.vehicle import VehicleCreate, VehicleUpdate
 from services.vehicle_service import VehicleService
 from config.database import get_db
@@ -39,7 +39,7 @@ async def list_vehicles(
     status: Optional[str] = None,
     node_code: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("vehicles:read"))
 ):
     """车辆列表"""
     result = await _load_vehicles(page, page_size, status, node_code, db)
@@ -50,7 +50,7 @@ async def list_vehicles(
 async def create_vehicle(
     vehicle: VehicleCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("vehicles:write"))
 ):
     """新增车辆"""
     result = await VehicleService.create_vehicle(vehicle, db)
@@ -63,7 +63,7 @@ async def create_vehicle(
 async def get_vehicle(
     vehicle_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission("vehicles:read"))
 ):
     """车辆详情"""
     result = await VehicleService.get_vehicle(vehicle_code, db)
@@ -75,7 +75,7 @@ async def update_vehicle(
     vehicle_code: str,
     vehicle: VehicleUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("vehicles:write"))
 ):
     """编辑车辆"""
     result = await VehicleService.update_vehicle(vehicle_code, vehicle, db)
@@ -88,7 +88,7 @@ async def update_vehicle(
 async def delete_vehicle(
     vehicle_code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_dispatcher_with_optional_idempotency)
+    current_user: User = Depends(require_permission_with_optional_idempotency("vehicles:write"))
 ):
     """删除车辆"""
     result = await VehicleService.delete_vehicle(vehicle_code, db)

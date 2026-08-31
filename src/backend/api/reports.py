@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_current_user
+from api.dependencies import require_permission
 from config.database import get_db
 from models.user import User
 from services.report_service import (
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/api/reports", tags=["报表分析"])
 async def sla_report(
     date_from: Optional[str] = Query(None, description="起始日期（ISO，如 2026-06-15）"),
     date_to: Optional[str] = Query(None, description="截止日期（ISO）"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reports:read")),
     db: Session = Depends(get_db),
 ):
     """SLA 达成率：准点率、平均延迟、订单分布"""
@@ -39,7 +39,7 @@ async def sla_report(
 
 @router.get("/cost", summary="成本分析")
 async def cost_report(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reports:read")),
     db: Session = Depends(get_db),
 ):
     """成本分析：按车辆（线路）/ 节点汇总"""
@@ -48,7 +48,7 @@ async def cost_report(
 
 @router.get("/exceptions", summary="异常统计")
 async def exception_report(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reports:read")),
     db: Session = Depends(get_db),
 ):
     """异常统计：类型 / 子类型分布"""
@@ -57,7 +57,7 @@ async def exception_report(
 
 @router.get("/capacity", summary="运力效率")
 async def capacity_report(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reports:read")),
     db: Session = Depends(get_db),
 ):
     """运力效率：车辆状态、调度、包裹流转"""
@@ -68,7 +68,7 @@ async def capacity_report(
 async def report_overview(
     date_from: Optional[str] = Query(None, description="起始日期（ISO）"),
     date_to: Optional[str] = Query(None, description="截止日期（ISO）"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("reports:read")),
     db: Session = Depends(get_db),
 ):
     """四类报表数据汇总，一次拉取供看板展示"""
