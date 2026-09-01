@@ -6,11 +6,11 @@
 - 计划/决策版本：D-R2-ENV / D-R2-DB
 - 日期与时区：2026-09-01 Asia/Shanghai
 - 执行人：Claude Code
-- 层级：P1 外部拓扑（第二刀，实现完成、外部验收待执行）
+- 层级：P1 外部拓扑（第二刀，GHA 已验证，整卡未验收完成）
 - Git 分支：feat/R2-05-postgres-protocols
-- Commit SHA：未提交
-- PR URL：未创建
-- CI run URL：待 GitHub Actions 实际运行后回填
+- Commit SHA：2de7c467b1722a2563915ea0a93e8e47160e6260；修复：ccf67fb、b8b391b
+- PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/20
+- CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33484488151
 
 ## Schema 与数据来源
 
@@ -68,7 +68,7 @@ P1_WORKER_A_URL=http://127.0.0.1:18001 P1_WORKER_B_URL=http://127.0.0.1:18002 py
 - 本机完整后端回归：`965 passed, 8 skipped, 317 warnings`（391.08 秒）；8 个 skip 均为缺少外部 PostgreSQL/Redis/双进程服务的 P1 场景，不是 PostgreSQL/Redis 通过证据。
 - 前端 `npm run build`：通过；依赖 `@vueuse/core` 有 2 条 Rolldown `INVALID_ANNOTATION` 警告，未导致构建失败。
 - `git diff --check` 与定向敏感内容检查：通过。
-- GitHub Actions：尚未执行，因此 PostgreSQL 协议、多进程 HTTP、outbox worker 和 artifact 均不得写成已通过。HTTP smoke 已补齐强制幂等键；worker 就绪检查改为 `scripts/wait_http.py`，避免 YAML heredoc 缩进导致 GHA 失败。
+- GitHub Actions：PR #20 CI [run 33484488151](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33484488151) 四个 job 全绿。`P1 PostgreSQL + Redis 协议与多 worker 验证` 已验证 PostgreSQL CAS/幂等/号段/replan/outbox 单赢家、双进程 JWT 撤权与幂等重放、以及 02A HTTP smoke。产物：artifact `p1-postgres-redis-worker-logs`。
 
 ## 证据边界
 
@@ -79,6 +79,5 @@ P1_WORKER_A_URL=http://127.0.0.1:18001 P1_WORKER_B_URL=http://127.0.0.1:18002 py
 
 ## 结论
 
-- 状态：`in_progress`。
-- 当前只完成第二刀代码与 CI harness，需创建 PR 并取得真实 GHA 日志后才能回填外部拓扑结果。
+- 状态：`in_progress`。PR #20 CI run 33484488151 全绿，第二刀外部拓扑已验证。PR 尚未合并，不得提前写已合并。
 - 即使本次 CI 全绿，R2-05 仍不得标 `done`；后续继续故障注入、恢复和备份验证。
