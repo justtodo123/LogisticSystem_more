@@ -15,7 +15,7 @@ depends_on: ["R2-00A", "R2-01", "R2-02", "R2-03"]
 
 开发默认 SQLite；Redis 失败回退进程内缓存。Compose 当前是 SQLite + 单 worker，**不是**本卡目标拓扑。本机 2026-08-25：无 Docker / WSL / PostgreSQL / Redis。第一轮 02B 仍为 `mitigated`。
 
-**当前动作**：第一刀已合入 `main`（PR #18 / merge `ef97229`）。第二刀已合入 `main`（PR #20 / merge `b7a9c52`）。故障切片已合入 `main`（PR #21 / merge `4c72828`）：Redis pause 时 `/api/health` 报 `redis: degraded` 且 login/me 仍走数据库成功、两个 Uvicorn worker 重启后订单可查、以及 `pg_dump --schema-only`。本机仍无 Docker/WSL/PostgreSQL；deadlock、连接池耗尽、备份恢复完成前本卡不得标 `done`。
+**当前动作**：第三刀在独立分支 `feat/R2-05-fault-recovery` 进行：worker 重启后的幂等重放、outbox lease reclaim 与 stale token、Redis 中断后恢复、PostgreSQL deadlock/serialization/连接池超时/短暂断连、以及专用库备份恢复。100,000 编号改为 `workflow_dispatch`，不进普通 PR CI。跨 worker 登录限流仍未完成。本机无 Docker/PostgreSQL/Redis；GHA 未绿前不得写成已验证。完成前本卡不得标 `done`。
 
 ## 问题与目标
 

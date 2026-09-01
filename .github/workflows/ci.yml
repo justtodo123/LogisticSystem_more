@@ -130,7 +130,9 @@ jobs:
           tests/p1/test_postgres_baseline.py
           tests/p1/test_redis_baseline.py
           tests/p1/test_postgres_protocols.py
+          tests/p1/test_postgres_faults.py
           tests/unit/core/test_database_url.py
+          tests/unit/core/test_db_retry.py
 
       - name: 初始化多 worker 合成数据
         run: |
@@ -177,6 +179,7 @@ jobs:
             tests/p1/test_multi_worker_http.py
           python scripts/smoke_local.py --base-url http://127.0.0.1:18001
           python scripts/p1_fault_harness.py
+          python scripts/p1_backup_restore.py
 
           cat > p1-artifacts/scenario-summary.txt <<'EOF'
           topology=two separately addressed single-worker Uvicorn processes
@@ -199,6 +202,8 @@ jobs:
             src/backend/p1-artifacts/scenario-summary.txt
             src/backend/p1-artifacts/fault-summary.txt
             src/backend/p1-artifacts/pg-schema.sql
+            src/backend/p1-artifacts/backup-restore-summary.txt
+            src/backend/p1-artifacts/pg-backup.sql
           if-no-files-found: warn
           retention-days: 7
 

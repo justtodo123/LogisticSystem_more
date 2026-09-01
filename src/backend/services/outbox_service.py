@@ -6,6 +6,7 @@ from uuid import uuid4
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from core.db_retry import retry_transient_pg
 from models.outbox_event import OutboxEvent
 from models.replan_task import ReplanTask
 
@@ -76,69 +77,73 @@ def claim_outbox_batch(
     lease_seconds: int,
 ) -> list[OutboxEvent]:
     """以条件更新原子抢占可投递事件，并回收已过期的 processing 租约。"""
-    now = _utcnow()
-    lease_until = now + timedelta(seconds=lease_seconds)
-    candidate_ids = list(
-        db.scalars(
-            select(OutboxEvent.id)
-            .where(
-                or_(
-                    (
-                        OutboxEvent.status.in_(["pending", "retry"])
-                        & (OutboxEvent.available_at <= now)
-                    ),
-                    (
-                        (OutboxEvent.status == "processing")
-                        & (OutboxEvent.lease_until <= now)
+
+    def _claim() -> list[OutboxEvent]:
+        now = _utcnow()
+        lease_until = now + timedelta(seconds=lease_seconds)
+        candidate_ids = list(
+            db.scalars(
+                select(OutboxEvent.id)
+                .where(
+                    or_(
+                        (
+                            OutboxEvent.status.in_(["pending", "retry"])
+                            & (OutboxEvent.available_at <= now)
+                        ),
+                        (
+                            (OutboxEvent.status == "processing")
+                            & (OutboxEvent.lease_until <= now)
+                        ),
+                    )
+                )
+                .order_by(OutboxEvent.id)
+                .limit(limit)
+            )
+        )
+        claimed_ids: list[int] = []
+        for event_id in candidate_ids:
+            token = uuid4().hex
+            result = db.execute(
+                update(OutboxEvent)
+                .where(
+                    OutboxEvent.id == event_id,
+                    or_(
+                        (
+                            OutboxEvent.status.in_(["pending", "retry"])
+                            & (OutboxEvent.available_at <= now)
+                        ),
+                        (
+                            (OutboxEvent.status == "processing")
+                            & (OutboxEvent.lease_until <= now)
+                        ),
                     ),
                 )
+                .values(
+                    status="processing",
+                    claim_token=token,
+                    claimed_by=worker_id,
+                    claimed_at=now,
+                    lease_until=lease_until,
+                )
             )
-            .order_by(OutboxEvent.id)
-            .limit(limit)
-        )
-    )
-    claimed_ids: list[int] = []
-    for event_id in candidate_ids:
-        token = uuid4().hex
-        result = db.execute(
-            update(OutboxEvent)
-            .where(
-                OutboxEvent.id == event_id,
-                or_(
-                    (
-                        OutboxEvent.status.in_(["pending", "retry"])
-                        & (OutboxEvent.available_at <= now)
-                    ),
-                    (
-                        (OutboxEvent.status == "processing")
-                        & (OutboxEvent.lease_until <= now)
-                    ),
-                ),
-            )
-            .values(
-                status="processing",
-                claim_token=token,
-                claimed_by=worker_id,
-                claimed_at=now,
-                lease_until=lease_until,
+            if result.rowcount == 1:
+                claimed_ids.append(event_id)
+        db.commit()
+        if not claimed_ids:
+            return []
+        return list(
+            db.scalars(
+                select(OutboxEvent)
+                .where(
+                    OutboxEvent.id.in_(claimed_ids),
+                    OutboxEvent.status == "processing",
+                    OutboxEvent.claimed_by == worker_id,
+                )
+                .order_by(OutboxEvent.id)
             )
         )
-        if result.rowcount == 1:
-            claimed_ids.append(event_id)
-    db.commit()
-    if not claimed_ids:
-        return []
-    return list(
-        db.scalars(
-            select(OutboxEvent)
-            .where(
-                OutboxEvent.id.in_(claimed_ids),
-                OutboxEvent.status == "processing",
-                OutboxEvent.claimed_by == worker_id,
-            )
-            .order_by(OutboxEvent.id)
-        )
-    )
+
+    return retry_transient_pg(_claim, on_retry=db.rollback)
 
 
 def _clear_claim(event: OutboxEvent) -> None:
@@ -146,6 +151,52 @@ def _clear_claim(event: OutboxEvent) -> None:
     event.claimed_by = None
     event.claimed_at = None
     event.lease_until = None
+
+
+def finalize_claimed_event(
+    db: Session,
+    *,
+    event_id: int,
+    claim_token: str,
+    worker_id: str,
+    ok: bool,
+    error: str,
+    permanent_failure: bool,
+    max_retries: int,
+    retry_delay_seconds: int,
+) -> str:
+    """Complete a claimed event. Returns delivered/retry/dead-letter/stale."""
+    current = db.scalar(
+        select(OutboxEvent).where(
+            OutboxEvent.id == event_id,
+            OutboxEvent.status == "processing",
+            OutboxEvent.claim_token == claim_token,
+            OutboxEvent.claimed_by == worker_id,
+        )
+    )
+    if current is None:
+        db.rollback()
+        return "stale"
+    if ok:
+        current.status = "delivered"
+        current.delivered_at = _utcnow()
+        current.last_error = None
+        _clear_claim(current)
+        db.commit()
+        return "delivered"
+
+    current.retry_count += 1
+    current.last_error = error[:256]
+    if permanent_failure or current.retry_count >= max_retries:
+        current.status = "dead-letter"
+        outcome = "dead-letter"
+    else:
+        current.status = "retry"
+        current.available_at = _utcnow() + timedelta(seconds=retry_delay_seconds)
+        outcome = "retry"
+    _clear_claim(current)
+    db.commit()
+    return outcome
 
 
 def deliver_outbox_batch(
@@ -190,37 +241,19 @@ def deliver_outbox_batch(
             else:
                 error = "sender returned failure"
 
-            current = db.scalar(
-                select(OutboxEvent).where(
-                    OutboxEvent.id == event_id,
-                    OutboxEvent.status == "processing",
-                    OutboxEvent.claim_token == claim_token,
-                    OutboxEvent.claimed_by == worker_id,
-                )
+            outcome = finalize_claimed_event(
+                db,
+                event_id=event_id,
+                claim_token=claim_token,
+                worker_id=worker_id,
+                ok=ok,
+                error=error,
+                permanent_failure=permanent_failure,
+                max_retries=max_retries,
+                retry_delay_seconds=retry_delay_seconds,
             )
-            if current is None:
-                db.rollback()
-                continue
-            if ok:
-                current.status = "delivered"
-                current.delivered_at = _utcnow()
-                current.last_error = None
-                _clear_claim(current)
-                db.commit()
-                counts["delivered"] += 1
-                continue
-
-            current.retry_count += 1
-            current.last_error = error[:256]
-            if permanent_failure or current.retry_count >= max_retries:
-                current.status = "dead-letter"
-                counts["dead-letter"] += 1
-            else:
-                current.status = "retry"
-                current.available_at = _utcnow() + timedelta(seconds=retry_delay_seconds)
-                counts["retry"] += 1
-            _clear_claim(current)
-            db.commit()
+            if outcome != "stale":
+                counts[outcome] += 1
         return counts
     finally:
         db.close()

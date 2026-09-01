@@ -58,7 +58,7 @@ R2-00A + R2-01 + R2-02 + R2-03 -> R2-05 (in_progress)
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：R2-05 故障切片已合入 PR #21 / merge `4c72828`。继续 deadlock/serialization、连接池耗尽、备份恢复与 100,000 编号规模验证。完成前本卡不得标 `done`，不得用 SQLite 结果替代。
+当前下一动作：R2-05 第三刀在 `feat/R2-05-fault-recovery`。先用 GHA 验证 worker/outbox 恢复、Redis 恢复、PostgreSQL 冲突与连接、备份恢复；100k 编号走手工 workflow。完成前本卡不得标 `done`，不得用 SQLite 结果替代。跨 worker 登录限流仍未完成。
 
 ## 当前证据边界
 

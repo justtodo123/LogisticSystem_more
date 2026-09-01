@@ -9,6 +9,7 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from core.db_retry import retry_transient_pg
 from core.error_codes import (
     CODE_CODE_ALLOCATION_CONFLICT,
     CODE_CODE_RANGE_EXHAUSTED,
@@ -177,9 +178,13 @@ def allocate_code(db: Session, resource: str, *, now: datetime | None = None) ->
     """从号段表条件更新抢下一个业务编号。"""
     spec = get_resource(resource)
     prefix = prefix_for(spec, now)
-    for _ in range(MAX_UNIQUE_RETRIES):
-        seq = _claim_next_value(db, spec, prefix)
-        code = format_code(prefix, seq, spec.width)
-        if not _code_taken(db, spec, code):
-            return code
-    raise DomainError(CODE_CODE_ALLOCATION_CONFLICT)
+
+    def _allocate() -> str:
+        for _ in range(MAX_UNIQUE_RETRIES):
+            seq = _claim_next_value(db, spec, prefix)
+            code = format_code(prefix, seq, spec.width)
+            if not _code_taken(db, spec, code):
+                return code
+        raise DomainError(CODE_CODE_ALLOCATION_CONFLICT)
+
+    return retry_transient_pg(_allocate, on_retry=db.rollback)

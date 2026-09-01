@@ -1,0 +1,58 @@
+name: P1 code scale
+
+on:
+  workflow_dispatch:
+    inputs:
+      scale:
+        description: Number of unique CodeRange claims
+        required: true
+        default: "100000"
+      workers:
+        description: Concurrent claim workers
+        required: true
+        default: "8"
+
+jobs:
+  code-scale:
+    name: PostgreSQL code range scale
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: logistics
+          POSTGRES_PASSWORD: logistics
+          POSTGRES_DB: logistics
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logistics -d logistics"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ENV: dev
+      PYTHONPATH: ${{ github.workspace }}/src/backend
+      DATABASE_URL: postgresql+psycopg://logistics:logistics@localhost:5432/logistics
+      P1_DATABASE_URL: postgresql+psycopg://logistics:logistics@localhost:5432/logistics
+      P1_CODE_SCALE: ${{ inputs.scale }}
+      P1_CODE_SCALE_WORKERS: ${{ inputs.workers }}
+      JWT_SECRET: ci-only-r2-05-p1-secret-value-32chars
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: src/backend/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: PostgreSQL release migrate
+        run: python scripts/release_migrate.py
+      - name: Run scale allocation
+        run: >-
+          python -m pytest -q -p no:cacheprovider
+          tests/p1/test_code_scale.py -s --tb=short

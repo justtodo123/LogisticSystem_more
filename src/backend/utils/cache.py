@@ -3,7 +3,8 @@
 
 - `@cached(ttl=300)` 装饰器：函数级缓存（支持 async / sync）
 - `cache_get` / `cache_set` / `cache_delete` / `cache_delete_prefix`：底层读写接口
-- Redis 连接失败一次后自动降级内存缓存，避免反复重连
+- Redis 失败后降级内存缓存；冷却后探测恢复，避免进程内永久卡在 degraded
+- 缓存未命中使用 per-key single-flight，避免恢复瞬间无界回源
 
 设计约定：
 - 缓存值必须是 JSON 可序列化的 dict/list/标量（端点返回的 ResponseSchema dict 均满足）
@@ -17,7 +18,7 @@ import logging
 import time
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from config.redis import get_redis_client, is_redis_enabled
+from config.redis import get_redis_client, is_redis_enabled, reset_redis_client
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -62,24 +63,83 @@ class MemoryCache:
 memory_cache = MemoryCache()
 _redis: Optional[Any] = None
 _redis_usable: Optional[bool] = None  # None=未检测；False=已降级内存缓存
+_degraded_until: float = 0.0
+_probe_lock = asyncio.Lock()
+_inflight: dict[str, asyncio.Future] = {}
+_inflight_guard = asyncio.Lock()
+
+
+def _mark_degraded(exc: BaseException) -> None:
+    global _redis_usable, _degraded_until
+    was = _redis_usable
+    _redis_usable = False
+    _degraded_until = time.monotonic() + float(settings.REDIS_RECOVER_SECONDS)
+    if was is not False:
+        logger.warning("redis_status=degraded error=%s", type(exc).__name__)
+
+
+def _mark_available() -> None:
+    global _redis_usable
+    if _redis_usable is False:
+        logger.info("redis_status=recovered")
+    elif _redis_usable is not True:
+        logger.info("redis_status=available")
+    _redis_usable = True
+
+
+def redis_runtime_status() -> str | None:
+    """None if Redis is disabled; otherwise available or degraded."""
+    if not is_redis_enabled():
+        return None
+    if _redis_usable is False:
+        return "degraded"
+    return "available"
+
+
+def reset_cache_runtime() -> None:
+    """Reset process-local Redis/memory cache state for tests."""
+    global _redis, _redis_usable, _degraded_until
+    _redis = None
+    _redis_usable = None
+    _degraded_until = 0.0
+    memory_cache.clear()
+    reset_redis_client()
 
 
 def resolve_redis():
-    """返回可用的 Redis 客户端，或 None（未启用 / 已降级内存）。"""
+    """返回可用的 Redis 客户端，或 None（未启用 / 冷却期内降级内存）。"""
     global _redis, _redis_usable
     if not is_redis_enabled():
         _redis_usable = False
         return None
-    if _redis_usable is False:
+    now = time.monotonic()
+    if _redis_usable is False and now < _degraded_until:
         return None
     if _redis is None:
         try:
             _redis = get_redis_client()
-        except Exception as e:  # pragma: no cover - 依赖外部 Redis
-            logger.warning("Redis 初始化失败，降级到内存缓存：%s", e)
-            _redis_usable = False
+        except Exception as exc:  # pragma: no cover - 依赖外部 Redis
+            logger.warning("Redis 初始化失败，降级到内存缓存：%s", exc)
+            _mark_degraded(exc)
             return None
     return _redis
+
+
+async def probe_redis() -> str | None:
+    """Ping Redis and update runtime status. Used by /api/health."""
+    if not is_redis_enabled():
+        return None
+    async with _probe_lock:
+        client = resolve_redis()
+        if client is None:
+            client = get_redis_client()
+        try:
+            await client.ping()
+            _mark_available()
+            return "available"
+        except Exception as exc:
+            _mark_degraded(exc)
+            return "degraded"
 
 
 async def cache_get(key: str) -> Any:
@@ -88,12 +148,13 @@ async def cache_get(key: str) -> Any:
     if client is not None:
         try:
             raw = await client.get(key)
+            _mark_available()
             if raw is None:
                 return None
             return json.loads(raw)
-        except Exception as e:  # pragma: no cover - 依赖外部 Redis
-            logger.warning("Redis GET 失败，降级到内存缓存：%s", e)
-            _redis_usable = False
+        except Exception as exc:  # pragma: no cover - 依赖外部 Redis
+            logger.warning("Redis GET 失败，降级到内存缓存：%s", exc)
+            _mark_degraded(exc)
     return memory_cache.get(key)
 
 
@@ -105,10 +166,11 @@ async def cache_set(key: str, value: Any, ttl: Optional[int] = None) -> None:
     if client is not None:
         try:
             await client.setex(key, ttl, payload)
+            _mark_available()
             return
-        except Exception as e:  # pragma: no cover - 依赖外部 Redis
-            logger.warning("Redis SET 失败，降级到内存缓存：%s", e)
-            _redis_usable = False
+        except Exception as exc:  # pragma: no cover - 依赖外部 Redis
+            logger.warning("Redis SET 失败，降级到内存缓存：%s", exc)
+            _mark_degraded(exc)
     memory_cache.set(key, value, ttl)
 
 
@@ -118,8 +180,9 @@ async def cache_delete(key: str) -> None:
     if client is not None:
         try:
             await client.delete(key)
-        except Exception:  # pragma: no cover - 依赖外部 Redis
-            _redis_usable = False
+            _mark_available()
+        except Exception as exc:  # pragma: no cover - 依赖外部 Redis
+            _mark_degraded(exc)
     memory_cache.delete(key)
 
 
@@ -130,8 +193,9 @@ async def cache_delete_prefix(prefix: str) -> None:
         try:
             async for key in client.scan_iter(match=f"{prefix}:*"):
                 await client.delete(key)
-        except Exception:  # pragma: no cover - 依赖外部 Redis
-            _redis_usable = False
+            _mark_available()
+        except Exception as exc:  # pragma: no cover - 依赖外部 Redis
+            _mark_degraded(exc)
     memory_cache.delete_prefix(prefix)
 
 
@@ -150,6 +214,32 @@ def _make_key(func: Callable, key_prefix: str, keys: Optional[Tuple[str, ...]], 
     else:
         seg = [f"{name}={bound.arguments[name]}" for name in bound.arguments]
     return build_key(key_prefix or func.__name__, *seg)
+
+
+async def _singleflight(key: str, loader):
+    async with _inflight_guard:
+        existing = _inflight.get(key)
+        if existing is not None:
+            waiter = existing
+        else:
+            loop = asyncio.get_running_loop()
+            waiter = loop.create_future()
+            _inflight[key] = waiter
+            existing = None
+    if existing is not None:
+        return await waiter
+    try:
+        result = await loader()
+        if not waiter.done():
+            waiter.set_result(result)
+        return result
+    except Exception as exc:
+        if not waiter.done():
+            waiter.set_exception(exc)
+        raise
+    finally:
+        async with _inflight_guard:
+            _inflight.pop(key, None)
 
 
 def cached(
@@ -175,9 +265,13 @@ def cached(
                 hit = await cache_get(key)
                 if hit is not None:
                     return hit
-                result = await func(*args, **kwargs)
-                await cache_set(key, result, ttl)
-                return result
+
+                async def load():
+                    result = await func(*args, **kwargs)
+                    await cache_set(key, result, ttl)
+                    return result
+
+                return await _singleflight(key, load)
 
             return async_wrapper
 

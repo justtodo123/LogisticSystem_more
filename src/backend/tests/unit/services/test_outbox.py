@@ -11,6 +11,7 @@ from services.outbox_service import (
     complete_notification_step,
     deliver_outbox_batch,
     enqueue_outbox,
+    finalize_claimed_event,
 )
 from services.replan_task_service import resume, start
 
@@ -255,3 +256,55 @@ def test_active_processing_lease_is_not_reclaimed(db_session):
     assert result["delivered"] == 1
     assert worker_sessions[0] is not request_session
     assert dispatcher_sessions == [worker_sessions[0]]
+
+
+
+def test_stale_claim_token_cannot_finalize(db_session):
+    enqueue_outbox(db_session, dedup_key="stale-token", event_type="x", payload={})
+    db_session.commit()
+    first = claim_outbox_batch(
+        db_session, worker_id="old-worker", limit=1, lease_seconds=60
+    )
+    assert len(first) == 1
+    old_token = first[0].claim_token
+    event_id = first[0].id
+    first[0].lease_until = datetime.utcnow() - timedelta(seconds=5)
+    db_session.commit()
+
+    reclaimed = claim_outbox_batch(
+        db_session, worker_id="new-worker", limit=1, lease_seconds=60
+    )
+    assert len(reclaimed) == 1
+    assert reclaimed[0].claim_token != old_token
+
+    outcome = finalize_claimed_event(
+        db_session,
+        event_id=event_id,
+        claim_token=old_token,
+        worker_id="old-worker",
+        ok=True,
+        error="",
+        permanent_failure=False,
+        max_retries=3,
+        retry_delay_seconds=1,
+    )
+    assert outcome == "stale"
+    stored = db_session.get(OutboxEvent, event_id)
+    db_session.refresh(stored)
+    assert stored.status == "processing"
+    assert stored.claimed_by == "new-worker"
+
+    outcome = finalize_claimed_event(
+        db_session,
+        event_id=event_id,
+        claim_token=reclaimed[0].claim_token,
+        worker_id="new-worker",
+        ok=True,
+        error="",
+        permanent_failure=False,
+        max_retries=3,
+        retry_delay_seconds=1,
+    )
+    assert outcome == "delivered"
+    db_session.refresh(stored)
+    assert stored.status == "delivered"

@@ -29,3 +29,4 @@ def test_engine_create_kwargs_postgres_enables_pool_pre_ping():
     assert kwargs["pool_pre_ping"] is True
     assert kwargs["pool_size"] == 8
     assert kwargs["max_overflow"] == 2
+    assert kwargs["pool_timeout"] == 30
