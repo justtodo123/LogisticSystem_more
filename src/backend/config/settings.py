@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./data/logistics.db"
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_TRANSIENT_RETRY_ATTEMPTS: int = 3
+    DB_TRANSIENT_RETRY_BACKOFF_MS: int = 50
 
     # ── JWT 认证 ──
     JWT_SECRET: str = "default-secret-key-change-in-env"
@@ -63,6 +66,7 @@ class Settings(BaseSettings):
     REDIS_ENABLED: bool = False
     REDIS_URL: str = ""
     REDIS_CACHE_TTL: int = 300
+    REDIS_RECOVER_SECONDS: float = 2.0
 
     # ── ERP 对接（T5-1）──
     # 外部 ERP 推送订单 Webhook 的 API Key；为空时回退到 Bearer JWT 认证（便于本地联调）

@@ -6,6 +6,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 
+from core.db_retry import retry_transient_pg
 from core.error_codes import CODE_STATE_CONFLICT
 from core.errors import DomainError
 
@@ -44,10 +45,14 @@ def claim_status(
         .values(values)
         .execution_options(synchronize_session=False)
     )
-    result = db.execute(stmt)
-    affected = result.rowcount
-    if affected == 0:
-        raise DomainError(CODE_STATE_CONFLICT)
-    if affected != 1:
-        raise DomainError(CODE_STATE_CONFLICT)
-    return affected
+
+    def _execute() -> int:
+        result = db.execute(stmt)
+        affected = result.rowcount
+        if affected == 0:
+            raise DomainError(CODE_STATE_CONFLICT)
+        if affected != 1:
+            raise DomainError(CODE_STATE_CONFLICT)
+        return affected
+
+    return retry_transient_pg(_execute, on_retry=db.rollback)

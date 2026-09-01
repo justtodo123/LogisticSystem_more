@@ -6,6 +6,8 @@ T4-3 缓存层测试（Redis 不可用时降级到内存缓存）
 2. @cached 装饰器：async/sync 函数缓存、参数区分、keys 限定
 3. TTL 过期
 """
+import asyncio
+
 import pytest
 
 from utils import cache
@@ -22,9 +24,9 @@ from utils.cache import (
 @pytest.fixture(autouse=True)
 def _clear_memory_cache():
     """每个测试前后清空内存缓存，避免跨测试污染"""
-    memory_cache.clear()
+    cache.reset_cache_runtime()
     yield
-    memory_cache.clear()
+    cache.reset_cache_runtime()
 
 
 @pytest.mark.unit
@@ -123,3 +125,74 @@ class TestCachedDecorator:
         assert fn(2) == 4
         assert fn(2) == 4
         assert calls == [2]
+
+
+
+class _FakeRedis:
+    def __init__(self):
+        self.fail = True
+        self.store = {}
+        self.pings = 0
+
+    async def ping(self):
+        self.pings += 1
+        if self.fail:
+            raise ConnectionError("redis down")
+        return True
+
+    async def get(self, key):
+        if self.fail:
+            raise ConnectionError("redis down")
+        raw = self.store.get(key)
+        return raw
+
+    async def setex(self, key, ttl, payload):
+        if self.fail:
+            raise ConnectionError("redis down")
+        self.store[key] = payload
+
+    async def delete(self, key):
+        self.store.pop(key, None)
+
+
+@pytest.mark.unit
+class TestRedisDegradeAndRecover:
+    async def test_redis_recovers_after_cooldown(self, monkeypatch):
+        fake = _FakeRedis()
+        monkeypatch.setattr(cache.settings, "REDIS_ENABLED", True)
+        monkeypatch.setattr(cache.settings, "REDIS_URL", "redis://example/0")
+        monkeypatch.setattr(cache.settings, "REDIS_RECOVER_SECONDS", 0)
+        monkeypatch.setattr(cache, "is_redis_enabled", lambda: True)
+        monkeypatch.setattr(cache, "get_redis_client", lambda: fake)
+        cache.reset_cache_runtime()
+        cache._redis = fake
+
+        await cache.cache_set("k", {"v": 1})
+        assert cache.redis_runtime_status() == "degraded"
+        assert await cache.cache_get("k") == {"v": 1}
+
+        fake.fail = False
+        assert await cache.probe_redis() == "available"
+        await cache.cache_set("k", {"v": 2})
+        assert await cache.cache_get("k") == {"v": 2}
+        assert cache.redis_runtime_status() == "available"
+
+    async def test_singleflight_collapses_duplicate_loads(self):
+        started = asyncio.Event()
+        release = asyncio.Event()
+        calls = []
+
+        @cache.cached(ttl=300, key_prefix="test:sf")
+        async def fn(x):
+            calls.append(x)
+            started.set()
+            await release.wait()
+            return {"x": x}
+
+        first = asyncio.create_task(fn(1))
+        await started.wait()
+        second = asyncio.create_task(fn(1))
+        release.set()
+        assert await first == {"x": 1}
+        assert await second == {"x": 1}
+        assert calls == [1]

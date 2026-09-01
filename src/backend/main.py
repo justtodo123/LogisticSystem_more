@@ -28,7 +28,7 @@ from api.erp_webhook import router as erp_webhook_router
 from api.reports import router as reports_router
 from api.ai_confirmation import router as ai_confirmation_router
 from api.users import router as users_router
-from config.redis import get_redis_client, is_redis_enabled
+from config.redis import is_redis_enabled
 from config.settings import settings
 from core.error_codes import (
     CODE_DATABASE_ERROR,
@@ -258,11 +258,15 @@ async def health_check():
         "ai_service": ai_status,
     }
     if is_redis_enabled():
-        try:
-            await get_redis_client().ping()
-            data["redis"] = "available"
-        except Exception:
-            data["redis"] = "degraded"
+        from utils.cache import probe_redis
+
+        redis_status = await probe_redis()
+        data["redis"] = redis_status or "degraded"
+        if redis_status != "available":
+            return HealthResponse(
+                data=data,
+                meta={"degraded": True, "degraded_reason": "redis"},
+            )
     return HealthResponse(data=data)
 
 

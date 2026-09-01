@@ -52,6 +52,7 @@ def engine_create_kwargs(
     *,
     pool_size: int = 5,
     max_overflow: int = 10,
+    pool_timeout: int = 30,
 ) -> dict[str, object]:
     """创建引擎参数：SQLite 仅方言 connect_args，PostgreSQL 启用连接池预检。"""
     kwargs: dict[str, object] = {"connect_args": engine_connect_args(database_url)}
@@ -61,6 +62,7 @@ def engine_create_kwargs(
             pool_pre_ping=True,
             pool_size=pool_size,
             max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
         )
     return kwargs
 
