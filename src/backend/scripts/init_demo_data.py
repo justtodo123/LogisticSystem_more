@@ -2,11 +2,16 @@
 演示数据初始化脚本
 依据架构设计说明书 §2 Q15：按用户→节点→车辆→司机→货物→订单顺序初始化
 """
+import sys
+from pathlib import Path as _Path
+
 from sqlalchemy.orm import Session
 from datetime import datetime
 import bcrypt
 import random
 import math
+
+sys.path.append(str(_Path(__file__).parent.parent))
 
 from models.user import User
 from models.node import Node

@@ -102,6 +102,7 @@ jobs:
           --health-retries 5
     env:
       ENV: dev
+      PYTHONPATH: ${{ github.workspace }}/src/backend
       DATABASE_URL: postgresql+psycopg://logistics:logistics@localhost:5432/logistics
       P1_DATABASE_URL: postgresql+psycopg://logistics:logistics@localhost:5432/logistics
       REDIS_ENABLED: "true"
