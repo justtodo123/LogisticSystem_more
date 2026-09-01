@@ -431,7 +431,7 @@ def dispatch_level(
                 }
                 dispatch_list.append(dispatch)
                 for p in assigned:
-                    p.dispatch_id = 0
+                    p.dispatch_id = None
                     updated_packages.append(p)
                 created.append(dispatch)
             return created

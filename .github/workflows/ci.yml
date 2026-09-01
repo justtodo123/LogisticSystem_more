@@ -72,7 +72,7 @@ jobs:
         run: python -m pytest -q -p no:cacheprovider
 
   p1-postgres-redis:
-    name: P1 PostgreSQL + Redis 基线
+    name: P1 PostgreSQL + Redis 协议与多 worker 验证
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -102,6 +102,7 @@ jobs:
           --health-retries 5
     env:
       ENV: dev
+      PYTHONPATH: ${{ github.workspace }}/src/backend
       DATABASE_URL: postgresql+psycopg://logistics:logistics@localhost:5432/logistics
       P1_DATABASE_URL: postgresql+psycopg://logistics:logistics@localhost:5432/logistics
       REDIS_ENABLED: "true"
@@ -123,8 +124,80 @@ jobs:
       - name: PostgreSQL 发布迁移门禁
         run: python scripts/release_migrate.py
 
-      - name: P1 Postgres/Redis 基线测试
-        run: python -m pytest -q -p no:cacheprovider tests/p1 tests/unit/core/test_database_url.py
+      - name: P1 PostgreSQL/Redis 协议复跑
+        run: >-
+          python -m pytest -q -p no:cacheprovider
+          tests/p1/test_postgres_baseline.py
+          tests/p1/test_redis_baseline.py
+          tests/p1/test_postgres_protocols.py
+          tests/unit/core/test_database_url.py
+
+      - name: 初始化多 worker 合成数据
+        run: |
+          python scripts/init_users.py
+          python scripts/init_demo_data.py
+
+      - name: 启动可单独寻址的应用与 outbox worker
+        shell: bash
+        run: |
+          mkdir -p p1-artifacts
+          python -m uvicorn main:app --host 127.0.0.1 --port 18001 \
+            >p1-artifacts/worker-a.log 2>&1 &
+          echo $! > p1-artifacts/worker-a.pid
+          python -m uvicorn main:app --host 127.0.0.1 --port 18002 \
+            >p1-artifacts/worker-b.log 2>&1 &
+          echo $! > p1-artifacts/worker-b.pid
+          python scripts/outbox_worker.py --worker-id gha-p1-outbox \
+            >p1-artifacts/outbox-worker.log 2>&1 &
+          echo $! > p1-artifacts/outbox-worker.pid
+
+          cleanup() {
+            for pid_file in p1-artifacts/*.pid; do
+              if [ -f "$pid_file" ]; then
+                kill "$(tr -d '[:space:]' < "$pid_file")" 2>/dev/null || true
+              fi
+            done
+          }
+          trap cleanup EXIT
+
+          export PYTHONUNBUFFERED=1
+          if ! python scripts/wait_http.py --timeout 60 \
+            http://127.0.0.1:18001/api/health \
+            http://127.0.0.1:18002/api/health; then
+            for log_file in p1-artifacts/*.log; do
+              echo "===== ${log_file} ====="
+              cat "${log_file}" || true
+            done
+            exit 1
+          fi
+
+          P1_WORKER_A_URL=http://127.0.0.1:18001 \
+          P1_WORKER_B_URL=http://127.0.0.1:18002 \
+            python -m pytest -q -p no:cacheprovider \
+            tests/p1/test_multi_worker_http.py
+          python scripts/smoke_local.py --base-url http://127.0.0.1:18001
+
+          cat > p1-artifacts/scenario-summary.txt <<'EOF'
+          topology=two separately addressed single-worker Uvicorn processes
+          worker_a=http://127.0.0.1:18001
+          worker_b=http://127.0.0.1:18002
+          database=PostgreSQL 16 service
+          cache=Redis 7 service
+          outbox_worker=separate process
+          assertions=HTTP smoke, cross-process JWT revocation, durable idempotent replay
+          data=synthetic
+          EOF
+
+      - name: 上传 P1 脱敏日志与场景摘要
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1-postgres-redis-worker-logs
+          path: |
+            src/backend/p1-artifacts/*.log
+            src/backend/p1-artifacts/scenario-summary.txt
+          if-no-files-found: warn
+          retention-days: 7
 
   frontend-check:
     name: 前端类型检查 + 构建
