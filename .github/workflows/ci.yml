@@ -171,11 +171,11 @@ jobs:
             exit 1
           fi
 
-          python scripts/smoke_local.py --base-url http://127.0.0.1:18001
           P1_WORKER_A_URL=http://127.0.0.1:18001 \
           P1_WORKER_B_URL=http://127.0.0.1:18002 \
             python -m pytest -q -p no:cacheprovider \
             tests/p1/test_multi_worker_http.py
+          python scripts/smoke_local.py --base-url http://127.0.0.1:18001
 
           cat > p1-artifacts/scenario-summary.txt <<'EOF'
           topology=two separately addressed single-worker Uvicorn processes
