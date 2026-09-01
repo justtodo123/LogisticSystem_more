@@ -28,6 +28,7 @@ from api.erp_webhook import router as erp_webhook_router
 from api.reports import router as reports_router
 from api.ai_confirmation import router as ai_confirmation_router
 from api.users import router as users_router
+from config.redis import get_redis_client, is_redis_enabled
 from config.settings import settings
 from core.error_codes import (
     CODE_DATABASE_ERROR,
@@ -249,15 +250,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
-    """健康检查接口（含 AI 服务状态）"""
+    """健康检查接口（含 AI / Redis 状态）"""
     ai_status = "available" if settings.DEEPSEEK_API_KEY else "degraded"
-    return HealthResponse(
-        data={
-            "status": "ok",
-            "environment": settings.ENV,
-            "ai_service": ai_status,
-        }
-    )
+    data = {
+        "status": "ok",
+        "environment": settings.ENV,
+        "ai_service": ai_status,
+    }
+    if is_redis_enabled():
+        try:
+            await get_redis_client().ping()
+            data["redis"] = "available"
+        except Exception:
+            data["redis"] = "degraded"
+    return HealthResponse(data=data)
 
 
 # 应用启动时初始化数据库（创建所有表）
