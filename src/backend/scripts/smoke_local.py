@@ -19,6 +19,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -91,6 +92,10 @@ def assert_not_dev_db(path: Path, label: str) -> None:
         raise SmokeFailed(f"{label} refuses to use the development db: {DEFAULT_DEV_DB}")
 
 
+def new_idempotency_key(prefix: str) -> str:
+    return f"{prefix}-{uuid.uuid4().hex}"
+
+
 def request_json(
     method: str,
     url: str,
@@ -98,6 +103,7 @@ def request_json(
     token: str | None = None,
     body: Any = None,
     timeout: float = 60,
+    idempotency_key: str | None = None,
 ) -> HttpResult:
     headers = {"Accept": "application/json"}
     data = None
@@ -106,6 +112,8 @@ def request_json(
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    if idempotency_key:
+        headers["X-Idempotency-Key"] = idempotency_key
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -316,6 +324,7 @@ def _step_schedule_draft(ctx: SmokeContext, token: str) -> None:
         token=token,
         body={"algorithm": "traditional", "preview": True, "order_codes": selected},
         timeout=180,
+        idempotency_key=new_idempotency_key("smoke-global"),
     )
     body = require_ok(result, "POST /api/schedule/global")
     record_degraded(ctx, "schedule/global", body)
@@ -339,6 +348,7 @@ def _step_confirm_pack(ctx: SmokeContext, token: str) -> None:
         api_url(ctx.base_url, f"/api/schedule/confirm/{ctx.schedule_code}"),
         token=token,
         timeout=180,
+        idempotency_key=new_idempotency_key("smoke-confirm"),
     )
     body = require_ok(result, "POST /api/schedule/confirm")
     data = body.get("data") or {}
@@ -487,6 +497,7 @@ def _step_deliver_and_arrival(ctx: SmokeContext, token: str) -> None:
             "is_normal": True,
         },
         timeout=120,
+        idempotency_key=new_idempotency_key("smoke-arrival"),
     )
     confirm_body = require_ok(confirm, "POST /api/simulation/confirm-arrival")
     confirm_data = confirm_body.get("data") or {}

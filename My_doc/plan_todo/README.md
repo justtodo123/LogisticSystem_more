@@ -4,7 +4,7 @@
 > **参考依据**：[大厂后端 SP 标准差距与优化路线图](../reference/大厂后端SP标准差距与优化路线图.md)。
 > **决策基线**：[decisions.md](./decisions.md)（协议冻结 `v2026-08-25-r2-freeze`；治理增补 `v2026-08-25-r2-governance`）。冲突时：代码与验证证据 > 版本化决策 > 本 README > 单卡正文。
 > **第一轮归档**：[第一轮优化计划](../post_plan/第一轮优化计划/)。第一轮文档只追溯，不承担第二轮实时状态。
-> **修订日期**：2026-09-01。R2-02 已通过 PR #10 / #11 / #12 验证并合并；R2-03 已通过 PR #15 / CI 验证并合并；R2-04B 已通过 PR #16 / CI 验证并合并。R2-05 第一刀已通过 PR #18 / main CI / CD 验证并合并；PostgreSQL 迁移与 Redis ping 已验证，故障注入与多 worker 验收未完成，仍不得标 done。
+> **修订日期**：2026-09-01。R2-02 已通过 PR #10 / #11 / #12 验证并合并；R2-03 已通过 PR #15 / CI 验证并合并；R2-04B 已通过 PR #16 / CI 验证并合并。R2-05 第一刀已通过 PR #18 / main CI / CD 验证并合并；第二刀已在功能分支实现 PostgreSQL 协议复跑和双进程 HTTP harness，但尚未提交或取得 GHA 结果。故障注入与恢复验收未完成，仍不得标 done。
 
 ## 阅读与状态规则
 
@@ -42,7 +42,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | 02 | P0 | P0 | done | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | R2-02A/B 经 PR #10 / #11 / #12、CI 验证并合并；数据库幂等状态机与原子号段协议完成 |
 | 03 | P0 | P0 | done | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | PR #15 / CI 通过并合并；Saga/outbox 协议与本地故障注入已验证 |
 | 04B | P0 并行 | P0 | done | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | PR #16 / CI 通过并合并；权限矩阵、token version、前后端 can() 已验证 |
-| 05 | P1 | P1 | in_progress | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | PR #18 / merge `ef97229` / CI 33379583834 全绿 / CD 33379973080 成功；PostgreSQL 迁移与 Redis ping 已验证；未完成故障注入与多 worker 验收 |
+| 05 | P1 | P1 | in_progress | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | 第一刀 PR #18 / CI / CD 已验证；第二刀 PostgreSQL 协议与双进程 HTTP harness 已实现但尚无 GHA 结果；故障注入与恢复未完成 |
 | 06 | P1/P2 | P1 | pending | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | 最小观测 + load/spike；soak 为 P2 |
 
 ## 依赖主链
@@ -58,13 +58,13 @@ R2-00A + R2-01 + R2-02 + R2-03 -> R2-05 (in_progress)
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：R2-05 第一刀已通过 PR #18 / main CI / CD 合入。继续故障注入、多 worker 复跑与备份恢复；完成前本卡不得标 `done`，不得用 SQLite 结果替代。
+当前下一动作：R2-05 第二刀已在功能分支实现 PostgreSQL 协议复跑与双进程 HTTP harness，待获得真实 GHA 运行结果后回填；继续故障注入、恢复与备份验证。完成前本卡不得标 `done`，不得用 SQLite 结果替代。
 
 ## 当前证据边界
 
 - 已有 SQLite、本地 HTTP smoke、单元/API/集成测试和路线查询次数回归；这些不等价于 PostgreSQL 多 worker 容量证明。
 - 本机（2026-08-25）：Win11 家庭版，Ryzen 7 7840H，16GB（空闲曾约 1.6GB），Python 3.13.3，Node v24.12.0，Git 2.49；**无** Docker / WSL / PostgreSQL / Redis / k6 / Locust。
-- R2-00A 已完成 Alembic 单 head、正式启动 migration gate、运行时 DDL 移除和 SQLite schema parity。R2-05 第一刀已合入：PostgreSQL 驱动、GHA Postgres/Redis 基线（fresh 迁移到唯一 head + Redis ping）已在 main CI 验证。仓库默认 `docker-compose.yml` 仍是 SQLite + 单 worker；故障注入、多 worker 复跑与备份恢复仍未完成，不计入已完成能力。
+- R2-00A 已完成 Alembic 单 head、正式启动 migration gate、运行时 DDL 移除和 SQLite schema parity。R2-05 第一刀已合入：PostgreSQL 驱动、GHA Postgres/Redis 基线（fresh 迁移到唯一 head + Redis ping）已在 main CI 验证。第二刀代码已增加 PostgreSQL 协议测试、两个可单独寻址应用进程的 HTTP 验证和独立 outbox worker，但尚未获得 GHA 结果；故障注入、恢复与备份仍未完成，不计入已完成能力。
 - 第一轮 02B Docker E2E 仍未完成；P1 保留独立 `blocked`，不默认为通过。
 - `My_doc/` 已正式纳入追踪；小型脱敏报告可入库，预览、依赖目录、数据库、日志、原始 CI 输出、待脱敏 Office 二进制、可再生成的历史演示输出与实验大产物继续忽略。
 
