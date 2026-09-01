@@ -273,23 +273,26 @@ def main() -> int:
 
     run(["docker", "pause", postgres_id])
     try:
-        failed = httpx.get(
-            f"{args.worker_a_url}/api/orders",
-            params={"page": 1, "page_size": 5},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        failed_code = None
         try:
-            failed_code = failed.json().get("code")
-        except Exception:
-            failed_code = failed.status_code
-        lines.append(f"postgres_paused_orders_code={failed_code}")
-        if failed.status_code == 200 and failed_code == 0:
-            raise SystemExit("orders succeeded while postgres paused")
+            failed = httpx.get(
+                f"{args.worker_a_url}/api/orders",
+                params={"page": 1, "page_size": 5},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=3,
+            )
+            failed_code = None
+            try:
+                failed_code = failed.json().get("code")
+            except Exception:
+                failed_code = failed.status_code
+            lines.append(f"postgres_paused_orders_code={failed_code}")
+            if failed.status_code == 200 and failed_code == 0:
+                raise SystemExit("orders succeeded while postgres paused")
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as exc:
+            lines.append(f"postgres_paused_orders_error={type(exc).__name__}")
     finally:
         run(["docker", "unpause", postgres_id])
-        time.sleep(3)
+        time.sleep(5)
 
     wait_http([f"{args.worker_a_url}/api/health", f"{args.worker_b_url}/api/health"])
     token = login(args.worker_a_url)
