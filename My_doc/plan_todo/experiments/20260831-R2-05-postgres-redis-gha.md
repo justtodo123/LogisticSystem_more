@@ -9,13 +9,15 @@
 - 层级：P1 外部拓扑（第一刀，未验收完成）
 - Git 分支：feat/R2-05-postgres-redis-gha
 - Commit SHA：03a3436790a7d98342ba04e35386358718c08891
+- Merge SHA：ef97229cb566fc544a41ab2f16c36ecee309c9e4
 - PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/18
-- CI run URL（如有）：尚无
+- CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33379583834
+- CD run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33379973080
 
 ## Schema 与数据来源
 
 - Alembic 当前 revision：r2_04b_token_version
-- 数据库来源：GHA 将使用 fresh PostgreSQL 16；本机未启动 PostgreSQL
+- 数据库来源：GHA 已使用 fresh PostgreSQL 16；本机未启动 PostgreSQL
 - 数据是否为合成/脱敏数据：是
 
 ## 环境
@@ -43,11 +45,12 @@ python -m pytest -q -p no:cacheprovider tests/unit/core/test_database_url.py tes
 ## 原始结果与产物
 
 - 命令是否实际执行：本机仅跑不依赖 Postgres 的单元测试；P1 live 测试在无 P1_DATABASE_URL 时 skip
-- GHA Postgres/Redis job：PR #18 已创建，CI 进行中
+- GHA Postgres/Redis job：PR #18 已合并；main CI run 33379583834 四个 job 全绿；`P1 PostgreSQL + Redis 基线` 已验证 PostgreSQL 迁移到唯一 head 与 Redis ping
+- CD：run 33379973080 成功
 - 脱敏检查：已检查；无凭据入库（compose 使用示例口令 logistics/logistics，仅 P1 实验栈）
 
 ## 结论
 
-- 状态：in_progress；未执行 Docker Compose，不得标 done
+- 状态：in_progress。PR #18 已于 2026-08-31 09:49:42 UTC 合并，merge `ef97229`；main CI run 33379583834 四个 job 全绿；CD run 33379973080 成功。PostgreSQL 迁移与 Redis ping 已验证。未执行 Docker Compose 多 worker / 故障注入，不得标 done
 - 已知限制：登录限流仍为进程内计数；SQLite StaticPool 不是跨 worker 证明
-- 下一步：等待 PR #18 CI；随后复跑 CAS/幂等/Saga/撤权
+- 下一步：复跑 CAS/幂等/Saga/撤权、多 worker 故障注入与备份恢复
