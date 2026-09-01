@@ -9,8 +9,11 @@
 - 层级：P1 外部拓扑（故障切片，GHA 已验证，整卡未验收完成）
 - Git 分支：feat/R2-05-fault-resilience
 - Commit SHA：c2b1f69d5ee782ba9e42e7e2c9a1f41cc00b0421
+- Merge SHA：4c72828ab9dd147d44b0f92893426783ae3fef9b
 - PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/21
 - CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33487318596
+- main CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33489817053
+- CD run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33490209885
 
 ## Schema 与数据来源
 
@@ -57,7 +60,7 @@ docker exec <postgres:16-alpine> pg_dump -U logistics -d logistics --schema-only
 ## 原始结果与产物
 
 - 命令是否实际执行：是（GitHub Actions，不是本机）
-- GitHub Actions：PR #21 CI [run 33487318596](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33487318596) 四个 job 全绿。`P1 PostgreSQL + Redis 协议与多 worker 验证` 日志记录：
+- GitHub Actions：PR #21 CI [run 33487318596](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33487318596) 四个 job 全绿；main CI [run 33489817053](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33489817053) 四个 job 全绿；CD [run 33490209885](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33490209885) 成功。`P1 PostgreSQL + Redis 协议与多 worker 验证` 日志记录：
   - `fault_checks=redis-pause,worker-restart,pg-schema-dump`
   - `redis_paused_health=degraded`
   - `db_login_during_redis_pause=ok`
@@ -79,5 +82,5 @@ docker exec <postgres:16-alpine> pg_dump -U logistics -d logistics --schema-only
 
 ## 结论
 
-- 状态：`in_progress`。PR #21 CI run 33487318596 全绿，故障切片已验证。PR 尚未合并，不得提前写已合并。
+- 状态：`in_progress`。PR #21 已于 2026-09-01 08:58:49 UTC 合并，merge `4c72828`；main CI run 33489817053 四个 job 全绿；CD run 33490209885 成功。故障切片已验证，R2-05 仍不得标 `done`。
 - 即使本次 CI 全绿，R2-05 仍不得标 `done`；后续继续 deadlock/serialization、连接池耗尽、备份恢复和 100,000 编号规模验证。
