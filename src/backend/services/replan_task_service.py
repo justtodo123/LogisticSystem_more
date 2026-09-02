@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from core.error_codes import CODE_IDEMPOTENCY_PAYLOAD_MISMATCH, CODE_STATE_CONFLICT
 from core.errors import DomainError
+from core.request_context import update_request_context
 from models.replan_task import ReplanTask
 from services.outbox_service import complete_notification_step
 
@@ -63,6 +64,7 @@ def _load_task(db: Session, task_id: int) -> ReplanTask:
     task = db.get(ReplanTask, task_id)
     if task is None:
         raise DomainError(CODE_STATE_CONFLICT, message="重规划任务不存在")
+    update_request_context(task_id=str(task.id))
     return task
 
 

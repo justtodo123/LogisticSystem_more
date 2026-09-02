@@ -22,6 +22,18 @@ from models.driver import Driver
 
 
 @pytest.fixture(autouse=True)
+def _reset_observability_state():
+    from core.metrics import metrics
+    from core.request_context import reset_request_context
+
+    metrics.reset()
+    reset_request_context()
+    yield
+    metrics.reset()
+    reset_request_context()
+
+
+@pytest.fixture(autouse=True)
 def _clear_global_memory_cache():
     """每个测试前后清空全局内存缓存，避免跨测试污染（T4-3）"""
     from utils.cache import memory_cache
@@ -37,11 +49,14 @@ def test_db():
     """创建测试数据库引擎和会话工厂，供所有fixture共享"""
     from sqlalchemy.pool import StaticPool
     
+    from core.sql_comments import instrument_engine
+
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,  # 使用StaticPool确保所有连接共享同一个数据库连接
     )
+    instrument_engine(engine)
     
     # 导入所有模型以确保它们被注册到Base.metadata
     from models import (  # noqa: F401

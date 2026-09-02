@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from config.redis import get_redis_client, is_redis_enabled, reset_redis_client
 from config.settings import settings
+from core.metrics import observe_cache
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ def _mark_degraded(exc: BaseException) -> None:
     _degraded_until = time.monotonic() + float(settings.REDIS_RECOVER_SECONDS)
     if was is not False:
         logger.warning("redis_status=degraded error=%s", type(exc).__name__)
+        observe_cache(degraded=True)
 
 
 def _mark_available() -> None:
@@ -150,12 +152,16 @@ async def cache_get(key: str) -> Any:
             raw = await client.get(key)
             _mark_available()
             if raw is None:
+                observe_cache(hit=False)
                 return None
+            observe_cache(hit=True)
             return json.loads(raw)
         except Exception as exc:  # pragma: no cover - 依赖外部 Redis
             logger.warning("Redis GET 失败，降级到内存缓存：%s", exc)
             _mark_degraded(exc)
-    return memory_cache.get(key)
+    value = memory_cache.get(key)
+    observe_cache(hit=value is not None)
+    return value
 
 
 async def cache_set(key: str, value: Any, ttl: Optional[int] = None) -> None:
@@ -279,6 +285,7 @@ def cached(
         def wrapper(*args, **kwargs):
             key = _make_key(func, key_prefix, keys, args, kwargs)
             hit = memory_cache.get(key)
+            observe_cache(hit=hit is not None)
             if hit is not None:
                 return hit
             result = func(*args, **kwargs)

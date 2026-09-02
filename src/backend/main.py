@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from pydantic import BaseModel
@@ -38,11 +38,14 @@ from core.error_codes import (
 )
 from core.errors import DomainError
 from core.exception_mapping import (
+    attach_request_meta,
     request_log_context,
     resolve_legacy_http_error,
     safe_response_headers,
     validation_error_meta,
 )
+from core.json_logging import configure_logging
+from core.metrics import observe_business_error, observe_idempotency_replay
 from middleware.idempotency import (
     IdempotencyMiddleware,
     IdempotencyProtocolError,
@@ -50,8 +53,10 @@ from middleware.idempotency import (
 )
 from middleware.timeout import TimeoutMiddleware
 from middleware.audit_log import AuditLogMiddleware
-from utils.response import error_response
+from middleware.request_context import RequestContextMiddleware
+from utils.response import error_response, success_response
 
+configure_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -100,6 +105,7 @@ app.add_middleware(
 
 # 注册审计日志中间件（T0-3 新增）— 放在最后，限流后的请求才记录
 app.add_middleware(AuditLogMiddleware)
+app.add_middleware(RequestContextMiddleware)
 
 # 注册认证路由
 app.include_router(auth_router)
@@ -165,9 +171,14 @@ async def domain_exception_handler(request: Request, exc: DomainError):
     retry_after = exc.meta.get("retry_after") if isinstance(exc.meta, dict) else None
     if isinstance(retry_after, (int, float)) and retry_after >= 0:
         headers["Retry-After"] = str(int(retry_after))
+    observe_business_error(exc.code)
     return JSONResponse(
         status_code=exc.http_status,
-        content=error_response(exc.code, exc.public_message, meta=exc.meta),
+        content=error_response(
+            exc.code,
+            exc.public_message,
+            meta=attach_request_meta(exc.meta),
+        ),
         headers=headers or None,
     )
 
@@ -178,6 +189,7 @@ async def idempotency_replay_handler(
     exc: IdempotencyReplay,
 ):
     """Return a stored response only after route authorization succeeds."""
+    observe_idempotency_replay()
     return IdempotencyMiddleware.replay_response(exc.response)
 
 
@@ -187,6 +199,7 @@ async def idempotency_protocol_error_handler(
     exc: IdempotencyProtocolError,
 ):
     """Render errors raised by the post-authorization claim protocol."""
+    observe_business_error(exc.code)
     return IdempotencyMiddleware.protocol_error_response(
         exc.code,
         headers=exc.headers,
@@ -202,9 +215,14 @@ async def database_exception_handler(request: Request, exc: SQLAlchemyError):
         type(exc).__name__,
         request_log_context(request),
     )
+    observe_business_error(definition.code)
     return JSONResponse(
         status_code=definition.http_status,
-        content=error_response(definition.code, definition.message),
+        content=error_response(
+            definition.code,
+            definition.message,
+            meta=attach_request_meta(),
+        ),
     )
 
 
@@ -217,9 +235,14 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         type(exc).__name__,
         request_log_context(request),
     )
+    observe_business_error(definition.code)
     return JSONResponse(
         status_code=definition.http_status,
-        content=error_response(definition.code, definition.message),
+        content=error_response(
+            definition.code,
+            definition.message,
+            meta=attach_request_meta(),
+        ),
     )
 
 
@@ -227,9 +250,14 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """将旧 HTTPException 安全转换为统一错误 envelope。"""
     definition, message, meta = resolve_legacy_http_error(exc.status_code, exc.detail)
+    observe_business_error(definition.code)
     return JSONResponse(
         status_code=exc.status_code,
-        content=error_response(definition.code, message, meta=meta),
+        content=error_response(
+            definition.code,
+            message,
+            meta=attach_request_meta(meta),
+        ),
         headers=safe_response_headers(exc.headers),
     )
 
@@ -238,12 +266,13 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """将 Pydantic 参数校验错误转为统一、安全的响应格式。"""
     definition = get_error_definition(CODE_PARAM_ERROR)
+    observe_business_error(definition.code)
     return JSONResponse(
         status_code=422,
         content=error_response(
             definition.code,
             definition.message,
-            meta=validation_error_meta(exc.errors()),
+            meta=attach_request_meta(validation_error_meta(exc.errors())),
         ),
     )
 
@@ -270,12 +299,32 @@ async def health_check():
     return HealthResponse(data=data)
 
 
+@app.get("/metrics")
+async def metrics_endpoint(request: Request):
+    """Core counters and gauges. JSON by default; Prometheus text with ?format=prometheus."""
+    from core.metrics import metrics
+    from services.observability_service import collect_runtime_gauges
+
+    gauges = collect_runtime_gauges()
+    payload = {"counters": metrics.snapshot(), "gauges": gauges}
+    fmt = (request.query_params.get("format") or "").lower()
+    accept = (request.headers.get("accept") or "").lower()
+    if fmt in {"prometheus", "prom"} or "text/plain" in accept:
+        lines = [metrics.render_prometheus().rstrip()]
+        for name, value in sorted(gauges.items()):
+            lines.append(f"{name} {value}")
+        text = "\n".join(line for line in lines if line) + "\n"
+        return PlainTextResponse(text, media_type="text/plain; version=0.0.4")
+    return success_response(payload)
+
+
 # 应用启动时初始化数据库（创建所有表）
 @app.on_event("startup")
 async def startup_event():
     """应用启动事件；schema 由发布前的 Alembic 步骤负责。"""
     from config.database_url import redact_database_url
 
+    configure_logging()
     logger.info(
         "启动环境：ENV=%s，数据库=%s（schema 需由发布前 Alembic 管理）",
         settings.ENV,

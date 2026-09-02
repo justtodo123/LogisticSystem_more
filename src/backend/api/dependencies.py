@@ -16,6 +16,7 @@ from core.error_codes import (
 )
 from core.errors import DomainError
 from core.permissions import user_has_permission
+from core.request_context import update_request_context
 from middleware.idempotency import claim_idempotency
 
 security = HTTPBearer()
@@ -47,6 +48,7 @@ async def get_current_user(
         if _token_version_from_payload(payload) != int(user.token_version or 0):
             raise DomainError(CODE_UNAUTHORIZED)
         request.state.current_user = user
+        update_request_context(user_id=str(user.id), role=str(user.role or ""))
         return user
     except DomainError:
         raise

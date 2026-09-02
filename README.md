@@ -64,6 +64,7 @@ cd src/frontend && cp .env.example .env.local && npm install && npm run dev
 - **通知服务** — 可插拔渠道（Console/Email/企业微信）
 - **ERP 对接** — CSV(xlsx) 导出 + Excel 导入列映射 + Webhook
 - **RBAC + 审计** — 4 角色 + 操作审计日志 + 幂等控制
+- **可观测性** — request/trace/task ID、JSON 日志、`/metrics`；load/spike 走 GHA
 
 ## 仓库结构
 

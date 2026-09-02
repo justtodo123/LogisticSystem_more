@@ -9,6 +9,7 @@ from config.database_url import (
     resolve_database_url,
 )
 from config.settings import settings  # noqa: F401  # 向后兼容：其他模块通过 from config.database import settings 使用
+from core.sql_comments import instrument_engine
 from models.base import Base
 
 
@@ -27,6 +28,7 @@ engine = create_engine(
         pool_timeout=settings.DB_POOL_TIMEOUT,
     ),
 )
+instrument_engine(engine)
 
 # 创建会话工厂
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
