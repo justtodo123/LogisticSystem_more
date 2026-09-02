@@ -131,6 +131,7 @@ jobs:
           tests/p1/test_redis_baseline.py
           tests/p1/test_postgres_protocols.py
           tests/p1/test_postgres_faults.py
+          tests/p1/test_login_rate_limit_redis.py
           tests/unit/core/test_database_url.py
           tests/unit/core/test_db_retry.py
 
@@ -176,7 +177,8 @@ jobs:
           P1_WORKER_A_URL=http://127.0.0.1:18001 \
           P1_WORKER_B_URL=http://127.0.0.1:18002 \
             python -m pytest -q -p no:cacheprovider \
-            tests/p1/test_multi_worker_http.py
+            tests/p1/test_multi_worker_http.py \
+            tests/p1/test_login_rate_limit_http.py
           python scripts/smoke_local.py --base-url http://127.0.0.1:18001
           python scripts/p1_fault_harness.py
           python scripts/p1_backup_restore.py
@@ -188,7 +190,7 @@ jobs:
           database=PostgreSQL 16 service
           cache=Redis 7 service
           outbox_worker=separate process
-          assertions=HTTP smoke, cross-process JWT revocation, durable idempotent replay
+          assertions=HTTP smoke, cross-process JWT revocation, durable idempotent replay, shared login rate limit
           data=synthetic
           EOF
 

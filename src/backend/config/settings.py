@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     # 外部 ERP 推送订单 Webhook 的 API Key；为空时回退到 Bearer JWT 认证（便于本地联调）
     ERP_API_KEY: str = ""
 
-    # R2-04B login rate limit (process-local; not cross-worker)
+    # R2-05 login rate limit (Redis shared when enabled; process-local fallback)
     LOGIN_RATE_LIMIT_ATTEMPTS: int = 5
     LOGIN_RATE_LIMIT_WINDOW_SECONDS: int = 60
 

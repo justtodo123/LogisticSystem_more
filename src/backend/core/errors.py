@@ -6,7 +6,7 @@ from typing import Any
 from core.error_codes import ErrorDefinition, get_error_definition
 
 
-_SAFE_META_KEYS = frozenset({"errors", "retry_after", "request_id", "trace_id"})
+_SAFE_META_KEYS = frozenset({"errors", "retry_after", "request_id", "trace_id", "degraded", "degraded_reason"})
 _MAX_META_ITEMS = 20
 _MAX_TEXT_LENGTH = 256
 
@@ -47,6 +47,9 @@ def sanitize_meta(meta: Mapping[str, Any] | None) -> dict[str, Any]:
                 result[key] = safe_errors
         elif key == "retry_after":
             if isinstance(value, (int, float)) and value >= 0:
+                result[key] = value
+        elif key == "degraded":
+            if isinstance(value, bool):
                 result[key] = value
         else:
             safe_value = _safe_text(value)
