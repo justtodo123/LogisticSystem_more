@@ -74,7 +74,7 @@ npm run build
 
 ## 完成记录
 
-- 状态：`in_progress`（2026-09-02）。第一刀已实现 request/trace/task ID、JSON 日志、SQL 注释、`/metrics`、k6 脚本与 `P1 load and spike` workflow。
-- 本机：无 Docker / k6；load/spike **未执行**，不得标 `done`。
-- 验证命令待本机 pytest 记录；GHA load 需 `workflow_dispatch`。
+- 状态：`in_progress`（2026-09-02）。第一刀已合并 PR #27 / `bbc05b1`。
+- 首次 GHA load run 33598168488 失败：错误率 0%，P95 10.15s，因每迭代 bcrypt 登录 + 预填 `p(95)<2000`。
+- 本机：无 Docker / k6；不得标 `done`，待 harness 修正后重跑 5 分钟 load + spike。
 - P2 未做：soak、Grafana 全家桶、镜像安全扫描。

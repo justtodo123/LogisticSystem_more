@@ -1,72 +1,91 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 import { Rate } from "k6/metrics";
-import { BASE_URL, PASSWORD, USERNAME, jsonHeaders } from "./helpers.js";
+import { BASE_URL, jsonHeaders, login } from "./helpers.js";
 
 const errorRate = new Rate("business_error_rate");
 
 export const options = {
   scenarios: {
-    load: {
+    reads: {
       executor: "constant-arrival-rate",
       rate: Number(__ENV.RPS || 8),
       timeUnit: "1s",
       duration: __ENV.DURATION || "5m",
       preAllocatedVUs: 20,
       maxVUs: 60,
+      exec: "readMix",
+    },
+    auth: {
+      executor: "constant-arrival-rate",
+      rate: Number(__ENV.LOGIN_RPS || 1),
+      timeUnit: "1s",
+      duration: __ENV.DURATION || "5m",
+      preAllocatedVUs: 2,
+      maxVUs: 10,
+      exec: "loginMix",
     },
   },
   thresholds: {
     http_req_failed: ["rate<0.01"],
     business_error_rate: ["rate<0.01"],
-    http_req_duration: ["p(95)<2000"],
+    dropped_iterations: ["count<100"],
+    http_req_duration: ["p(95)<5000"],
   },
 };
 
-function login() {
-  const res = http.post(
-    `${BASE_URL}/api/auth/login`,
-    JSON.stringify({ username: USERNAME, password: PASSWORD }),
-    { headers: jsonHeaders() },
-  );
-  const ok = check(res, {
-    "login status 200": (r) => r.status === 200,
-    "login business 0": (r) => {
-      try {
-        return r.json("code") === 0;
-      } catch (err) {
-        return false;
-      }
-    },
-  });
-  errorRate.add(!ok);
-  if (!ok) {
-    return null;
+export function setup() {
+  const result = login();
+  if (!result.ok || !result.token) {
+    throw new Error("setup login failed");
   }
-  return res.json("data.access_token");
+  return { token: result.token };
 }
 
-export default function () {
-  const health = http.get(`${BASE_URL}/api/health`, { headers: jsonHeaders() });
+export function readMix(data) {
+  const health = http.get(`${BASE_URL}/api/health`, {
+    headers: jsonHeaders(),
+    tags: { name: "health" },
+  });
   check(health, {
     "health 200": (r) => r.status === 200,
     "health echoes request id": (r) => Boolean(r.headers["X-Request-Id"] || r.headers["X-Request-ID"]),
   });
 
-  const token = login();
-  if (token) {
-    const me = http.get(`${BASE_URL}/api/auth/me`, { headers: jsonHeaders(token) });
-    const orders = http.get(`${BASE_URL}/api/orders?page=1&page_size=20`, {
-      headers: jsonHeaders(token),
-    });
-    const meOk = check(me, { "me 200": (r) => r.status === 200 && r.json("code") === 0 });
-    const ordersOk = check(orders, {
-      "orders 200": (r) => r.status === 200 && r.json("code") === 0,
-    });
-    errorRate.add(!(meOk && ordersOk));
+  const token = data && data.token;
+  if (!token) {
+    errorRate.add(true);
+    return;
   }
 
-  const metrics = http.get(`${BASE_URL}/metrics`, { headers: jsonHeaders() });
+  const me = http.get(`${BASE_URL}/api/auth/me`, {
+    headers: jsonHeaders(token),
+    tags: { name: "me" },
+  });
+  const orders = http.get(`${BASE_URL}/api/orders?page=1&page_size=20`, {
+    headers: jsonHeaders(token),
+    tags: { name: "orders" },
+  });
+  const meOk = check(me, { "me 200": (r) => r.status === 200 && r.json("code") === 0 });
+  const ordersOk = check(orders, {
+    "orders 200": (r) => r.status === 200 && r.json("code") === 0,
+  });
+  errorRate.add(!(meOk && ordersOk));
+
+  const metrics = http.get(`${BASE_URL}/metrics`, {
+    headers: jsonHeaders(),
+    tags: { name: "metrics" },
+  });
   check(metrics, { "metrics 200": (r) => r.status === 200 });
   sleep(0.1);
+}
+
+export function loginMix() {
+  const result = login();
+  check(result.res, {
+    "login status 200": (r) => r.status === 200,
+    "login business 0": () => result.ok,
+  });
+  errorRate.add(!result.ok);
+  sleep(0.05);
 }

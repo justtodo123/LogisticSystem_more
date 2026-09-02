@@ -58,7 +58,7 @@ R2-00A + R2-01 + R2-02 + R2-03 -> R2-05 (done)
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：R2-05 已由 PR #25 CI run 33589202969 验证。R2-06 第一刀进行中：request/trace/task ID、JSON 日志与 `/metrics` 已实现；load/spike 待 GHA `workflow_dispatch`。
+当前下一动作：R2-05 已由 PR #25 CI run 33589202969 验证。R2-06 第一刀已合并 PR #27。首次 load run 33598168488 失败（P95 10.15s，登录混合）；harness 修正中，不得标 done。
 
 ## 当前证据边界
 
