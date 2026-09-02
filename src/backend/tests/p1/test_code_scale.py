@@ -2,8 +2,9 @@
 
 Production global_schedule codes are width=3 (max 999). This job therefore
 measures unique, contiguous claims on a dedicated CodeRange row rather than
-changing production width. It does not publish P95/P99.
+changing production width.
 """
+import math
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -46,12 +47,14 @@ def test_postgres_code_range_scale(p1_postgres, p1_row_cleanup):
     )
 
     claimed: list[int] = []
+    latencies: list[float] = []
     lock = Lock()
 
     def claim_one() -> None:
+        started_one = time.perf_counter()
         session = factory()
         try:
-            for _ in range(32):
+            for attempt in range(128):
                 current = session.execute(
                     select(CodeRange.next_value).where(
                         CodeRange.resource == "p1_scale",
@@ -71,9 +74,11 @@ def test_postgres_code_range_scale(p1_postgres, p1_row_cleanup):
                     session.commit()
                     with lock:
                         claimed.append(current)
+                        latencies.append(time.perf_counter() - started_one)
                     return
                 session.rollback()
-            raise AssertionError("failed to claim a code")
+                time.sleep(min(0.001 * (2**min(attempt, 5)), 0.02))
+            raise AssertionError("failed to claim a code after 128 retries")
         finally:
             session.close()
 
@@ -109,10 +114,18 @@ def test_postgres_code_range_scale(p1_postgres, p1_row_cleanup):
     finally:
         resumed.close()
 
+    sorted_latencies = sorted(latencies)
+
+    def percentile(value: float) -> float:
+        index = max(0, math.ceil(value * len(sorted_latencies)) - 1)
+        return sorted_latencies[index]
+
     print(
         "code_scale="
         f"{scale} workers={workers} unique={len(set(claimed))} "
         f"contiguous=1..{scale} resume_next={scale + 1} elapsed_s={elapsed:.3f} "
-        "p95=unmeasured p99=unmeasured",
+        f"throughput_per_s={scale / elapsed:.1f} "
+        f"p95_ms={percentile(0.95) * 1000:.3f} "
+        f"p99_ms={percentile(0.99) * 1000:.3f}",
         flush=True,
     )
