@@ -13,8 +13,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from config.database_url import engine_create_kwargs, resolve_database_url
+from config.settings import settings
 from models.node import Node
 from models.outbox_event import OutboxEvent
+from models.user import User
+from services.auth_service import get_password_hash
 from services.outbox_service import claim_outbox_batch, enqueue_outbox, finalize_claimed_event
 
 
@@ -86,6 +89,31 @@ def stop_pid(pid_path: Path) -> None:
         subprocess.run(["kill", pid], check=False)
 
 
+def login_attempt(base_url: str, username: str, password: str, timeout: float = 15) -> httpx.Response:
+    return httpx.post(
+        f"{base_url}/api/auth/login",
+        json={"username": username, "password": password},
+        timeout=timeout,
+    )
+
+
+def seed_user(factory, username: str, password: str) -> None:
+    db = factory()
+    try:
+        db.add(
+            User(
+                username=username,
+                password_hash=get_password_hash(password),
+                role="dispatcher",
+                display_name=username,
+                is_active=True,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
 def login(base_url: str, username: str = "admin", password: str = "123456") -> str:
     response = httpx.post(
         f"{base_url}/api/auth/login",
@@ -123,9 +151,8 @@ def main() -> int:
 
     summary = artifacts / "fault-summary.txt"
     lines = [
-        "fault_checks=redis-pause-recover,worker-restart-idempotency,outbox-lease-reclaim,pg-pause-recover,pg-schema-dump",
+        "fault_checks=redis-pause-recover,login-rate-limit,worker-restart-idempotency,outbox-lease-reclaim,pg-pause-recover,pg-schema-dump",
         "data=synthetic",
-        "cross_worker_login_rate_limit=not_in_scope",
     ]
 
     redis_id = docker_id("redis:7-alpine")
@@ -162,6 +189,68 @@ def main() -> int:
     lines.append(f"redis_recovered_health={recovered}")
     if recovered != "available":
         raise SystemExit(f"redis did not recover: {recovered}")
+
+    rl_suffix = uuid4().hex
+    rl_user = f"p1-rl-{rl_suffix}"
+    rl_other = f"p1-rl-other-{rl_suffix}"
+    rl_probe = f"p1-rl-probe-{rl_suffix}"
+    rl_password = f"P1-{rl_suffix}"
+    seed_user(factory, rl_user, rl_password)
+    seed_user(factory, rl_other, rl_password)
+    seed_user(factory, rl_probe, rl_password)
+    attempts = int(settings.LOGIN_RATE_LIMIT_ATTEMPTS)
+    for index in range(attempts - 1):
+        base = args.worker_a_url if index % 2 == 0 else args.worker_b_url
+        response = login_attempt(base, rl_user, "wrong")
+        body = response.json()
+        if response.status_code != 200 or body.get("code") != 40100:
+            raise SystemExit(f"shared fail login unexpected: {response.text[:300]}")
+        if (body.get("meta") or {}).get("degraded"):
+            raise SystemExit("login rate limit degraded before redis pause")
+
+    run(["docker", "pause", redis_id])
+    try:
+        paused = login_attempt(args.worker_a_url, rl_user, "wrong", timeout=10)
+        paused_body = paused.json()
+        paused_meta = paused_body.get("meta") or {}
+        if paused.status_code != 200 or paused_body.get("code") != 40100:
+            raise SystemExit(f"paused login unexpected: {paused.text[:300]}")
+        if paused_meta.get("degraded") is not True or paused_meta.get("degraded_reason") != "redis":
+            raise SystemExit(f"paused login not degraded: {paused_meta}")
+        lines.append("login_rate_limit_redis_paused_degraded=ok")
+    finally:
+        run(["docker", "unpause", redis_id])
+        time.sleep(3)
+
+    limiter_recovered = False
+    for _ in range(10):
+        probe = login_attempt(args.worker_a_url, rl_probe, "wrong")
+        probe_body = probe.json()
+        if (
+            probe.status_code == 200
+            and probe_body.get("code") == 40100
+            and (probe_body.get("meta") or {}).get("degraded") is False
+        ):
+            limiter_recovered = True
+            break
+        time.sleep(1)
+    if not limiter_recovered:
+        raise SystemExit("login limiter did not recover shared redis")
+    lines.append("login_rate_limit_redis_recovered=ok")
+
+    threshold = login_attempt(args.worker_b_url, rl_user, "wrong")
+    threshold_body = threshold.json()
+    if threshold.status_code != 200 or threshold_body.get("code") != 40100:
+        raise SystemExit(f"recover fail before lock unexpected: {threshold.text[:300]}")
+    locked = login_attempt(args.worker_a_url, rl_user, rl_password)
+    locked_body = locked.json()
+    if locked.status_code != 429 or locked_body.get("code") != 42900:
+        raise SystemExit(f"shared limiter did not lock after recover: {locked.text[:300]}")
+    other_ok = login_attempt(args.worker_b_url, rl_other, rl_password)
+    other_body = other_ok.json()
+    if other_ok.status_code != 200 or other_body.get("code") != 0:
+        raise SystemExit(f"other user blocked by shared limiter: {other_ok.text[:300]}")
+    lines.append("cross_worker_login_rate_limit=ok")
 
     token = login(args.worker_a_url)
     suffix = uuid4().hex[:16]

@@ -36,7 +36,7 @@ async def login(credentials: UserLoginRequest, request: Request, db: Session = D
             "code": CODE_UNAUTHORIZED,
             "message": "用户名或密码错误",
             "data": None,
-            "meta": {"degraded": False, "degraded_reason": None},
+            "meta": limiter.public_meta(),
         }
 
     limiter.record_success(rate_key)
@@ -65,7 +65,7 @@ async def login(credentials: UserLoginRequest, request: Request, db: Session = D
             "role": user.role,
             "display_name": user.display_name,
         },
-        "meta": {"degraded": False, "degraded_reason": None},
+        "meta": limiter.public_meta(),
     }
 
 

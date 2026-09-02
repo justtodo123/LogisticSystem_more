@@ -40,3 +40,19 @@ def test_meta_sanitizer_bounds_validation_errors():
     assert len(meta["errors"]) == 20
     assert set(meta["errors"][0]) == {"loc", "type", "msg"}
     assert "token" not in meta
+
+
+def test_meta_sanitizer_keeps_degraded_flag():
+    meta = sanitize_meta(
+        {
+            "degraded": True,
+            "degraded_reason": "redis",
+            "retry_after": 9,
+            "secret": "hidden",
+        }
+    )
+    assert meta == {
+        "degraded": True,
+        "degraded_reason": "redis",
+        "retry_after": 9,
+    }
