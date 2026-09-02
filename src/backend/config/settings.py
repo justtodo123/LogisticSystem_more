@@ -76,6 +76,9 @@ class Settings(BaseSettings):
     LOGIN_RATE_LIMIT_ATTEMPTS: int = 5
     LOGIN_RATE_LIMIT_WINDOW_SECONDS: int = 60
 
+    # R2-06 observability
+    LOG_LEVEL: str = "INFO"
+
     # ── 地图服务（T5-2）──
     # MAP_PROVIDER: amap（高德）/ baidu（百度）；为空或未配置 MAP_API_KEY 时降级直线距离
     MAP_PROVIDER: str = ""

@@ -14,7 +14,7 @@ from services.log_service import LogService, VALID_EVENTS
 logger = logging.getLogger(__name__)
 
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-EXCLUDED_PATHS = {"/api/health", "/docs", "/openapi.json", "/redoc", "/api/auth/login", "/api/auth/logout"}
+EXCLUDED_PATHS = {"/api/health", "/metrics", "/docs", "/openapi.json", "/redoc", "/api/auth/login", "/api/auth/logout"}
 
 
 class AuditLogMiddleware(BaseHTTPMiddleware):

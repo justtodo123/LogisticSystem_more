@@ -12,6 +12,8 @@ from starlette.responses import JSONResponse
 
 from config.settings import settings
 from core.error_codes import CODE_REQUEST_TIMEOUT, get_error_definition
+from core.exception_mapping import attach_request_meta
+from core.metrics import observe_business_error
 from utils.response import error_response
 
 logger = logging.getLogger(__name__)
@@ -24,7 +26,7 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
     排除路径（如 health）不受超时限制。
     """
 
-    EXCLUDED_PATHS = {"/api/health", "/docs", "/openapi.json", "/redoc"}
+    EXCLUDED_PATHS = {"/api/health", "/metrics", "/docs", "/openapi.json", "/redoc"}
 
     def __init__(self, app, timeout_seconds: int = 30):
         super().__init__(app)
@@ -50,7 +52,12 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
                 request.url.path,
             )
             definition = get_error_definition(CODE_REQUEST_TIMEOUT)
+            observe_business_error(definition.code)
             return JSONResponse(
                 status_code=definition.http_status,
-                content=error_response(definition.code, definition.message),
+                content=error_response(
+                    definition.code,
+                    definition.message,
+                    meta=attach_request_meta(),
+                ),
             )

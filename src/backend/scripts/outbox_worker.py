@@ -6,9 +6,18 @@ import socket
 from contextlib import suppress
 
 from config.database import SessionLocal
+from core.json_logging import configure_logging
+from core.request_context import (
+    RequestContext,
+    bind_request_context,
+    generate_id,
+    reset_request_context,
+)
 from models.outbox_event import OutboxEvent
 from services.notification.dispatcher import NotificationDispatcher
 from services.outbox_service import deliver_outbox_batch
+
+configure_logging()
 
 
 logger = logging.getLogger(__name__)
@@ -20,9 +29,21 @@ async def _send(event: OutboxEvent) -> bool:
     try:
         payload = dict(event.payload or {})
         payload["idempotency_key"] = event.dedup_key
-        scenario = event.event_type.replace(".", "_")
-        results = await NotificationDispatcher(db=session).notify(scenario, payload)
-        return bool(results) and all(value == "ok" for value in results.values())
+        task_id = payload.get("task_id")
+        token = bind_request_context(
+            RequestContext(
+                request_id=generate_id(),
+                trace_id=generate_id(),
+                task_id=str(task_id) if task_id is not None else None,
+                idempotency_key=event.dedup_key,
+            )
+        )
+        try:
+            scenario = event.event_type.replace(".", "_")
+            results = await NotificationDispatcher(db=session).notify(scenario, payload)
+            return bool(results) and all(value == "ok" for value in results.values())
+        finally:
+            reset_request_context(token)
     finally:
         session.close()
 

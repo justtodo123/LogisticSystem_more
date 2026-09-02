@@ -1,11 +1,11 @@
 ---
 plan_id: "R2-06"
 title: 可观测性、容量测试与交付证据
-status: pending
+status: in_progress
 priority: P1
 owner: justtodo123
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-09-02
 depends_on: ["R2-04B", "R2-05"]
 ---
 
@@ -74,4 +74,7 @@ npm run build
 
 ## 完成记录
 
-- 尚未开始。进入条件含 R2-05 解阻。完成时填写工具版本、load/spike 结果、流水线链接、Commit/PR 与 P2 未做项。
+- 状态：`in_progress`（2026-09-02）。第一刀已实现 request/trace/task ID、JSON 日志、SQL 注释、`/metrics`、k6 脚本与 `P1 load and spike` workflow。
+- 本机：无 Docker / k6；load/spike **未执行**，不得标 `done`。
+- 验证命令待本机 pytest 记录；GHA load 需 `workflow_dispatch`。
+- P2 未做：soak、Grafana 全家桶、镜像安全扫描。

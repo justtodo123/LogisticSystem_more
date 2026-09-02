@@ -1,0 +1,118 @@
+name: P1 load and spike
+
+on:
+  workflow_dispatch:
+    inputs:
+      load_duration:
+        description: k6 load duration
+        required: true
+        default: "5m"
+      load_rps:
+        description: constant arrival rate for load
+        required: true
+        default: "8"
+      spike_rps:
+        description: peak arrival rate for spike
+        required: true
+        default: "25"
+
+jobs:
+  load-spike:
+    name: P1 k6 load + spike
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: logistics
+          POSTGRES_PASSWORD: logistics
+          POSTGRES_DB: logistics
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logistics -d logistics"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ENV: dev
+      PYTHONPATH: ${{ github.workspace }}/src/backend
+      DATABASE_URL: postgresql+psycopg://logistics:logistics@localhost:5432/logistics
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-only-r2-06-load-secret-value-32
+      BASE_URL: http://127.0.0.1:18001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: src/backend/requirements.txt
+      - uses: grafana/setup-k6-action@v1
+      - name: Install dependencies
+        working-directory: src/backend
+        run: pip install -r requirements.txt
+      - name: Migrate, seed, load and spike
+        working-directory: src/backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p p1-artifacts "${GITHUB_WORKSPACE}/artifacts/r2-06-load"
+          python scripts/release_migrate.py
+          python scripts/init_users.py
+          python scripts/init_demo_data.py
+          python -m uvicorn main:app --host 127.0.0.1 --port 18001 \
+            >p1-artifacts/load-api.log 2>&1 &
+          echo $! > p1-artifacts/load-api.pid
+          cleanup() {
+            if [ -f p1-artifacts/load-api.pid ]; then
+              kill "$(tr -d '[:space:]' < p1-artifacts/load-api.pid)" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+          python scripts/wait_http.py --timeout 60 http://127.0.0.1:18001/api/health
+          python - <<'PY'
+          import urllib.request
+          req = urllib.request.Request(
+              "http://127.0.0.1:18001/api/health",
+              headers={"X-Request-ID": "r2-06-probe"},
+          )
+          with urllib.request.urlopen(req, timeout=10) as resp:
+              request_id = resp.headers.get("X-Request-ID")
+              if request_id != "r2-06-probe":
+                  raise SystemExit(f"request id mismatch: {request_id}")
+          with urllib.request.urlopen("http://127.0.0.1:18001/metrics", timeout=10) as resp:
+              body = resp.read().decode()
+              if "http_requests_total" not in body and "counters" not in body:
+                  raise SystemExit("metrics payload missing counters")
+          print("observability_probe=ok")
+          PY
+          k6 run --summary-export="${GITHUB_WORKSPACE}/artifacts/r2-06-load/load-summary.json" \
+            -e BASE_URL=http://127.0.0.1:18001 \
+            -e DURATION=${{ inputs.load_duration }} \
+            -e RPS=${{ inputs.load_rps }} \
+            "${GITHUB_WORKSPACE}/load/k6/load.js"
+          k6 run --summary-export="${GITHUB_WORKSPACE}/artifacts/r2-06-load/spike-summary.json" \
+            -e BASE_URL=http://127.0.0.1:18001 \
+            -e SPIKE_RPS=${{ inputs.spike_rps }} \
+            "${GITHUB_WORKSPACE}/load/k6/spike.js"
+      - name: Upload load artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-06-load-spike
+          path: |
+            artifacts/r2-06-load/*.json
+            src/backend/p1-artifacts/*.log
+          if-no-files-found: warn
+          retention-days: 14

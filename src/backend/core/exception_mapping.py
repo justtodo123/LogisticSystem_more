@@ -10,6 +10,7 @@ from core.error_codes import (
     get_error_definition,
 )
 from core.errors import sanitize_meta
+from core.request_context import context_as_dict, get_request_context
 
 
 _SAFE_RESPONSE_HEADERS = frozenset(
@@ -19,6 +20,7 @@ _SAFE_RESPONSE_HEADERS = frozenset(
         "retry-after",
         "x-request-id",
         "x-trace-id",
+        "x-task-id",
     }
 )
 _MAX_VALIDATION_ERRORS = 20
@@ -81,16 +83,34 @@ def validation_error_meta(errors: list[dict[str, Any]]) -> dict[str, Any]:
     return sanitize_meta({"errors": safe_errors})
 
 
+def attach_request_meta(meta: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Merge request/trace/task IDs into public error meta without overwriting callers."""
+    merged: dict[str, Any] = dict(meta or {})
+    current = get_request_context()
+    if current is None:
+        return sanitize_meta(merged)
+    merged.setdefault("request_id", current.request_id)
+    merged.setdefault("trace_id", current.trace_id)
+    if current.task_id:
+        merged.setdefault("task_id", current.task_id)
+    return sanitize_meta(merged)
+
+
 def request_log_context(request: Any) -> dict[str, str]:
     """提取不含 query/body 的请求诊断上下文。"""
     context = {
         "method": str(getattr(request, "method", ""))[:16],
         "path": str(getattr(getattr(request, "url", None), "path", ""))[:256],
     }
+    context.update(context_as_dict())
     headers = getattr(request, "headers", {})
     if isinstance(headers, Mapping):
-        for header, key in (("x-request-id", "request_id"), ("x-trace-id", "trace_id")):
+        for header, key in (
+            ("x-request-id", "request_id"),
+            ("x-trace-id", "trace_id"),
+            ("x-task-id", "task_id"),
+        ):
             value = headers.get(header)
             if isinstance(value, str) and 0 < len(value) <= 256:
-                context[key] = value
+                context.setdefault(key, value)
     return context

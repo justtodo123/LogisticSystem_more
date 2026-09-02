@@ -6,7 +6,7 @@ from typing import Any
 from core.error_codes import ErrorDefinition, get_error_definition
 
 
-_SAFE_META_KEYS = frozenset({"errors", "retry_after", "request_id", "trace_id", "degraded", "degraded_reason"})
+_SAFE_META_KEYS = frozenset({"errors", "retry_after", "request_id", "trace_id", "task_id", "degraded", "degraded_reason"})
 _MAX_META_ITEMS = 20
 _MAX_TEXT_LENGTH = 256
 
