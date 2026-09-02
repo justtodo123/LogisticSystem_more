@@ -91,7 +91,7 @@ docker compose -f docker-compose.p1.yml -p logistics-r2 up -d --build
 - 第三刀：分支 `feat/R2-05-fault-recovery`；实现提交 `19a67bc`；pause 超时修复 `cdacba7`。PR：[PR #23](https://github.com/justtodo123/LogisticSystem_more/pull/23)，已于 2026-09-01 10:01:14 UTC 合并，merge `e021966`。PR CI：[run 33494304652](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33494304652)；main CI：[run 33495246187](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33495246187)，四个 job 全绿；CD：[run 33495660568](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33495660568) 成功。
 - 本机：未执行 Docker / PostgreSQL / Redis；P1 live 测试在无外部服务时 skip，不得写成 PostgreSQL 通过。
 - 规模实测：`P1 code scale` run [33581256635](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33581256635) 成功；100,000 次、8 workers、unique/contiguous/resume 均通过，516.578 秒，193.6 claims/s，P95 158.342 ms，P99 294.859 ms。跨 worker 登录限流代码已实现；P1 双 worker / Redis pause GHA 尚未执行。
-- 跨 worker 登录限流：分支 eat/R2-05-cross-worker-login-rate-limit 已实现 Redis Lua 共享计数与降级回退；本机单测已通过；P1 GHA 尚未执行，PR/CI 尚无。
+- 跨 worker 登录限流：分支 eat/R2-05-cross-worker-login-rate-limit 已实现 Redis Lua 共享计数与降级回退；本机单测已通过；P1 GHA 尚未执行；PR #25 已开出，CI 尚未结果。
 - 实现提交：`03a3436`；文档记录提交：`860aa6d`；迁移方言修复：`f3f0ef9`；合并提交：`ef97229cb566fc544a41ab2f16c36ecee309c9e4`。
 - PR：[PR #18](https://github.com/justtodo123/LogisticSystem_more/pull/18)，已于 2026-08-31 09:49:42 UTC 合并。
 - CI：[run 33379583834](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33379583834)，`数据库迁移基线`、`后端测试 (pytest)`、`P1 PostgreSQL + Redis 基线`、`前端类型检查 + 构建` 均成功。

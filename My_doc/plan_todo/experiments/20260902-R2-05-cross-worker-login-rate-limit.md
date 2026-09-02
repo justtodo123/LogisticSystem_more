@@ -9,7 +9,7 @@
 - 层级：P0 本机协议 + P1 外部拓扑（P1 尚未在 GHA 执行）
 - Git 分支：feat/R2-05-cross-worker-login-rate-limit
 - Commit SHA：0bab96a10cede4f3453015a54b36c477cc651019
-- PR URL：尚无
+- PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/25
 - CI run URL：未执行
 
 ## Schema 与数据来源
