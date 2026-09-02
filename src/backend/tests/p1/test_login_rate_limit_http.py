@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from core.error_codes import CODE_LOGIN_RATE_LIMITED
+from models.log_event import LogEvent
 from models.user import User
 from services.auth_service import get_password_hash
 
@@ -49,12 +50,17 @@ def test_two_workers_share_login_rate_limit(p1_postgres, p1_redis_url, p1_row_cl
         ]
         seed.add_all(users)
         seed.commit()
+        user_ids = [user.id for user in users]
     finally:
         seed.close()
 
     p1_row_cleanup(
+        LogEvent,
         User,
-        filters={User: User.username.in_((username, other_name))},
+        filters={
+            LogEvent: LogEvent.user_id.in_(user_ids),
+            User: User.username.in_((username, other_name)),
+        },
     )
 
     with httpx.Client(timeout=30) as client:
