@@ -13,7 +13,7 @@ export function jsonHeaders(token, extra) {
   const headers = {
     Accept: "application/json",
     "Content-Type": "application/json",
-    "X-Request-ID": `k6-${__VU}-${__ITER}-${Date.now()}`,
+    "X-Request-ID": `k6-${Date.now()}-${Math.floor(Math.random() * 1e9)}`,
   };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
