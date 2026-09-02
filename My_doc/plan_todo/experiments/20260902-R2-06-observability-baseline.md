@@ -45,6 +45,7 @@ python -m pytest -q -p no:cacheprovider tests/unit/core/test_request_context.py 
 - load 结果：http_req_failed 0%，checks 7399/7399，P95 10154 ms，avg 3385 ms，dropped_iterations 1344
 - 失败原因：每迭代 bcrypt 登录阻塞单 worker；/api/auth/login p50 3203 ms；预填 p(95)<2000 被击穿，k6 exit 99
 - 产物：artifacts r2-06-load-spike（load-summary.json + load-api.log）
+- 第二次 load run 33604463684 在 setup() 失败：k6 `__ITER` 不存在于 setup 上下文，exit 107
 - 脱敏检查：脚本不含凭据；GHA 使用示例口令 logistics/logistics
 
 ## STAR 素材（引用已有 P0/P1 证据，待 load 数字补齐）
@@ -57,4 +58,4 @@ python -m pytest -q -p no:cacheprovider tests/unit/core/test_request_context.py 
 
 - 状态：in_progress。观测基线已合并；首次 load 因登录混合与 2s 绝对门禁失败，不能标 done
 - 已知限制：本机无 k6 与 PostgreSQL；/metrics 计数为进程内，多 worker 需分别抓取或后续聚合
-- 下一步：修正 k6 令牌复用 + 1 RPS 登录混合，2 uvicorn workers；重跑 load/spike 后回填 RPS/P95/P99
+- 下一步：修正 setup() 下 `__ITER` ReferenceError；重跑 load/spike 后回填 RPS/P95/P99
