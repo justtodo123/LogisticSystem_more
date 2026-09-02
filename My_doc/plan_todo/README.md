@@ -4,7 +4,7 @@
 > **参考依据**：[大厂后端 SP 标准差距与优化路线图](../reference/大厂后端SP标准差距与优化路线图.md)。
 > **决策基线**：[decisions.md](./decisions.md)（协议冻结 `v2026-08-25-r2-freeze`；治理增补 `v2026-08-25-r2-governance`）。冲突时：代码与验证证据 > 版本化决策 > 本 README > 单卡正文。
 > **第一轮归档**：[第一轮优化计划](../post_plan/第一轮优化计划/)。第一轮文档只追溯，不承担第二轮实时状态。
-> **修订日期**：2026-09-01。R2-02 已通过 PR #10 / #11 / #12 验证并合并；R2-03 已通过 PR #15 / CI 验证并合并；R2-04B 已通过 PR #16 / CI 验证并合并。R2-05 第一刀至第三刀已合入：PR #18 / #20 / #21 / #23，main CI / CD 已验证 worker/outbox 恢复、Redis 恢复、PostgreSQL 冲突与连接、专用库备份恢复。100k 编号尚未实测，跨 worker 登录限流仍未完成，仍不得标 done。
+> **修订日期**：2026-09-02。R2-02 已通过 PR #10 / #11 / #12 验证并合并；R2-03 已通过 PR #15 / CI 验证并合并；R2-04B 已通过 PR #16 / CI 验证并合并。R2-05 第一刀至第三刀已合入：PR #18 / #20 / #21 / #23，main CI / CD 已验证 worker/outbox 恢复、Redis 恢复、PostgreSQL 冲突与连接、专用库备份恢复。100k 编号已完成 GHA 实测，跨 worker 登录限流仍未完成，仍不得标 done。
 
 ## 阅读与状态规则
 
@@ -42,7 +42,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | 02 | P0 | P0 | done | [原子幂等与业务编号](./02-idempotency-and-code-generation.md) | R2-02A/B 经 PR #10 / #11 / #12、CI 验证并合并；数据库幂等状态机与原子号段协议完成 |
 | 03 | P0 | P0 | done | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | PR #15 / CI 通过并合并；Saga/outbox 协议与本地故障注入已验证 |
 | 04B | P0 并行 | P0 | done | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | PR #16 / CI 通过并合并；权限矩阵、token version、前后端 can() 已验证 |
-| 05 | P1 | P1 | in_progress | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | PR #18/#20/#21/#23 已合并；main CI/CD 已验证故障恢复与备份；100k 与跨 worker 登录限流未完成 |
+| 05 | P1 | P1 | in_progress | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | PR #18/#20/#21/#23 已合并；main CI/CD 与 100k GHA scale run `33581256635` 已验证；仅剩跨 worker 登录限流 |
 | 06 | P1/P2 | P1 | pending | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | 最小观测 + load/spike；soak 为 P2 |
 
 ## 依赖主链
@@ -58,13 +58,13 @@ R2-00A + R2-01 + R2-02 + R2-03 -> R2-05 (in_progress)
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：R2-05 第三刀已合入 PR #23 / merge `e021966`。剩余：手工触发 100k 号段 CAS（`P1 code scale` workflow），以及跨 worker 登录限流。完成前本卡不得标 `done`，不得用 SQLite 结果替代。
+当前下一动作：R2-05 100k 号段 CAS 已由独立 `P1 code scale` workflow 实测通过（run `33581256635`）；剩余跨 worker 登录限流。完成前本卡不得标 `done`，不得用 SQLite 结果替代。
 
 ## 当前证据边界
 
 - 已有 SQLite、本地 HTTP smoke、单元/API/集成测试和路线查询次数回归；这些不等价于 PostgreSQL 多 worker 容量证明。
 - 本机（2026-08-25）：Win11 家庭版，Ryzen 7 7840H，16GB（空闲曾约 1.6GB），Python 3.13.3，Node v24.12.0，Git 2.49；**无** Docker / WSL / PostgreSQL / Redis / k6 / Locust。
-- R2-00A 已完成 Alembic 单 head、正式启动 migration gate、运行时 DDL 移除和 SQLite schema parity。R2-05 第一刀至第三刀已合入 PR #18 / #20 / #21 / #23：PostgreSQL 协议复跑、双进程 HTTP、Redis pause/恢复、worker 重启幂等重放、outbox lease reclaim、deadlock/serialization 有限重试、连接池超时、Postgres 短暂断连、专用库备份恢复。100,000 编号尚未实测（仅有 `workflow_dispatch` job），跨 worker 登录限流仍为进程内实现，不计入已完成能力。
+- R2-00A 已完成 Alembic 单 head、正式启动 migration gate、运行时 DDL 移除和 SQLite schema parity。R2-05 第一刀至第三刀已合入 PR #18 / #20 / #21 / #23：PostgreSQL 协议复跑、双进程 HTTP、Redis pause/恢复、worker 重启幂等重放、outbox lease reclaim、deadlock/serialization 有限重试、连接池超时、Postgres 短暂断连、专用库备份恢复。100,000 编号已由 `workflow_dispatch` run `33581256635` 实测通过，跨 worker 登录限流仍为进程内实现，不计入已完成能力。
 - 第一轮 02B Docker E2E 仍未完成；P1 保留独立 `blocked`，不默认为通过。
 - `My_doc/` 已正式纳入追踪；小型脱敏报告可入库，预览、依赖目录、数据库、日志、原始 CI 输出、待脱敏 Office 二进制、可再生成的历史演示输出与实验大产物继续忽略。
 

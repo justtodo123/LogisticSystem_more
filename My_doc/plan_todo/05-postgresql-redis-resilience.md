@@ -5,7 +5,7 @@ status: in_progress
 priority: P1
 owner: justtodo123
 created: 2026-08-25
-updated: 2026-09-01
+updated: 2026-09-02
 depends_on: ["R2-00A", "R2-01", "R2-02", "R2-03"]
 ---
 
@@ -15,7 +15,7 @@ depends_on: ["R2-00A", "R2-01", "R2-02", "R2-03"]
 
 开发默认 SQLite；Redis 失败回退进程内缓存。Compose 当前是 SQLite + 单 worker，**不是**本卡目标拓扑。本机 2026-08-25：无 Docker / WSL / PostgreSQL / Redis。第一轮 02B 仍为 `mitigated`。
 
-**当前动作**：第三刀已合入 `main`（PR #23 / merge `e021966`）。已验证 worker 重启幂等重放、outbox lease reclaim 与 stale token、Redis 中断后恢复、PostgreSQL deadlock/serialization/连接池超时/短暂断连、以及专用库备份恢复。100,000 编号尚未实测；跨 worker 登录限流仍未完成。本机无 Docker/WSL/PostgreSQL。完成前本卡不得标 `done`。
+**当前动作**：第三刀已合入 `main`（PR #23 / merge `e021966`）。已验证 worker 重启幂等重放、outbox lease reclaim 与 stale token、Redis 中断后恢复、PostgreSQL deadlock/serialization/连接池超时/短暂断连、以及专用库备份恢复。100,000 编号已完成 GHA 实测；跨 worker 登录限流仍未完成。本机无 Docker/WSL/PostgreSQL。完成前本卡不得标 `done`。
 
 ## 问题与目标
 
@@ -90,7 +90,7 @@ docker compose -f docker-compose.p1.yml -p logistics-r2 up -d --build
 - 故障切片：分支 `feat/R2-05-fault-resilience`；实现提交 `c2b1f69`；文档记录提交 `e424a20`。PR：[PR #21](https://github.com/justtodo123/LogisticSystem_more/pull/21)，已于 2026-09-01 08:58:49 UTC 合并，merge `4c72828`。PR CI：[run 33487318596](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33487318596)；main CI：[run 33489817053](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33489817053)，四个 job 全绿；CD：[run 33490209885](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33490209885) 成功。已验证 Redis pause 时 login/me、worker 重启后订单仍可查、以及 schema dump。
 - 第三刀：分支 `feat/R2-05-fault-recovery`；实现提交 `19a67bc`；pause 超时修复 `cdacba7`。PR：[PR #23](https://github.com/justtodo123/LogisticSystem_more/pull/23)，已于 2026-09-01 10:01:14 UTC 合并，merge `e021966`。PR CI：[run 33494304652](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33494304652)；main CI：[run 33495246187](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33495246187)，四个 job 全绿；CD：[run 33495660568](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33495660568) 成功。
 - 本机：未执行 Docker / PostgreSQL / Redis；P1 live 测试在无外部服务时 skip，不得写成 PostgreSQL 通过。
-- 未做：100,000 编号规模尚未实测（仅有手工 `P1 code scale` workflow，未填写 P95/P99）；跨 worker 登录限流仍为进程内实现。
+- 规模实测：`P1 code scale` run [33581256635](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33581256635) 成功；100,000 次、8 workers、unique/contiguous/resume 均通过，516.578 秒，193.6 claims/s，P95 158.342 ms，P99 294.859 ms。跨 worker 登录限流仍为进程内实现。
 - 实现提交：`03a3436`；文档记录提交：`860aa6d`；迁移方言修复：`f3f0ef9`；合并提交：`ef97229cb566fc544a41ab2f16c36ecee309c9e4`。
 - PR：[PR #18](https://github.com/justtodo123/LogisticSystem_more/pull/18)，已于 2026-08-31 09:49:42 UTC 合并。
 - CI：[run 33379583834](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33379583834)，`数据库迁移基线`、`后端测试 (pytest)`、`P1 PostgreSQL + Redis 基线`、`前端类型检查 + 构建` 均成功。
