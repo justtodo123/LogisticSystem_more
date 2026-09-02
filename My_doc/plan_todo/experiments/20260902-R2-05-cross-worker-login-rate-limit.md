@@ -9,8 +9,11 @@
 - 层级：P1 外部拓扑（GHA 已验证）
 - Git 分支：feat/R2-05-cross-worker-login-rate-limit
 - Commit SHA：0bab96a10cede4f3453015a54b36c477cc651019；修复：fffee0e
+- Merge SHA：372ae9f81ba3da80ceaca64595cefa256dd01a2d
 - PR URL：https://github.com/justtodo123/LogisticSystem_more/pull/25
 - CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33589202969
+- main CI run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33590407219
+- CD run URL：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33590735173
 
 ## Schema 与数据来源
 
@@ -68,5 +71,5 @@ python scripts/p1_fault_harness.py
 - 结论与对应证据：跨 worker 共享登录限流、Redis pause 降级与恢复后重新共享已在 GHA 验证
 - 已知限制：本机无 Docker；P1 结果不外推为生产容量
 - 未通过项 / 未执行项：无
-- 下一步：合入 main 后开始 R2-06
+- 下一步：R2-06 request/trace/task ID、最小指标与 load/spike
 
