@@ -71,7 +71,7 @@ jobs:
           python scripts/release_migrate.py
           python scripts/init_users.py
           python scripts/init_demo_data.py
-          python -m uvicorn main:app --host 127.0.0.1 --port 18001 \
+          python -m uvicorn main:app --host 127.0.0.1 --port 18001 --workers 2 --no-access-log \
             >p1-artifacts/load-api.log 2>&1 &
           echo $! > p1-artifacts/load-api.pid
           cleanup() {

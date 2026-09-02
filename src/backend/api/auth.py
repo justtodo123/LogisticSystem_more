@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
@@ -6,7 +8,7 @@ from schemas.user import UserLoginRequest
 from services.auth_service import (
     bump_token_version,
     create_access_token,
-    authenticate_user,
+    verify_password,
 )
 from services.log_service import LogService, build_login_event_data
 from api.dependencies import get_current_user
@@ -29,8 +31,15 @@ async def login(credentials: UserLoginRequest, request: Request, db: Session = D
     rate_key = login_rate_limit_key(credentials.username, client_ip)
     limiter.check(rate_key)
 
-    user = authenticate_user(db, credentials.username, credentials.password)
-    if not user or not user.is_active:
+    user = db.query(User).filter(User.username == credentials.username).first()
+    password_ok = False
+    if user is not None:
+        password_ok = await asyncio.to_thread(
+            verify_password,
+            credentials.password,
+            user.password_hash,
+        )
+    if not user or not password_ok or not user.is_active:
         limiter.record_failure(rate_key)
         return {
             "code": CODE_UNAUTHORIZED,
