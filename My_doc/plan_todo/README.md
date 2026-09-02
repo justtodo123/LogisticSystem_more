@@ -43,7 +43,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | 03 | P0 | P0 | done | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | PR #15 / CI 通过并合并；Saga/outbox 协议与本地故障注入已验证 |
 | 04B | P0 并行 | P0 | done | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | PR #16 / CI 通过并合并；权限矩阵、token version、前后端 can() 已验证 |
 | 05 | P1 | P1 | done | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | PR #18/#20/#21/#23 已合并；main CI/CD 与 100k GHA scale run `33581256635` 已验证；PR #25 CI run 33589202969 四个 job 全绿 |
-| 06 | P1/P2 | P1 | in_progress | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | 最小观测 + load/spike；soak 为 P2 |
+| 06 | P1/P2 | P1 | done | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | PR #27/#28/#29；GHA load/spike run 33607612662 成功；soak 为 P2 |
 
 ## 依赖主链
 
@@ -58,7 +58,7 @@ R2-00A + R2-01 + R2-02 + R2-03 -> R2-05 (done)
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：R2-05 已由 PR #25 CI run 33589202969 验证。R2-06 第一刀已合并 PR #27。首次 load run 33598168488 失败（P95 10.15s，登录混合）；harness 修正中，不得标 done。
+当前下一动作：R2-06 P1 已由 GHA run 33607612662 验证 load+spike（混合 P95 9.81 ms / 9.63 ms，错误率 0%）。P2 soak/Grafana/镜像扫描不阻塞。
 
 ## 当前证据边界
 

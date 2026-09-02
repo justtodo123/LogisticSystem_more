@@ -1,7 +1,7 @@
 ---
 plan_id: "R2-06"
 title: 可观测性、容量测试与交付证据
-status: in_progress
+status: done
 priority: P1
 owner: justtodo123
 created: 2026-08-25
@@ -74,7 +74,8 @@ npm run build
 
 ## 完成记录
 
-- 状态：`in_progress`（2026-09-02）。第一刀已合并 PR #27 / `bbc05b1`。
-- 首次 GHA load run 33598168488 失败：错误率 0%，P95 10.15s，因每迭代 bcrypt 登录 + 预填 `p(95)<2000`。
-- 本机：无 Docker / k6；不得标 `done`，待 harness 修正后重跑 5 分钟 load + spike。
+- 状态：`done`（2026-09-02）。观测基线 PR #27/#28/#29；成功 load/spike GHA run 33607612662，head `3b4a273`。
+- Load 5m / 8 RPS 读混合 + 1 RPS login：http_req_failed 0%，dropped 0，k6 混合 P95 9.81 ms；login 路径 P95 290 ms。
+- Spike 约 5m / 峰值 25 RPS：http_req_failed 0%，dropped 0，k6 混合 P95 9.63 ms。
+- 产物：`r2-06-load-spike` artifact；详见 [20260902-R2-06-observability-baseline.md](./experiments/20260902-R2-06-observability-baseline.md)。
 - P2 未做：soak、Grafana 全家桶、镜像安全扫描。
