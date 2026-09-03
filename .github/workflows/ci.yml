@@ -12,6 +12,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  secret-scan:
+    name: 跟踪内容秘密扫描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 校验跟踪证据已脱敏
+        run: python scripts/check-tracked-secrets.py
+
+      - name: 扫描提交范围中的秘密
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  image-policy-test:
+    name: 镜像发布策略测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 运行镜像扫描策略单元测试
+        run: python -m unittest discover -s scripts/tests -p 'test_*.py'
+
   migration-check:
     name: 数据库迁移基线
     runs-on: ubuntu-latest

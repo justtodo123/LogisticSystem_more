@@ -45,3 +45,16 @@ export function login() {
   }
   return { res, token, ok };
 }
+
+let vuToken = null;
+
+export function getVuToken() {
+  if (vuToken) {
+    return vuToken;
+  }
+  const result = login();
+  if (result.ok && result.token) {
+    vuToken = result.token;
+  }
+  return vuToken;
+}

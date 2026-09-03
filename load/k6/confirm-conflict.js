@@ -1,7 +1,7 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 import { Counter, Rate, Trend } from "k6/metrics";
-import { BASE_URL, jsonHeaders, login, newRequestId } from "./helpers.js";
+import { BASE_URL, getVuToken, jsonHeaders, newRequestId } from "./helpers.js";
 
 const errorRate = new Rate("business_error_rate");
 const unexpected5xx = new Rate("unexpected_5xx");
@@ -44,15 +44,15 @@ function businessCode(res) {
 }
 
 export function setup() {
-  const result = login();
-  if (!result.ok || !result.token) {
+  const token = getVuToken();
+  if (!token) {
     throw new Error("setup login failed");
   }
   const create = http.post(
     `${BASE_URL}/api/schedule/global`,
     JSON.stringify({ algorithm: "traditional", preview: true }),
     {
-      headers: jsonHeaders(result.token, { "X-Idempotency-Key": `sched-${newRequestId()}` }),
+      headers: jsonHeaders(token, { "X-Idempotency-Key": `sched-${newRequestId()}` }),
       tags: { name: "write" },
     },
   );
@@ -64,11 +64,16 @@ export function setup() {
     throw new Error("setup schedule_code missing");
   }
   console.log(`write_path_schedule_code=${scheduleCode}`);
-  return { token: result.token, scheduleCode };
+  return { scheduleCode };
 }
 
 export function confirmSame(data) {
-  const headers = jsonHeaders(data.token, {
+  const token = getVuToken();
+  if (!token) {
+    errorRate.add(true);
+    return;
+  }
+  const headers = jsonHeaders(token, {
     "X-Idempotency-Key": `confirm-${__VU}-${__ITER}-${newRequestId()}`,
   });
   const res = http.post(`${BASE_URL}/api/schedule/confirm/${data.scheduleCode}`, null, {

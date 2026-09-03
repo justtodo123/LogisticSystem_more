@@ -1,5 +1,4 @@
-# CD 工作流：CI 在 main 分支成功完成后自动构建并推送 Docker 镜像
-# 通过 workflow_run 依赖 CI（代码层强制"未通过 CI 不推送"，不依赖仓库分支保护设置）
+# CD：CI 成功后先构建、生成 SBOM 并扫描，门禁通过后才发布镜像
 name: CD
 
 on:
@@ -9,46 +8,188 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  docker-build-push:
-    name: 构建并推送 Docker 镜像
+  build-scan-publish:
+    name: 构建、扫描并发布镜像
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      TRIVY_VERSION: 0.56.2
+      BACKEND_LOCAL: logistics-backend:${{ github.event.workflow_run.head_sha }}
+      FRONTEND_LOCAL: logistics-frontend:${{ github.event.workflow_run.head_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      # GHCR 镜像名必须全小写，github.repository 可能含大写（如 LogisticSystem）
-      - name: 计算小写镜像名
+      - name: 计算镜像名和准备证据目录
         id: vars
-        run: echo "image=$(echo 'ghcr.io/${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "image=$(echo 'ghcr.io/${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          mkdir -p artifacts/image-scan
 
-      - name: 登录 GHCR
+      - name: 构建后端镜像（不推送）
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.backend
+          load: true
+          push: false
+          tags: ${{ env.BACKEND_LOCAL }}
+
+      - name: 构建前端镜像（不推送）
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.frontend
+          load: true
+          push: false
+          tags: ${{ env.FRONTEND_LOCAL }}
+
+      - name: 生成 SBOM 并扫描最终镜像
+        id: scan
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p artifacts/image-scan
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$GITHUB_WORKSPACE:/work" \
+            "aquasec/trivy:${TRIVY_VERSION}" image --format cyclonedx \
+            --output /work/artifacts/image-scan/backend.sbom.cdx.json "$BACKEND_LOCAL"
+          backend_sbom=$?
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$GITHUB_WORKSPACE:/work" \
+            "aquasec/trivy:${TRIVY_VERSION}" image --format cyclonedx \
+            --output /work/artifacts/image-scan/frontend.sbom.cdx.json "$FRONTEND_LOCAL"
+          frontend_sbom=$?
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$GITHUB_WORKSPACE:/work" \
+            "aquasec/trivy:${TRIVY_VERSION}" image --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --format json --output /work/artifacts/image-scan/backend-trivy.json "$BACKEND_LOCAL"
+          backend_scan=$?
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$GITHUB_WORKSPACE:/work" \
+            "aquasec/trivy:${TRIVY_VERSION}" image --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --format json --output /work/artifacts/image-scan/frontend-trivy.json "$FRONTEND_LOCAL"
+          frontend_scan=$?
+          printf '{"backend_sbom":%s,"frontend_sbom":%s,"backend_scan":%s,"frontend_scan":%s}\n' \
+            "$backend_sbom" "$frontend_sbom" "$backend_scan" "$frontend_scan" \
+            > artifacts/image-scan/scan-status.json
+          if [ "$backend_sbom" -ne 0 ] || [ "$frontend_sbom" -ne 0 ] || \
+             [ "$backend_scan" -ne 0 ] || [ "$frontend_scan" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: 评估漏洞发布门禁
+        id: gate
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          test -s artifacts/image-scan/backend-trivy.json
+          test -s artifacts/image-scan/frontend-trivy.json
+          python scripts/evaluate-image-scan.py \
+            --policy security/image-scan-policy.json \
+            --exceptions security/image-scan-exceptions.json \
+            --report "backend" artifacts/image-scan/backend-trivy.json \
+            --report "frontend" artifacts/image-scan/frontend-trivy.json \
+            --output artifacts/image-scan/policy-evaluation.json \
+            | tee artifacts/image-scan/policy-evaluation.txt
+
+      - name: 生成扫描环境报告和校验清单
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import platform
+          import subprocess
+          from pathlib import Path
+
+          root = Path("artifacts/image-scan")
+          def version(command):
+              try:
+                  return subprocess.check_output(command, text=True, stderr=subprocess.STDOUT).strip().splitlines()[0]
+              except Exception as exc:
+                  return str(exc)
+          def sha256(path):
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(65536), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+          files = sorted(path for path in root.iterdir() if path.is_file())
+          report = {
+              "schema_version": 1,
+              "workflow": os.environ.get("GITHUB_WORKFLOW"),
+              "run_url": f"{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}/actions/runs/{os.environ.get('GITHUB_RUN_ID')}",
+              "source_sha": os.environ.get("SOURCE_SHA"),
+              "docker": version(["docker", "version", "--format", "{{.Server.Version}}"]),
+              "trivy": os.environ.get("TRIVY_VERSION"),
+              "platform": platform.platform(),
+              "policy": "security/image-scan-policy.json",
+              "retention_days": 14,
+              "artifacts": [{"name": path.name, "bytes": path.stat().st_size, "sha256": sha256(path)} for path in files],
+          }
+          (root / "env-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: 上传镜像扫描证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-scan-${{ env.SOURCE_SHA }}
+          path: artifacts/image-scan/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: 发布门禁失败则终止工作流
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.scan.outcome }}" != "success" ] || [ "${{ steps.gate.outcome }}" != "success" ]; then
+            echo "image release gate failed"
+            exit 1
+          fi
+
+      - name: 登录 GHCR（仅门禁通过后）
+        if: ${{ steps.gate.outcome == 'success' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 构建并推送后端镜像
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.backend
-          push: true
-          tags: |
-            ${{ steps.vars.outputs.image }}-backend:latest
-            ${{ steps.vars.outputs.image }}-backend:${{ github.event.workflow_run.head_sha }}
+      - name: 推送不可变 SHA 镜像
+        if: ${{ steps.gate.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker tag "$BACKEND_LOCAL" "${{ steps.vars.outputs.image }}-backend:${SOURCE_SHA}"
+          docker tag "$FRONTEND_LOCAL" "${{ steps.vars.outputs.image }}-frontend:${SOURCE_SHA}"
+          docker push "${{ steps.vars.outputs.image }}-backend:${SOURCE_SHA}"
+          docker push "${{ steps.vars.outputs.image }}-frontend:${SOURCE_SHA}"
 
-      - name: 构建并推送前端镜像
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.frontend
-          push: true
-          tags: |
-            ${{ steps.vars.outputs.image }}-frontend:latest
-            ${{ steps.vars.outputs.image }}-frontend:${{ github.event.workflow_run.head_sha }}
+      - name: 推进 latest（仅两个 SHA 镜像均已推送）
+        if: ${{ steps.gate.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker tag "${{ steps.vars.outputs.image }}-backend:${SOURCE_SHA}" "${{ steps.vars.outputs.image }}-backend:latest"
+          docker tag "${{ steps.vars.outputs.image }}-frontend:${SOURCE_SHA}" "${{ steps.vars.outputs.image }}-frontend:latest"
+          docker push "${{ steps.vars.outputs.image }}-backend:latest"
+          docker push "${{ steps.vars.outputs.image }}-frontend:latest"

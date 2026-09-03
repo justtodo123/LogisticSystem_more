@@ -1,7 +1,7 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 import { Rate } from "k6/metrics";
-import { BASE_URL, jsonHeaders, login } from "./helpers.js";
+import { BASE_URL, getVuToken, jsonHeaders, login } from "./helpers.js";
 
 const errorRate = new Rate("business_error_rate");
 
@@ -41,20 +41,12 @@ export const options = {
   },
 };
 
-export function setup() {
-  const result = login();
-  if (!result.ok || !result.token) {
-    throw new Error("setup login failed");
-  }
-  return { token: result.token };
-}
-
-export function readMix(data) {
+export function readMix() {
   const health = http.get(`${BASE_URL}/api/health`, {
     headers: jsonHeaders(),
     tags: { name: "health" },
   });
-  const token = data && data.token;
+  const token = getVuToken();
   let ok = health.status === 200 && Boolean(token);
   if (token) {
     const me = http.get(`${BASE_URL}/api/auth/me`, {

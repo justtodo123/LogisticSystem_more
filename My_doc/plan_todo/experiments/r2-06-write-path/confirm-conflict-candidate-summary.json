@@ -172,7 +172,7 @@
     },
     "setup_data": {
         "scheduleCode": "GS20260903001",
-        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsInR2IjowLCJleHAiOjE3ODg0OTU1MDN9.n62IIpuWRyf1bhRez_BDyDOMymu7CG5W7uZZV2m4LZs"
+        "token": "[REDACTED]"
     },
     "root_group": {
         "name": "",
@@ -180,13 +180,13 @@
         "id": "d41d8cd98f00b204e9800998ecf8427e",
         "groups": {},
         "checks": {
-                "confirm is success or conflict": {
-                    "name": "confirm is success or conflict",
-                    "path": "::confirm is success or conflict",
-                    "id": "9eac6ce1a72c4a06ee43d093aa706664",
-                    "passes": 8,
-                    "fails": 0
-                }
+            "confirm is success or conflict": {
+                "name": "confirm is success or conflict",
+                "path": "::confirm is success or conflict",
+                "id": "9eac6ce1a72c4a06ee43d093aa706664",
+                "passes": 8,
+                "fails": 0
             }
+        }
     }
 }
