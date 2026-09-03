@@ -1,0 +1,311 @@
+name: P1 write-path smoke and load
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: smoke (30-60s) or load (5-10m). First success only establishes a baseline.
+        required: true
+        type: choice
+        options:
+          - smoke
+          - load
+        default: smoke
+      duration:
+        description: Override k6 duration (empty uses mode default)
+        required: false
+        default: ""
+      write_rps:
+        description: Override idempotency arrival rate (empty uses mode default)
+        required: false
+        default: ""
+      confirm_vus:
+        description: Override confirm-conflict VUs (empty uses mode default)
+        required: false
+        default: ""
+
+jobs:
+  write-path:
+    name: P1 write-path ${{ inputs.mode }}
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: logistics
+          POSTGRES_PASSWORD: logistics
+          POSTGRES_DB: logistics
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logistics -d logistics"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ENV: dev
+      PYTHONPATH: ${{ github.workspace }}/src/backend
+      DATABASE_URL: postgresql+psycopg://logistics:logistics@localhost:5432/logistics
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-only-r2-06-write-secret-value-32
+      BASE_URL: http://127.0.0.1:18001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: src/backend/requirements.txt
+      - uses: grafana/setup-k6-action@v1
+      - name: Install dependencies
+        working-directory: src/backend
+        run: pip install -r requirements.txt
+      - name: Migrate, seed, probe, write-path load and compare
+        working-directory: src/backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          MODE="${{ inputs.mode }}"
+          if [ "$MODE" = "load" ]; then
+            DURATION="${{ inputs.duration }}"
+            WRITE_RPS="${{ inputs.write_rps }}"
+            CONFIRM_VUS="${{ inputs.confirm_vus }}"
+            DURATION="${DURATION:-5m}"
+            WRITE_RPS="${WRITE_RPS:-2}"
+            CONFIRM_VUS="${CONFIRM_VUS:-8}"
+          else
+            DURATION="${{ inputs.duration }}"
+            WRITE_RPS="${{ inputs.write_rps }}"
+            CONFIRM_VUS="${{ inputs.confirm_vus }}"
+            DURATION="${DURATION:-30s}"
+            WRITE_RPS="${WRITE_RPS:-1}"
+            CONFIRM_VUS="${CONFIRM_VUS:-4}"
+          fi
+
+          ART="${GITHUB_WORKSPACE}/artifacts/r2-06-write"
+          EXP="${GITHUB_WORKSPACE}/My_doc/plan_todo/experiments/r2-06-write-path"
+          mkdir -p p1-artifacts "$ART" "$EXP"
+
+          python scripts/release_migrate.py
+          python scripts/init_users.py
+          python scripts/init_demo_data.py
+
+          python -m uvicorn main:app --host 127.0.0.1 --port 18001 --workers 2 --no-access-log \
+            >p1-artifacts/write-api.log 2>&1 &
+          echo $! > p1-artifacts/write-api.pid
+
+          cleanup() {
+            for pid_file in p1-artifacts/*.pid; do
+              if [ -f "$pid_file" ]; then
+                kill "$(tr -d '[:space:]' < "$pid_file")" 2>/dev/null || true
+              fi
+            done
+          }
+          trap cleanup EXIT
+
+          python scripts/wait_http.py --timeout 60 http://127.0.0.1:18001/api/health
+
+          python - <<'PY'
+          import urllib.request
+          req = urllib.request.Request(
+              "http://127.0.0.1:18001/api/health",
+              headers={"X-Request-ID": "r2-06-write-probe", "X-Trace-ID": "r2-06-write-trace"},
+          )
+          with urllib.request.urlopen(req, timeout=10) as resp:
+              request_id = resp.headers.get("X-Request-ID")
+              trace_id = resp.headers.get("X-Trace-ID")
+              if request_id != "r2-06-write-probe" or trace_id != "r2-06-write-trace":
+                  raise SystemExit(f"request/trace mismatch: {request_id} {trace_id}")
+          with urllib.request.urlopen("http://127.0.0.1:18001/metrics", timeout=10) as resp:
+              body = resp.read().decode()
+              if "http_requests_total" not in body and "counters" not in body:
+                  raise SystemExit("metrics payload missing counters")
+          print("observability_probe=ok")
+          PY
+
+          set +e
+          python scripts/probe_outbox_trace.py \
+            --base-url http://127.0.0.1:18001 \
+            --output "$ART/trace-probe.json"
+          probe_status=$?
+
+          python scripts/outbox_worker.py --worker-id gha-r2-06-write-outbox \
+            >p1-artifacts/write-outbox-worker.log 2>&1 &
+          echo $! > p1-artifacts/write-outbox-worker.pid
+
+          WRITE_PATH_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "WRITE_PATH_STARTED_AT=${WRITE_PATH_STARTED_AT}"
+
+          k6 run --summary-export="$ART/idempotency-summary.json" \
+            -e BASE_URL=http://127.0.0.1:18001 \
+            -e DURATION="$DURATION" \
+            -e WRITE_RPS="$WRITE_RPS" \
+            "${GITHUB_WORKSPACE}/load/k6/idempotency.js" \
+            | tee p1-artifacts/idempotency-k6.log
+          idem_status=${PIPESTATUS[0]}
+
+          k6 run --summary-export="$ART/confirm-conflict-summary.json" \
+            -e BASE_URL=http://127.0.0.1:18001 \
+            -e DURATION="$DURATION" \
+            -e CONFIRM_VUS="$CONFIRM_VUS" \
+            "${GITHUB_WORKSPACE}/load/k6/confirm-conflict.js" \
+            | tee p1-artifacts/confirm-conflict-k6.log
+          confirm_status=${PIPESTATUS[0]}
+
+          schedule_code="$(grep -oE 'write_path_schedule_code=[^[:space:]]+' p1-artifacts/confirm-conflict-k6.log | tail -n1 | cut -d= -f2 || true)"
+          invariant_args=(--output "$ART/invariants.json" --started-at "$WRITE_PATH_STARTED_AT")
+          if [ -n "${schedule_code}" ]; then
+            invariant_args+=(--schedule-code "$schedule_code")
+          fi
+          python scripts/check_write_path_invariants.py "${invariant_args[@]}"
+          invariant_status=$?
+
+          compare_status=0
+          python - <<PY
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          art = Path(os.environ["GITHUB_WORKSPACE"]) / "artifacts" / "r2-06-write"
+          root = Path(os.environ["GITHUB_WORKSPACE"])
+          reports = []
+          overall = 0
+          for scenario, filename in (
+              ("idempotency", "idempotency-summary.json"),
+              ("confirm-conflict", "confirm-conflict-summary.json"),
+          ):
+              candidate = art / filename
+              if not candidate.exists():
+                  reports.append({"scenario": scenario, "passed": False, "note": "summary missing"})
+                  overall = 1
+                  continue
+              baseline = root / "load" / "baselines" / filename
+              args = [
+                  sys.executable,
+                  "scripts/compare_k6_summaries.py",
+                  str(candidate if not baseline.exists() else baseline),
+                  str(candidate),
+                  "--scenario",
+                  scenario,
+                  "--json-output",
+                  str(art / f"{scenario}-comparison.json"),
+                  "--output",
+                  str(art / f"{scenario}-comparison.txt"),
+              ]
+              if not baseline.exists():
+                  args.append("--establish-baseline")
+              result = subprocess.run(args)
+              if result.returncode != 0:
+                  overall = 1
+              if (art / f"{scenario}-comparison.json").exists():
+                  reports.append(json.loads((art / f"{scenario}-comparison.json").read_text(encoding="utf-8")))
+          (art / "comparison-report.json").write_text(
+              json.dumps({"scenarios": reports, "passed": overall == 0}, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          raise SystemExit(overall)
+          PY
+          compare_status=$?
+          set -e
+
+          python scripts/redact_json_logs.py p1-artifacts/write-api.log "$ART/write-api.redacted.log" || true
+          python scripts/redact_json_logs.py p1-artifacts/write-outbox-worker.log "$ART/write-outbox-worker.redacted.log" || true
+
+          python - <<PY
+          import hashlib
+          import json
+          import os
+          import platform
+          import shutil
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          art = Path(os.environ["GITHUB_WORKSPACE"]) / "artifacts" / "r2-06-write"
+          exp = Path(os.environ["GITHUB_WORKSPACE"]) / "My_doc" / "plan_todo" / "experiments" / "r2-06-write-path"
+          exp.mkdir(parents=True, exist_ok=True)
+
+          def sha256(path: Path) -> str | None:
+              if not path.exists():
+                  return None
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(65536), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          def version(cmd):
+              try:
+                  return subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT).strip().splitlines()[0]
+              except Exception as exc:
+                  return str(exc)
+
+          files = sorted(p for p in art.glob("*") if p.is_file())
+          env = {
+              "run_url": os.environ.get("GITHUB_SERVER_URL", "") + "/" + os.environ.get("GITHUB_REPOSITORY", "") + "/actions/runs/" + os.environ.get("GITHUB_RUN_ID", ""),
+              "branch": os.environ.get("GITHUB_REF_NAME"),
+              "commit": os.environ.get("GITHUB_SHA"),
+              "mode": "${{ inputs.mode }}",
+              "duration": "$DURATION",
+              "write_rps": "$WRITE_RPS",
+              "confirm_vus": "$CONFIRM_VUS",
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "postgres_image": "postgres:16-alpine",
+              "redis_image": "redis:7-alpine",
+              "uvicorn_workers": 2,
+              "outbox_worker": 1,
+              "k6": version(["k6", "version"]),
+              "retention_days": 14,
+              "note": "First successful run establishes a write-path baseline and must not claim relative regression passed.",
+              "artifacts": [
+                  {
+                      "name": path.name,
+                      "bytes": path.stat().st_size,
+                      "sha256": sha256(path),
+                  }
+                  for path in files
+              ],
+          }
+          (art / "env-report.json").write_text(json.dumps(env, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          for name in (
+              "idempotency-summary.json",
+              "confirm-conflict-summary.json",
+              "comparison-report.json",
+              "invariants.json",
+              "trace-probe.json",
+              "env-report.json",
+          ):
+              src = art / name
+              if src.exists():
+                  shutil.copy2(src, exp / name)
+          print("env_report=ok")
+          PY
+
+          echo "probe_status=${probe_status} idem_status=${idem_status} confirm_status=${confirm_status} invariant_status=${invariant_status} compare_status=${compare_status}"
+          if [ "$probe_status" -ne 0 ] || [ "$idem_status" -ne 0 ] || [ "$confirm_status" -ne 0 ] || [ "$invariant_status" -ne 0 ] || [ "$compare_status" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Upload write-path artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-06-write-path
+          path: |
+            artifacts/r2-06-write/**
+            src/backend/p1-artifacts/*.log
+            My_doc/plan_todo/experiments/r2-06-write-path/*.json
+          if-no-files-found: warn
+          retention-days: 14

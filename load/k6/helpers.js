@@ -9,11 +9,17 @@ export const BASE_URL = header("BASE_URL", "http://127.0.0.1:18001").replace(/\/
 export const USERNAME = header("LOAD_USERNAME", "admin");
 export const PASSWORD = header("LOAD_PASSWORD", "123456");
 
+export function newRequestId() {
+  return `k6-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+}
+
 export function jsonHeaders(token, extra) {
+  const requestId = newRequestId();
   const headers = {
     Accept: "application/json",
     "Content-Type": "application/json",
-    "X-Request-ID": `k6-${Date.now()}-${Math.floor(Math.random() * 1e9)}`,
+    "X-Request-ID": requestId,
+    "X-Trace-ID": requestId,
   };
   if (token) {
     headers.Authorization = `Bearer ${token}`;

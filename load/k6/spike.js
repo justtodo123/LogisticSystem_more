@@ -6,6 +6,7 @@ import { BASE_URL, jsonHeaders, login } from "./helpers.js";
 const errorRate = new Rate("business_error_rate");
 
 export const options = {
+  summaryTrendStats: ["avg", "min", "med", "max", "p(90)", "p(95)", "p(99)"],
   scenarios: {
     spike: {
       executor: "ramping-arrival-rate",

@@ -1,0 +1,65 @@
+{
+  "metrics": {
+    "http_req_duration": {
+      "type": "trend",
+      "values": {
+        "p(95)": 20.0,
+        "p(99)": 40.0,
+        "avg": 8.0
+      }
+    },
+    "http_req_failed": {
+      "type": "rate",
+      "values": {
+        "rate": 0.05,
+        "passes": 5,
+        "fails": 95
+      }
+    },
+    "business_error_rate": {
+      "type": "rate",
+      "values": {
+        "rate": 0.05,
+        "passes": 5,
+        "fails": 95
+      }
+    },
+    "unexpected_5xx": {
+      "type": "rate",
+      "values": {
+        "rate": 0.02,
+        "passes": 2,
+        "fails": 98
+      }
+    },
+    "dropped_iterations": {
+      "type": "counter",
+      "values": {
+        "count": 12
+      }
+    },
+    "duplicate_side_effects": {
+      "type": "counter",
+      "values": {
+        "count": 3
+      }
+    },
+    "checks": {
+      "type": "rate",
+      "values": {
+        "rate": 0.9,
+        "passes": 90,
+        "fails": 10
+      }
+    },
+    "confirmation_success_total": {
+      "type": "counter",
+      "values": {
+        "count": 4
+      }
+    }
+  },
+  "root_group": {
+    "checks": {}
+  }
+}
