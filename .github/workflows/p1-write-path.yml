@@ -53,6 +53,7 @@ jobs:
           --health-retries 5
     env:
       ENV: dev
+      PYTHONUNBUFFERED: "1"
       PYTHONPATH: ${{ github.workspace }}/src/backend
       DATABASE_URL: postgresql+psycopg://logistics:logistics@localhost:5432/logistics
       REDIS_ENABLED: "true"
@@ -139,7 +140,7 @@ jobs:
             --output "$ART/trace-probe.json"
           probe_status=$?
 
-          python scripts/outbox_worker.py --worker-id gha-r2-06-write-outbox \
+          python -u scripts/outbox_worker.py --worker-id gha-r2-06-write-outbox \
             >p1-artifacts/write-outbox-worker.log 2>&1 &
           echo $! > p1-artifacts/write-outbox-worker.pid
 

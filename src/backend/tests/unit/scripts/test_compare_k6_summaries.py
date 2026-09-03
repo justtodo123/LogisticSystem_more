@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 
-from scripts.compare_k6_summaries import evaluate, load_summary, main
+from scripts.compare_k6_summaries import evaluate, extract_snapshot, load_summary, main
 
 DATA = Path(__file__).parent / "data"
 
@@ -103,3 +103,31 @@ def test_establish_baseline_skips_relative_p95():
     assert report["p95_regression_ok"] is None
     assert report["note"] == "建立写路径 baseline。"
     assert report["passed"] is True
+
+def test_extract_snapshot_reads_flat_k6_v1_metrics():
+    summary = {
+        "metrics": {
+            "business_error_rate": {"passes": 0, "fails": 31, "value": 0},
+            "unexpected_5xx": {"passes": 0, "fails": 155, "value": 0},
+            "write_duration": {"p(95)": 24.5, "p(99)": 54.0, "avg": 15.0},
+            "confirm_duration": {"p(95)": 18.2, "p(99)": 21.0, "avg": 12.0},
+            "http_req_duration": {"p(95)": 30.0, "p(99)": 60.0},
+            "duplicate_side_effects": {"count": 0, "rate": 0},
+            "confirmation_success_total": {"count": 1, "rate": 0.25},
+            "confirmation_conflict_rate": {"passes": 3, "fails": 1, "value": 0.75},
+            "idempotency_replay_rate": {"passes": 31, "fails": 0, "value": 1},
+            "checks": {"passes": 62, "fails": 0, "value": 1},
+        }
+    }
+    snap = extract_snapshot(summary)
+    assert snap["error_rate"] == 0
+    assert snap["unexpected_5xx"] == 0
+    assert snap["write_p95"] == 24.5
+    assert snap["confirm_p95"] == 18.2
+    assert snap["p95"] == 30.0
+    assert snap["p99"] == 60.0
+    assert snap["confirmation_success_total"] == 1
+    assert snap["confirmation_conflict_rate"] == 0.75
+    assert snap["idempotency_replay_rate"] == 1
+    assert snap["checks_rate"] == 1
+

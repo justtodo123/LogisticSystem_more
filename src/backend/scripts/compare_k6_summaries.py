@@ -30,16 +30,30 @@ def load_summary(path: Path) -> dict[str, Any]:
     return payload
 
 
+_METRIC_META_KEYS = frozenset({"values", "thresholds", "type", "contains"})
+
+
 def _values(summary: dict[str, Any], name: str) -> dict[str, Any]:
     metric = (summary.get("metrics") or {}).get(name) or {}
-    values = metric.get("values") or {}
-    return values if isinstance(values, dict) else {}
+    if not isinstance(metric, dict):
+        return {}
+    merged: dict[str, Any] = {}
+    nested = metric.get("values")
+    if isinstance(nested, dict):
+        merged.update(nested)
+    for key, value in metric.items():
+        if key in _METRIC_META_KEYS:
+            continue
+        merged.setdefault(key, value)
+    return merged
 
 
 def metric_rate(summary: dict[str, Any], name: str, default: float = 0.0) -> float:
     values = _values(summary, name)
     if "rate" in values:
         return float(values["rate"])
+    if "value" in values:
+        return float(values["value"])
     return default
 
 

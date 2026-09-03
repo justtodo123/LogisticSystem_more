@@ -24,6 +24,8 @@ def test_write_scripts_export_setup_and_business_metrics():
     assert "unexpected_5xx" in idem
     assert "confirmation_success_total" in confirm
     assert "confirmation_conflict_rate" in confirm
+    assert "expectedStatuses(200, 409)" in confirm
+    assert 'confirmation_success_total: ["count==1"]' in confirm
     assert re.search(r"X-Request-ID", helpers)
     assert "login()" in idem
     assert "login()" in confirm

@@ -24,9 +24,10 @@ export const options = {
   },
   thresholds: {
     http_req_failed: ["rate<0.01"],
+    business_error_rate: ["rate==0"],
     unexpected_5xx: ["rate==0"],
     duplicate_side_effects: ["count==0"],
-    confirmation_success_total: ["count<=1"],
+    confirmation_success_total: ["count==1"],
   },
 };
 
@@ -73,6 +74,7 @@ export function confirmSame(data) {
   const res = http.post(`${BASE_URL}/api/schedule/confirm/${data.scheduleCode}`, null, {
     headers,
     tags: { name: "confirm" },
+    responseCallback: http.expectedStatuses(200, 409),
   });
   confirmDuration.add(res.timings.duration);
   unexpected5xx.add(is5xx(res));
