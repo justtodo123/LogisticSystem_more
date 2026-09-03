@@ -34,6 +34,7 @@ def check_idempotency(
     db: Session,
     *,
     node_name_prefix: str = "k6-node-",
+    started_at: datetime | None = None,
 ) -> dict[str, Any]:
     nodes = list(db.scalars(select(Node).where(Node.name.like(f"{node_name_prefix}%"))).all())
     node_codes = [node.node_code for node in nodes]
@@ -41,6 +42,13 @@ def check_idempotency(
     # Stored keys are SHA-256 fingerprints, not the caller-provided idem- prefix.
     records = list(db.scalars(select(IdempotencyRecord)).all())
     processing = [row.idempotency_key for row in records if row.status in PROCESSING_STATUSES]
+    scoped = records
+    if started_at is not None:
+        scoped = [
+            row
+            for row in records
+            if row.created_at is not None and row.created_at >= started_at
+        ]
     succeeded = [row for row in records if row.status == "SUCCEEDED"]
     payload_groups: dict[tuple[str, str | None], int] = {}
     for row in succeeded:
@@ -54,10 +62,14 @@ def check_idempotency(
             select(func.count()).select_from(StorageCenter).where(StorageCenter.node_id.in_(storage_ids))
         ) or 0
     failures: list[str] = []
+    if not nodes:
+        failures.append("no k6-node-* rows created by the write-path run")
     if duplicate_nodes:
         failures.append(f"duplicate node_code values: {duplicate_nodes}")
     if processing:
         failures.append(f"leftover PROCESSING idempotency records: {len(processing)}")
+    if nodes and not scoped:
+        failures.append("no idempotency records in the write-path window")
     if duplicate_records:
         failures.append("duplicate succeeded idempotency records for the same key/payload")
     if nodes and storage_count != len(nodes):
@@ -68,7 +80,7 @@ def check_idempotency(
         "node_count": len(nodes),
         "unique_node_codes": len(set(node_codes)),
         "storage_center_count": int(storage_count),
-        "idempotency_record_count": len(records),
+        "idempotency_record_count": len(scoped),
         "processing_count": len(processing),
         "duplicate_node_codes": duplicate_nodes,
         "passed": not failures,
@@ -150,7 +162,7 @@ def run_checks(
     schedule_code: str | None = None,
     started_at: datetime | None = None,
 ) -> dict[str, Any]:
-    idem = check_idempotency(db)
+    idem = check_idempotency(db, started_at=started_at)
     confirm = check_confirm(db, schedule_code=schedule_code, started_at=started_at)
     outbox = check_outbox(db)
     failures = list(idem["failures"]) + list(confirm["failures"]) + list(outbox["failures"])
