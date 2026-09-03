@@ -30,7 +30,7 @@
 - 短时 smoke（30s, 1 RPS, 4 confirm VUs）先排除脚本/数据问题
 - 正式 load：5m，幂等写 2 RPS + 并发确认 8 VUs
 - 服务端 Python 不变量：唯一节点、无重复确认成功、无残留 PROCESSING outbox
-- 进程内 trace probe：success / 首次失败后 retry / dead-letter
+- HTTP POST `/api/debug/write-path-probe` then independent worker: success / first-fail retry / dead-letter
 - comparator 按场景分别比较；第一次成功只建立 baseline
 
 ## 命令
@@ -79,8 +79,22 @@ gh workflow run p1-write-path.yml --ref feat/R2-06-end-to-end-trace-propagation 
 - 独立 worker trace：`worker_mode=independent`；HTTP `trace_id=trc-write-path-probe` 贯穿 outbox_execute / retry / dead-letter；execution `request_id` 每次不同；`parent_request_id=req-write-path-probe`；worker JSON 日志非空
 - 产物：同一 artifact 名 `r2-06-write-path`；仓库小文件见 `r2-06-write-path/comparison-report.json`
 
+## HTTP-produced independent worker trace
+
+- Code: PR #36, merge `bf5c3a7`
+- PR smoke: https://github.com/justtodo123/LogisticSystem_more/actions/runs/33736349431 (`c6d259e`)
+- main smoke: https://github.com/justtodo123/LogisticSystem_more/actions/runs/33738039588 (`bf5c3a7`)
+- Endpoint: `POST /api/debug/write-path-probe` (ENV=dev only)
+- `enqueue_source=http`, `worker_mode=independent`, `passed=true`
+- HTTP `trace_id=trc-write-path-probe` equals outbox `_trace.trace_id` and worker success/retry/dead-letter `trace_id`
+- HTTP `request_id=req-write-path-probe` != worker execution `request_id`
+- retry execution IDs differ; `parent_request_id` remains `req-write-path-probe`; `task_id=task-write-path-probe`
+- Repo small file: `r2-06-write-path/trace-probe.json` 2636 B SHA-256 `3fa77d1c5467d48b9cb0c09118a9fd013cf7ff540f8662c4ba0a2157d0a4542f`
+- CI artifact `r2-06-write-path` (14 days): `write-outbox-worker.redacted.log` 5594 B SHA-256 `4e0c4d09db0616b0f80bb652721491670e1dd90a1d224723f38ffc0dff418b31`
+- This smoke is not a 5-minute write-path candidate and must not be compared with 2026-09-02 read-mix P95
+
 ## 结论（更新）
 
 - 已有两次可比 5m 写路径运行，第二次相对回归通过。仍不要与读混合 P95 比较。
 - 独立 outbox worker 进程日志已证明同一 `trace_id`。
-- 未做：写路径 PR 性能门禁、跨 worker 指标聚合、soak、Grafana。
+- 未做：跨 worker 指标聚合、Grafana 全家桶、镜像扫描。HTTP 产生的独立 worker trace 已由 main smoke 33738039588 证实。

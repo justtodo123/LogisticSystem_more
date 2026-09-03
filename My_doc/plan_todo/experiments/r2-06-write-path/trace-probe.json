@@ -3,9 +3,41 @@
     "status": 200,
     "request_id": "req-write-path-probe",
     "trace_id": "trc-write-path-probe",
-    "task_id": "task-write-path-probe"
+    "task_id": "task-write-path-probe",
+    "path": "/api/debug/write-path-probe",
+    "body": {
+      "code": 0,
+      "message": "success",
+      "data": {
+        "enqueued": [
+          {
+            "dedup_key": "write-path-success",
+            "event_type": "write_path_probe.success",
+            "status": "pending"
+          },
+          {
+            "dedup_key": "write-path-retry",
+            "event_type": "write_path_probe.retry",
+            "status": "pending"
+          },
+          {
+            "dedup_key": "write-path-dead",
+            "event_type": "write_path_probe.dead",
+            "status": "pending"
+          }
+        ],
+        "request_id": "req-write-path-probe",
+        "trace_id": "trc-write-path-probe",
+        "task_id": "task-write-path-probe"
+      },
+      "meta": {
+        "degraded": false,
+        "degraded_reason": null
+      }
+    }
   },
   "worker_mode": "independent",
+  "enqueue_source": "http",
   "first_batch": {
     "delivered": 1,
     "retry": 1,
@@ -24,7 +56,7 @@
   "attempts": {
     "write-path-success": [
       {
-        "request_id": "be33dd2ba8cf4b8fa25f865793dadbd4",
+        "request_id": "9b09c5ab9eb14ac2b75c5f2da276cd11",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"
@@ -32,13 +64,13 @@
     ],
     "write-path-retry": [
       {
-        "request_id": "39d0256e3ffa41bb81aa476a8c8eb8c1",
+        "request_id": "d8e9ee6950ae499f9fd9bde29293812f",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"
       },
       {
-        "request_id": "6357de1f381f4235a6ac68422d64db5c",
+        "request_id": "48416f21197d4dd1b3873711ffaa2269",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"
@@ -46,7 +78,7 @@
     ],
     "write-path-dead": [
       {
-        "request_id": "9fa5b2e7a0ac40dd98b77dc895c9932a",
+        "request_id": "33d6ec3df10e479d91e3a7902f1282f5",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"
