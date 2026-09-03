@@ -23,7 +23,7 @@
   "attempts": {
     "write-path-success": [
       {
-        "request_id": "8fa9fd40078141bda476d05ba59c845f",
+        "request_id": "79107868676745dca01304cf668fbe78",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"
@@ -31,13 +31,13 @@
     ],
     "write-path-retry": [
       {
-        "request_id": "8a9b9e857d4f4718a2a2c5acff850ae5",
+        "request_id": "7df92e1115a74caeb5bdac2770278659",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"
       },
       {
-        "request_id": "e8f790da0f734f03ab9f94bdf2d61450",
+        "request_id": "8d4a523e7ebf428e869c2cd1e1fc4f37",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"
@@ -45,7 +45,7 @@
     ],
     "write-path-dead": [
       {
-        "request_id": "629acd2573ef4294a16d7307728f4625",
+        "request_id": "5dd83774adf84c3ea5482cdef55a0a3f",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"

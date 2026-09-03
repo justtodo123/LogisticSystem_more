@@ -34,16 +34,12 @@ def check_idempotency(
     db: Session,
     *,
     node_name_prefix: str = "k6-node-",
-    key_prefix: str = "idem-",
 ) -> dict[str, Any]:
     nodes = list(db.scalars(select(Node).where(Node.name.like(f"{node_name_prefix}%"))).all())
     node_codes = [node.node_code for node in nodes]
     duplicate_nodes = sorted({code for code in node_codes if node_codes.count(code) > 1})
-    records = list(
-        db.scalars(
-            select(IdempotencyRecord).where(IdempotencyRecord.idempotency_key.like(f"{key_prefix}%"))
-        ).all()
-    )
+    # Stored keys are SHA-256 fingerprints, not the caller-provided idem- prefix.
+    records = list(db.scalars(select(IdempotencyRecord)).all())
     processing = [row.idempotency_key for row in records if row.status in PROCESSING_STATUSES]
     succeeded = [row for row in records if row.status == "SUCCEEDED"]
     payload_groups: dict[tuple[str, str | None], int] = {}

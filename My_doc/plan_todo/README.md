@@ -43,7 +43,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | 03 | P0 | P0 | done | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | PR #15 / CI 通过并合并；Saga/outbox 协议与本地故障注入已验证 |
 | 04B | P0 并行 | P0 | done | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | PR #16 / CI 通过并合并；权限矩阵、token version、前后端 can() 已验证 |
 | 05 | P1 | P1 | done | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | PR #18/#20/#21/#23 已合并；main CI/CD 与 100k GHA scale run `33581256635` 已验证；PR #25 CI run 33589202969 四个 job 全绿 |
-| 06 | P1/P2 | P1 | done | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | P1：HTTP 观测基线 + 读混合 load/spike（PR #27/#28/#29，GHA run 33607612662）。写路径 workflow 已加但尚未正式实测；第一次成功只建立 baseline。跨 worker 指标与 soak/Grafana 仍为后续/P2 |
+| 06 | P1/P2 | P1 | done | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | P1：HTTP 观测基线 + 读混合 load/spike（run 33607612662）。写路径 5m load 已建立 baseline（run 33710390070），不宣称相对回归通过，不与读混合 P95 比较。跨 worker 指标与 soak/Grafana 仍为后续/P2 |
 
 ## 依赖主链
 
@@ -58,7 +58,7 @@ R2-00A + R2-01 + R2-02 + R2-03 -> R2-05 (done)
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：R2-06 P1 口径收窄为 HTTP 观测基线及读混合 load/spike 证据；下一步先补 outbox/worker trace 连续性，而不是开启 P2 Grafana 或 soak。
+当前下一动作：R2-06 写路径第一次 5m load 已建立 baseline（run 33710390070）。第二次可比运行后才能做相对回归和轻量 PR gate。不要把写路径 P95 与读混合 P95 比较。P2 soak/Grafana 不阻塞。
 
 ## 当前证据边界
 

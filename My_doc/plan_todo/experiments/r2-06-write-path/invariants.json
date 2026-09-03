@@ -1,8 +1,8 @@
 {
   "idempotency": {
-    "node_count": 31,
-    "unique_node_codes": 31,
-    "storage_center_count": 31,
+    "node_count": 600,
+    "unique_node_codes": 600,
+    "storage_center_count": 600,
     "idempotency_record_count": 0,
     "processing_count": 0,
     "duplicate_node_codes": [],
@@ -13,7 +13,7 @@
     "schedule_code": "GS20260903001",
     "status": "active",
     "version": 2,
-    "package_count": 50,
+    "package_count": 57,
     "passed": true,
     "failures": []
   },

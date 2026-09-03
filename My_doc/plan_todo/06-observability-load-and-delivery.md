@@ -5,7 +5,7 @@ status: done
 priority: P1
 owner: justtodo123
 created: 2026-08-25
-updated: 2026-09-02
+updated: 2026-09-03
 depends_on: ["R2-04B", "R2-05"]
 ---
 
@@ -79,4 +79,8 @@ npm run build
 - Spike 约 5m / 峰值 25 RPS：http_req_failed 0%，dropped 0，k6 混合 P95 9.63 ms。
 - 产物：`r2-06-load-spike` artifact；详见 [20260902-R2-06-observability-baseline.md](./experiments/20260902-R2-06-observability-baseline.md)。
 - P2 未做：soak、Grafana 全家桶、镜像安全扫描。
-- 本分支补强：outbox payload `_trace` 与 worker 恢复同一 `trace_id`（集成测试）；Redis/DeepSeek/地图/微信 依赖观测；k6 幂等写与并发确认脚本；baseline comparator 可执行。独立 workflow `.github/workflows/p1-write-path.yml` 已落地（仅 workflow_dispatch）。尚无正式 GHA 写路径产物；第一次成功运行只建立 baseline，不宣称相对回归通过，也不宣称业务全路径容量验证。
+- 写路径是独立场景，不并入 2026-09-02 读混合 P95。正式 5m load：GHA run 33710390070，head `b87db19`，PostgreSQL 16 + Redis 7 + Uvicorn 2 workers + 1 outbox worker，`WRITE_RPS=2`，`CONFIRM_VUS=8`。comparator 为 `establish_baseline`，不宣称相对回归通过，也不宣称业务全路径容量验证。
+- 幂等写：http_req_failed 0，unexpected_5xx 0，重放 600/600，写 P95 27.66 ms / P99 73.16 ms；DB 600 个唯一 `k6-node-*`，无重复副作用，无残留 PROCESSING outbox。
+- 并发确认：8 个 contender，1 次成功 / 7 次冲突，unexpected_5xx 0；confirm P95 836.7 ms（不要用含 login 的混合 HTTP P95）；schedule `GS20260903001` 最终 active。
+- Trace probe：HTTP `trace_id=trc-write-path-probe` 贯穿 success/retry/dead-letter；每次 execution 新 `request_id`；`parent_request_id` 指向原始 HTTP。独立 worker 进程日志为空（probe 在 worker 启动前进程内投递）。
+- 写路径产物：artifact `r2-06-write-path`（14 天）；小文件见 [r2-06-write-path](./experiments/r2-06-write-path/README.md) 与 [20260903-R2-06-write-path-baseline.md](./experiments/20260903-R2-06-write-path-baseline.md)。跨 worker 指标聚合、Grafana、soak 仍未完成；写路径 PR 门禁需两次可比 load 后再接。

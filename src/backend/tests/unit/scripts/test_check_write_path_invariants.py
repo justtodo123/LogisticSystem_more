@@ -83,6 +83,12 @@ def test_invariants_fail_on_duplicate_nodes_and_processing(db_session):
                 payload_hash="abc",
                 expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1),
             ),
+            IdempotencyRecord(
+                idempotency_key="a" * 64,
+                status="PROCESSING",
+                payload_hash="def",
+                expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1),
+            ),
             OutboxEvent(
                 dedup_key="stuck-outbox",
                 event_type="notification.test",
@@ -105,6 +111,6 @@ def test_invariants_fail_on_duplicate_nodes_and_processing(db_session):
     db_session.commit()
     report = run_checks(db_session, schedule_code="GS-K6-DRAFT")
     assert report["passed"] is False
-    assert report["idempotency"]["processing_count"] == 1
+    assert report["idempotency"]["processing_count"] == 2
     assert report["outbox"]["processing_count"] == 1
     assert report["confirm"]["status"] == "draft"
