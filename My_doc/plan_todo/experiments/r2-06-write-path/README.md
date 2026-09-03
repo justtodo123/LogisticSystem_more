@@ -10,7 +10,8 @@ Two comparable 5-minute loads exist. The second run compared against `load/basel
 
 - Baseline load: https://github.com/justtodo123/LogisticSystem_more/actions/runs/33710390070 (`b87db19`)
 - Candidate load: https://github.com/justtodo123/LogisticSystem_more/actions/runs/33714192935 (`cca064e`)
-- Independent worker trace: `worker_mode=independent` in `trace-probe.json`
+- Independent worker trace: HTTP POST `/api/debug/write-path-probe` (`enqueue_source=http`, `worker_mode=independent`)
+- HTTP-produced evidence: PR #36 merge `bf5c3a7`; main smoke https://github.com/justtodo123/LogisticSystem_more/actions/runs/33738039588
 - Topology: PostgreSQL 16, Redis 7, Uvicorn 2 workers, 1 outbox worker
 - Parameters: `DURATION=5m`, `WRITE_RPS=2`, `CONFIRM_VUS=8`
 
@@ -30,12 +31,15 @@ Confirm-conflict:
 - confirm P95 836.7 ms -> 897.8 ms (+7.3%), under the 15% gate
 - do not use mixed HTTP P95 (includes login/setup)
 
-Independent worker trace:
+Independent worker trace (HTTP-produced):
 
-- HTTP `trace_id=trc-write-path-probe` equals worker `outbox_execute` / retry / dead-letter logs
-- each execution mints a new `request_id`
-- `parent_request_id=req-write-path-probe`
+- `POST /api/debug/write-path-probe` in the API process enqueues success/retry/dead-letter rows
+- `enqueue_source=http`, `worker_mode=independent`, `passed=true`
+- HTTP `trace_id=trc-write-path-probe` equals outbox `_trace.trace_id` and worker success/retry/dead-letter logs
+- HTTP `request_id=req-write-path-probe` is not reused as the worker execution `request_id`
+- retry uses two different execution `request_id`s; `parent_request_id` stays `req-write-path-probe`
 - worker JSON log is non-empty (`write-outbox-worker.redacted.log`)
+- do not treat this smoke as a 5-minute write-path candidate
 
 ## Files
 

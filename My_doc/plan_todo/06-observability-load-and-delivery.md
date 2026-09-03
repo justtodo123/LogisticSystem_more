@@ -74,7 +74,7 @@ npm run build
 
 ## 完成记录
 
-- 状态：`R2-06 P1 done：完成 HTTP 观测基线及读混合 load/spike 证据；端到端 outbox trace、依赖级观测、写入/并发确认压测和跨 worker 指标聚合列为后续增强，不宣称已完成完整端到端观测与业务全路径容量验证。`（2026-09-02）。观测基线 PR #27/#28/#29；成功 load/spike GHA run 33607612662，head `3b4a273`。
+- 状态：`R2-06 P1 done：完成 HTTP 观测基线及读混合 load/spike 证据；HTTP 产生的独立 worker trace、依赖级观测、写入/并发确认压测已有证据；跨 worker 指标聚合仍列为后续增强，不宣称已完成完整端到端观测与业务全路径容量验证。`（2026-09-02）。观测基线 PR #27/#28/#29；成功 load/spike GHA run 33607612662，head `3b4a273`。
 - Load 5m / 8 RPS 读混合 + 1 RPS login：http_req_failed 0%，dropped 0，k6 混合 P95 9.81 ms；login 路径 P95 290 ms。
 - Spike 约 5m / 峰值 25 RPS：http_req_failed 0%，dropped 0，k6 混合 P95 9.63 ms。
 - 产物：`r2-06-load-spike` artifact；详见 [20260902-R2-06-observability-baseline.md](./experiments/20260902-R2-06-observability-baseline.md)。
@@ -82,5 +82,5 @@ npm run build
 - 写路径是独立场景，不并入 2026-09-02 读混合 P95。第一次 5m load 建立 baseline（run 33710390070）。第二次相同参数 candidate（run 33714192935）相对回归通过：幂等写 P95 -4.7%，确认 P95 +7.3%。独立 worker 日志证明同一 `trace_id` 覆盖 success/retry/dead-letter。不宣称业务全路径容量验证。
 - 幂等写：http_req_failed 0，unexpected_5xx 0，重放 600/600，写 P95 27.66 ms / P99 73.16 ms；DB 600 个唯一 `k6-node-*`，无重复副作用，无残留 PROCESSING outbox。
 - 并发确认：8 个 contender，1 次成功 / 7 次冲突，unexpected_5xx 0；confirm P95 836.7 ms（不要用含 login 的混合 HTTP P95）；schedule `GS20260903001` 最终 active。
-- Trace probe：HTTP `trace_id=trc-write-path-probe` 贯穿 success/retry/dead-letter；每次 execution 新 `request_id`；`parent_request_id` 指向原始 HTTP。独立 worker 进程日志为空（probe 在 worker 启动前进程内投递）。
+- Trace probe：HTTP POST `/api/debug/write-path-probe` 产生 outbox（`enqueue_source=http`）；独立 worker 消费 success/retry/dead-letter。HTTP `trace_id=trc-write-path-probe` 贯穿 API、outbox `_trace` 与 worker 日志；每次 execution 新 `request_id`；`parent_request_id=req-write-path-probe`。证据：PR #36 merge `bf5c3a7`，main smoke run 33738039588。
 - 写路径产物：artifact `r2-06-write-path`（14 天）；小文件见 [r2-06-write-path](./experiments/r2-06-write-path/README.md) 与 [20260903-R2-06-write-path-baseline.md](./experiments/20260903-R2-06-write-path-baseline.md)。跨 worker 指标聚合、Grafana 全家桶仍未完成。轻量 PR 门禁已合入 PR #32（merge 4f29d1a），首次 PR smoke run 33715890853 通过：mode=pr_correctness，p95_regression_ok=null，独立 worker trace_id=trc-write-path-probe。P2 soak smoke 已在 main 上跑通：run 33717505441，8m / 4 RPS，33 个样本，error_rate 0，unexpected_5xx 0，RSS 1.206x。这只证明采样器可跑，不断言无泄漏，不把 soak P95 与 5m 读混合或写路径 P95 比较。2 小时 soak 已跑通：run 33720629269，2h / 4 RPS，480 个样本，error_rate 0，unexpected_5xx 0，dropped 0；预热后 RSS 387864 KB -> 388464 KB（1.002x）。不断言永久无泄漏，不把 soak P95 与 5m 读混合或写路径 P95 比较。Grafana 全家桶、镜像扫描、跨 worker 指标聚合仍未做。小文件见 experiments/r2-06-soak/ 与 20260903-R2-06-p2-soak.md。
