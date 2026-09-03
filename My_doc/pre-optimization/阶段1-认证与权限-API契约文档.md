@@ -47,7 +47,7 @@ Content-Type: application/json
   "code": 0,
   "message": "success",
   "data": {
-    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaXNwYXRjaGVyIiwicm9sZSI6ImRpc3BhdGNoZXIiLCJleHAiOjE3MTgyMDgwMDB9.8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8",
+    "access_token": "[REDACTED]",
     "token_type": "bearer",
     "expires_in": 86400,
     "role": "dispatcher",
@@ -479,7 +479,7 @@ HMACSHA256(
 
 **完整 Token 示例**（解码前）：
 ```
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaXNwYXRjaGVyIiwicm9sZSI6ImRpc3BhdGNoZXIiLCJleHAiOjE3MTgyMDgwMDB9.8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8Z8
+[REDACTED]
 ```
 
 **解码后 Payload**：

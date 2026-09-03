@@ -2,14 +2,14 @@
     "root_group": {
         "groups": {},
         "checks": {
-                "confirm is success or conflict": {
-                    "name": "confirm is success or conflict",
-                    "path": "::confirm is success or conflict",
-                    "id": "9eac6ce1a72c4a06ee43d093aa706664",
-                    "passes": 8,
-                    "fails": 0
-                }
-            },
+            "confirm is success or conflict": {
+                "name": "confirm is success or conflict",
+                "path": "::confirm is success or conflict",
+                "id": "9eac6ce1a72c4a06ee43d093aa706664",
+                "passes": 8,
+                "fails": 0
+            }
+        },
         "name": "",
         "path": "",
         "id": "d41d8cd98f00b204e9800998ecf8427e"
@@ -187,6 +187,6 @@
     },
     "setup_data": {
         "scheduleCode": "GS20260903001",
-        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsInR2IjowLCJleHAiOjE3ODg0OTE3OTN9.lKMdgDBSsQOZ-SxIyOs5uFoVixM1gU7sYm80SIksV2o"
+        "token": "[REDACTED]"
     }
 }

@@ -96,7 +96,7 @@
             "p(90)": 0,
             "p(95)": 0,
             "p(99)": 0,
-            "avg": 0.0000417133625267561
+            "avg": 4.17133625267561e-05
         },
         "http_req_waiting": {
             "med": 3.144755,
@@ -197,6 +197,6 @@
         }
     },
     "setup_data": {
-        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsInR2IjowLCJleHAiOjE3ODg1MDExNDF9.eRgx45xPpT5CTjx5lc-rVatuCAXcpbpwDlok3FQky7U"
+        "token": "[REDACTED]"
     }
 }

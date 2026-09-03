@@ -1,6 +1,6 @@
 {
     "setup_data": {
-        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsInR2IjowLCJleHAiOjE3ODg0OTE0OTJ9.wS5BI8QiLi-0tDo4JI_p0fnIxdcQ7rgNae2FReMAU5A"
+        "token": "[REDACTED]"
     },
     "root_group": {
         "name": "",
@@ -8,21 +8,21 @@
         "id": "d41d8cd98f00b204e9800998ecf8427e",
         "groups": {},
         "checks": {
-                "idempotent write succeeded": {
-                    "path": "::idempotent write succeeded",
-                    "id": "46e71a7ec6ed35ab9bb5d2aaad66a2fe",
-                    "passes": 600,
-                    "fails": 0,
-                    "name": "idempotent write succeeded"
-                },
-                "replay matches original": {
-                    "passes": 600,
-                    "fails": 0,
-                    "name": "replay matches original",
-                    "path": "::replay matches original",
-                    "id": "e51cc19253ba753fdefe45a3fdf3f2aa"
-                }
+            "idempotent write succeeded": {
+                "path": "::idempotent write succeeded",
+                "id": "46e71a7ec6ed35ab9bb5d2aaad66a2fe",
+                "passes": 600,
+                "fails": 0,
+                "name": "idempotent write succeeded"
+            },
+            "replay matches original": {
+                "passes": 600,
+                "fails": 0,
+                "name": "replay matches original",
+                "path": "::replay matches original",
+                "id": "e51cc19253ba753fdefe45a3fdf3f2aa"
             }
+        }
     },
     "metrics": {
         "data_received": {

@@ -140,7 +140,7 @@
         }
     },
     "setup_data": {
-        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsInR2IjowLCJleHAiOjE3ODg0OTg0NDF9.RgltyroF0qOJda31unF-8tyBI6tzOlvluE_Zqk_JVto"
+        "token": "[REDACTED]"
     },
     "root_group": {
         "name": "",
@@ -148,55 +148,55 @@
         "id": "d41d8cd98f00b204e9800998ecf8427e",
         "groups": {},
         "checks": {
-                "health 200": {
-                    "path": "::health 200",
-                    "id": "8e4f90a842a57472549a6b2cf699032d",
-                    "passes": 1921,
-                    "fails": 0,
-                    "name": "health 200"
-                },
-                "health echoes request id": {
-                    "fails": 0,
-                    "name": "health echoes request id",
-                    "path": "::health echoes request id",
-                    "id": "594d29bd866b006a683a4aea8497558e",
-                    "passes": 1921
-                },
-                "me 200": {
-                    "fails": 0,
-                    "name": "me 200",
-                    "path": "::me 200",
-                    "id": "30e7556edf82eff0e3762598c402eb40",
-                    "passes": 1921
-                },
-                "orders 200": {
-                    "name": "orders 200",
-                    "path": "::orders 200",
-                    "id": "cba71426cf25a3e10b652088d545256e",
-                    "passes": 1921,
-                    "fails": 0
-                },
-                "metrics 200": {
-                    "fails": 0,
-                    "name": "metrics 200",
-                    "path": "::metrics 200",
-                    "id": "6025b93ff340487de79d60f9527333fc",
-                    "passes": 1921
-                },
-                "login status 200": {
-                    "name": "login status 200",
-                    "path": "::login status 200",
-                    "id": "a9f04e9f501317c68a9f824e04811bea",
-                    "passes": 481,
-                    "fails": 0
-                },
-                "login business 0": {
-                    "id": "0214585d02e24b1e2943dacee2456925",
-                    "passes": 481,
-                    "fails": 0,
-                    "name": "login business 0",
-                    "path": "::login business 0"
-                }
+            "health 200": {
+                "path": "::health 200",
+                "id": "8e4f90a842a57472549a6b2cf699032d",
+                "passes": 1921,
+                "fails": 0,
+                "name": "health 200"
+            },
+            "health echoes request id": {
+                "fails": 0,
+                "name": "health echoes request id",
+                "path": "::health echoes request id",
+                "id": "594d29bd866b006a683a4aea8497558e",
+                "passes": 1921
+            },
+            "me 200": {
+                "fails": 0,
+                "name": "me 200",
+                "path": "::me 200",
+                "id": "30e7556edf82eff0e3762598c402eb40",
+                "passes": 1921
+            },
+            "orders 200": {
+                "name": "orders 200",
+                "path": "::orders 200",
+                "id": "cba71426cf25a3e10b652088d545256e",
+                "passes": 1921,
+                "fails": 0
+            },
+            "metrics 200": {
+                "fails": 0,
+                "name": "metrics 200",
+                "path": "::metrics 200",
+                "id": "6025b93ff340487de79d60f9527333fc",
+                "passes": 1921
+            },
+            "login status 200": {
+                "name": "login status 200",
+                "path": "::login status 200",
+                "id": "a9f04e9f501317c68a9f824e04811bea",
+                "passes": 481,
+                "fails": 0
+            },
+            "login business 0": {
+                "id": "0214585d02e24b1e2943dacee2456925",
+                "passes": 481,
+                "fails": 0,
+                "name": "login business 0",
+                "path": "::login business 0"
             }
+        }
     }
 }

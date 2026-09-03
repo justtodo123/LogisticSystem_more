@@ -9,15 +9,20 @@ def _read(name: str) -> str:
     return (K6 / name).read_text(encoding="utf-8")
 
 
-def test_write_scripts_export_setup_and_business_metrics():
+def test_write_scripts_keep_vu_tokens_out_of_setup_data():
     idem = _read("idempotency.js")
     confirm = _read("confirm-conflict.js")
     helpers = _read("helpers.js")
     for source in (idem, confirm, helpers):
         assert source.count("{") == source.count("}")
         assert source.count("(") == source.count(")")
-    assert "export function setup()" in idem
+    assert "export function setup()" not in idem
     assert "export function setup()" in confirm
+    assert "return { scheduleCode };" in confirm
+    assert "token:" not in confirm.split("export function setup()", 1)[1].split("export function confirmSame", 1)[0]
+    assert "function getVuToken()" in helpers
+    assert "getVuToken()" in idem
+    assert "getVuToken()" in confirm
     assert "newRequestId" in helpers
     assert "idempotency_replay_rate" in idem
     assert "duplicate_side_effects" in idem
@@ -27,5 +32,4 @@ def test_write_scripts_export_setup_and_business_metrics():
     assert "expectedStatuses(200, 409)" in confirm
     assert 'confirmation_success_total: ["count==1"]' in confirm
     assert re.search(r"X-Request-ID", helpers)
-    assert "login()" in idem
-    assert "login()" in confirm
+    assert "login()" in helpers

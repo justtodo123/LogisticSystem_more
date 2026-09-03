@@ -1,7 +1,7 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 import { Counter, Rate, Trend } from "k6/metrics";
-import { BASE_URL, jsonHeaders, login } from "./helpers.js";
+import { BASE_URL, getVuToken, jsonHeaders } from "./helpers.js";
 
 const errorRate = new Rate("business_error_rate");
 const unexpected5xx = new Rate("unexpected_5xx");
@@ -43,16 +43,8 @@ function businessCode(res) {
   }
 }
 
-export function setup() {
-  const result = login();
-  if (!result.ok || !result.token) {
-    throw new Error("setup login failed");
-  }
-  return { token: result.token };
-}
-
-export function idempotentWrite(data) {
-  const token = data && data.token;
+export function idempotentWrite() {
+  const token = getVuToken();
   if (!token) {
     errorRate.add(true);
     return;

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "policy_version": "2026-09-03.1",
+  "blocking_severities": ["CRITICAL", "HIGH"],
+  "report_only_severities": ["MEDIUM", "LOW"],
+  "unknown_severity": "report_and_fail",
+  "unfixed": "block_when_blocking_severity",
+  "scanner_errors": "fail",
+  "missing_reports": "fail"
+}
