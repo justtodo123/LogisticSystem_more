@@ -12,7 +12,7 @@ Do not login on every iteration: bcrypt password checks block a single asyncio w
 
 Run read-mix load/spike on GitHub Actions via workflow `P1 load and spike` (`workflow_dispatch`).
 
-Run write-path smoke/load via a separate workflow `P1 write-path smoke and load` (`.github/workflows/p1-write-path.yml`, `workflow_dispatch` only). The 2026-09-03 5m load (GHA run 33710390070) established `load/baselines` for idempotency and confirm-conflict. PRs run a 30s correctness gate (`.github/workflows/p1-write-path-pr.yml`, PR #32, run 33715890853) that does not compare smoke P95 with the 5m write-path baseline or read-mix P95. Formal 5-10m load stays on workflow_dispatch. P2 soak smoke is `.github/workflows/p2-soak.yml` (`workflow_dispatch` only). First smoke run 33717505441 (8m / 4 RPS) proved the sampler; it does not prove no leak and must not be compared with 5m read-mix or write-path P95. Grafana and 2h soak remain later.
+Run write-path smoke/load via a separate workflow `P1 write-path smoke and load` (`.github/workflows/p1-write-path.yml`, `workflow_dispatch` only). The 2026-09-03 5m load (GHA run 33710390070) established `load/baselines` for idempotency and confirm-conflict. PRs run a 30s correctness gate (`.github/workflows/p1-write-path-pr.yml`, PR #32, run 33715890853) that does not compare smoke P95 with the 5m write-path baseline or read-mix P95. Formal 5-10m load stays on workflow_dispatch. P2 soak smoke is `.github/workflows/p2-soak.yml` (`workflow_dispatch` only). First smoke run 33717505441 (8m / 4 RPS) proved the sampler. First 2h soak run 33720629269 passed correctness with no unbounded RSS/connection growth after warmup; it must not be compared with 5m read-mix or write-path P95. Grafana remains later.
 
 Example (Linux/GHA):
 
