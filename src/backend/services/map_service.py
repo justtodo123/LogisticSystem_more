@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 
 from config.settings import settings
+from core.dependency import outbound_trace_headers, track_dependency
 from utils.cache import memory_cache
 
 # 路网距离结果缓存 TTL（秒）：真实 API 结果波动小，缓存 1 小时
@@ -65,9 +66,13 @@ def _call_amap(lat1, lng1, lat2, lng2, mode: str):
         "key": settings.MAP_API_KEY,
     }
     query = url + "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(query, headers={"User-Agent": "logistics-platform"})
-    with urllib.request.urlopen(req, timeout=5) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
+    req = urllib.request.Request(
+        query,
+        headers=outbound_trace_headers({"User-Agent": "logistics-platform"}),
+    )
+    with track_dependency("map", "amap"):
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
     if body.get("status") != "1":
         raise ValueError(f"高德返回异常: {body.get('info')}")
     path = (body.get("route") or {}).get("paths") or []
@@ -86,9 +91,13 @@ def _call_baidu(lat1, lng1, lat2, lng2, mode: str):
         "ak": settings.MAP_API_KEY,
     }
     query = url + "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(query, headers={"User-Agent": "logistics-platform"})
-    with urllib.request.urlopen(req, timeout=5) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
+    req = urllib.request.Request(
+        query,
+        headers=outbound_trace_headers({"User-Agent": "logistics-platform"}),
+    )
+    with track_dependency("map", "baidu"):
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
     if body.get("status") != 0:
         raise ValueError(f"百度返回异常: {body.get('message')}")
     result = body.get("result") or {}

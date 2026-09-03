@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 from config.settings import settings
+from core.dependency import outbound_trace_headers, track_dependency
 
 from .base import NotificationChannel
 
@@ -38,9 +39,20 @@ class WechatWorkChannel(NotificationChannel):
                 "msgtype": "text",
                 "text": {"content": f"【{subject}】\n{content}"},
             }
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(self.webhook_url, json=payload)
-                resp.raise_for_status()
+            with track_dependency("wechat", "webhook") as dep:
+                try:
+                    async with httpx.AsyncClient(timeout=10) as client:
+                        resp = await client.post(
+                            self.webhook_url,
+                            json=payload,
+                            headers=outbound_trace_headers(),
+                        )
+                        resp.raise_for_status()
+                except Exception as exc:
+                    dep["status"] = "error"
+                    dep["error_type"] = type(exc).__name__
+                    logger.error("企业微信通知发送失败: %s", exc)
+                    return False
             logger.info("企业微信通知发送成功: %s", subject)
             return True
         except Exception as e:  # 通知失败不影响主业务流程
