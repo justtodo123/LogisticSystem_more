@@ -1,0 +1,223 @@
+name: P2 soak smoke and soak
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: smoke (8-10m harness check) or soak (2h). First success only proves the sampler.
+        required: true
+        type: choice
+        options:
+          - smoke
+          - soak
+        default: smoke
+      duration:
+        description: Override k6 duration (empty uses mode default)
+        required: false
+        default: ""
+      rps:
+        description: Override read-mix arrival rate (empty uses mode default)
+        required: false
+        default: ""
+
+jobs:
+  soak:
+    name: P2 soak ${{ inputs.mode }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: logistics
+          POSTGRES_PASSWORD: logistics
+          POSTGRES_DB: logistics
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logistics -d logistics"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ENV: dev
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: ${{ github.workspace }}/src/backend
+      DATABASE_URL: postgresql+psycopg://logistics:logistics@localhost:5432/logistics
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-only-r2-06-soak-secret-value-32
+      BASE_URL: http://127.0.0.1:18001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: src/backend/requirements.txt
+      - uses: grafana/setup-k6-action@v1
+      - name: Install dependencies
+        working-directory: src/backend
+        run: pip install -r requirements.txt
+      - name: Sample runtime, run k6, and check soak report
+        working-directory: src/backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.mode }}" = "soak" ]; then
+            DURATION="${{ inputs.duration }}"
+            RPS="${{ inputs.rps }}"
+            DURATION="${DURATION:-2h}"
+            RPS="${RPS:-4}"
+          else
+            DURATION="${{ inputs.duration }}"
+            RPS="${{ inputs.rps }}"
+            DURATION="${DURATION:-8m}"
+            RPS="${RPS:-4}"
+          fi
+
+          ART="${GITHUB_WORKSPACE}/artifacts/r2-06-soak"
+          mkdir -p p1-artifacts "$ART"
+
+          python scripts/release_migrate.py
+          python scripts/init_users.py
+          python scripts/init_demo_data.py
+
+          python -m uvicorn main:app --host 127.0.0.1 --port 18001 --workers 2 --no-access-log \
+            >p1-artifacts/soak-api.log 2>&1 &
+          echo $! > p1-artifacts/soak-api.pid
+
+          cleanup() {
+            for pid_file in p1-artifacts/*.pid; do
+              if [ -f "$pid_file" ]; then
+                kill "$(tr -d '[:space:]' < "$pid_file")" 2>/dev/null || true
+              fi
+            done
+          }
+          trap cleanup EXIT
+
+          python scripts/wait_http.py --timeout 60 http://127.0.0.1:18001/api/health
+
+          python -u scripts/outbox_worker.py --worker-id gha-r2-06-soak-outbox \
+            --retry-delay-seconds 0 --poll-seconds 1 \
+            >p1-artifacts/soak-outbox-worker.log 2>&1 &
+          echo $! > p1-artifacts/soak-outbox-worker.pid
+
+          python -u scripts/sample_runtime.py \
+            --pid-file p1-artifacts/soak-api.pid \
+            --extra-pid-file p1-artifacts/soak-outbox-worker.pid \
+            --interval 15 \
+            --duration 15000 \
+            --stop-file "$ART/sampler.stop" \
+            --output "$ART/soak-samples.jsonl" \
+            >p1-artifacts/soak-sampler.log 2>&1 &
+          echo $! > p1-artifacts/soak-sampler.pid
+
+          set +e
+          k6 run --summary-export="$ART/soak-summary.json" \
+            -e BASE_URL=http://127.0.0.1:18001 \
+            -e DURATION="$DURATION" \
+            -e RPS="$RPS" \
+            -e LOGIN_RPS=1 \
+            "${GITHUB_WORKSPACE}/load/k6/load.js" \
+            | tee p1-artifacts/soak-k6.log
+          k6_status=${PIPESTATUS[0]}
+
+          touch "$ART/sampler.stop"
+          if [ -f p1-artifacts/soak-sampler.pid ]; then
+            sampler_pid="$(tr -d '[:space:]' < p1-artifacts/soak-sampler.pid)"
+            for _ in $(seq 1 20); do
+              if ! kill -0 "$sampler_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            kill "$sampler_pid" 2>/dev/null || true
+          fi
+
+          python scripts/check_soak_report.py \
+            --samples "$ART/soak-samples.jsonl" \
+            --k6-summary "$ART/soak-summary.json" \
+            --mode "${{ inputs.mode }}" \
+            --json-output "$ART/soak-report.json"
+          report_status=$?
+          set -e
+
+          python scripts/redact_json_logs.py p1-artifacts/soak-api.log "$ART/soak-api.redacted.log" || true
+          python scripts/redact_json_logs.py p1-artifacts/soak-outbox-worker.log "$ART/soak-outbox-worker.redacted.log" || true
+
+          python - <<PY
+          import hashlib
+          import json
+          import os
+          import platform
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          art = Path(os.environ["GITHUB_WORKSPACE"]) / "artifacts" / "r2-06-soak"
+
+          def sha256(path: Path):
+              if not path.exists():
+                  return None
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(65536), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          def version(cmd):
+              try:
+                  return subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT).strip().splitlines()[0]
+              except Exception as exc:
+                  return str(exc)
+
+          files = sorted(p for p in art.glob("*") if p.is_file())
+          env = {
+              "run_url": os.environ.get("GITHUB_SERVER_URL", "") + "/" + os.environ.get("GITHUB_REPOSITORY", "") + "/actions/runs/" + os.environ.get("GITHUB_RUN_ID", ""),
+              "branch": os.environ.get("GITHUB_REF_NAME"),
+              "commit": os.environ.get("GITHUB_SHA"),
+              "mode": "${{ inputs.mode }}",
+              "duration": "$DURATION",
+              "rps": "$RPS",
+              "python": sys.version.split()[0],
+              "platform": platform.platform(),
+              "postgres_image": "postgres:16-alpine",
+              "redis_image": "redis:7-alpine",
+              "uvicorn_workers": 2,
+              "outbox_worker": 1,
+              "k6": version(["k6", "version"]),
+              "retention_days": 14,
+              "note": "First successful smoke only proves the soak harness. It does not prove no leak, and must not be compared with 5m read-mix or write-path P95.",
+              "artifacts": [
+                  {"name": path.name, "bytes": path.stat().st_size, "sha256": sha256(path)}
+                  for path in files
+              ],
+          }
+          (art / "env-report.json").write_text(json.dumps(env, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          print("env_report=ok")
+          PY
+
+          echo "k6_status=${k6_status} report_status=${report_status} duration=${DURATION} rps=${RPS}"
+          if [ "$k6_status" -ne 0 ] || [ "$report_status" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Upload soak artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-06-soak
+          path: |
+            artifacts/r2-06-soak/**
+            src/backend/p1-artifacts/*.log
+          if-no-files-found: warn
+          retention-days: 14

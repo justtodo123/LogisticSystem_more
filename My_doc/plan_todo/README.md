@@ -43,7 +43,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | 03 | P0 | P0 | done | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | PR #15 / CI 通过并合并；Saga/outbox 协议与本地故障注入已验证 |
 | 04B | P0 并行 | P0 | done | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | PR #16 / CI 通过并合并；权限矩阵、token version、前后端 can() 已验证 |
 | 05 | P1 | P1 | done | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | PR #18/#20/#21/#23 已合并；main CI/CD 与 100k GHA scale run `33581256635` 已验证；PR #25 CI run 33589202969 四个 job 全绿 |
-| 06 | P1/P2 | P1 | done | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | P1：HTTP 观测基线 + 读混合 load/spike（run 33607612662）。写路径两次 5m load 可比（PR #31，run 33710390070 / 33714192935）。轻量 PR 门禁只检查正确性，不比较 5m P95。跨 worker 指标与 soak/Grafana 仍为后续/P2 |
+| 06 | P1/P2 | P1 | done | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | P1：HTTP 观测基线 + 读混合 load/spike（run 33607612662）。写路径两次 5m load 可比（PR #31）。轻量 PR 正确性门禁已合入 PR #32（run 33715890853）。P2 soak smoke 仅 workflow_dispatch，不绑定 PR，不上 Grafana |
 
 ## 依赖主链
 
@@ -58,7 +58,7 @@ R2-00A + R2-01 + R2-02 + R2-03 -> R2-05 (done)
 R2-04B + R2-05 -> R2-06
 ```
 
-当前下一动作：R2-06 写路径已合入 main（PR #31）。轻量 PR 门禁只做 30s 正确性检查；5～10 分钟 load 仍手工触发。P2 soak/Grafana 不阻塞。不要把写路径 P95 与读混合 P95 比较。
+当前下一动作：R2-06 P1 已合入 main（PR #31/#32）。下一步是 P2 soak 短时 smoke（p2-soak.yml，workflow_dispatch）：先证明采样器，再考虑 2 小时 soak。不要绑定 PR，不要上 Grafana 全家桶，不要把 soak P95 与读混合/写路径 P95 比较。
 
 ## 当前证据边界
 
