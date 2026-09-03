@@ -61,6 +61,6 @@ gh workflow run p1-load.yml --ref main -f load_duration=5m -f load_rps=8 -f spik
 
 ## 结论
 
-- 状态：done（P1）。观测基线与可复现 load/spike 已有真实产物。
-- 已知限制：GHA ubuntu 单机回环，不是生产容量；`/metrics` 为进程内计数；k6 默认摘要无 p(99)，P99 来自应用 JSON 日志；混合 P95 被 health/metrics 拉低。
+- 状态：`R2-06 P1 done：完成 HTTP 观测基线及读混合 load/spike 证据；端到端 outbox trace、依赖级观测、写入/并发确认压测和跨 worker 指标聚合列为后续增强，不宣称已完成完整端到端观测与业务全路径容量验证。`
+- 已知限制：GHA ubuntu 单机回环，不是生产容量；`/metrics` 为进程内计数；k6 默认摘要当时无 p(99)，P99 来自应用 JSON 日志；混合 P95 被 health/metrics 拉低。当时尚未闭合 HTTP -> outbox -> worker 的同一 `trace_id`，也未跑幂等写/并发确认独立场景。
 - P2 未做：soak、Grafana 全家桶、镜像安全扫描。
