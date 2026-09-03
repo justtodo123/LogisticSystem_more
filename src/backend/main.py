@@ -28,6 +28,7 @@ from api.erp_webhook import router as erp_webhook_router
 from api.reports import router as reports_router
 from api.ai_confirmation import router as ai_confirmation_router
 from api.users import router as users_router
+from api.debug import router as debug_router
 from config.redis import is_redis_enabled
 from config.settings import settings
 from core.error_codes import (
@@ -151,6 +152,7 @@ app.include_router(reports_router)
 
 # 注册 AI 建议确认闸门路由（T6-2）
 app.include_router(ai_confirmation_router)
+app.include_router(debug_router)
 
 
 # ─── 全局异常处理器 ───────────────────────────────────────────────

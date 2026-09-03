@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 HTTP_TRACE_ID = "trc-write-path-probe"
 HTTP_REQUEST_ID = "req-write-path-probe"
 HTTP_TASK_ID = "task-write-path-probe"
+PROBE_PATH = "/api/debug/write-path-probe"
 PROBE_KEYS = ("write-path-success", "write-path-retry", "write-path-dead")
 EXPECTED_STATUS = {
     "write-path-success": "delivered",
@@ -71,22 +72,40 @@ class RecordingHandler(logging.Handler):
         self.lines.append(payload)
 
 
-def probe_http(base_url: str) -> dict[str, Any]:
-    url = base_url.rstrip("/") + "/api/health"
+def _probe_headers() -> dict[str, str]:
+    return {
+        "X-Request-ID": HTTP_REQUEST_ID,
+        "X-Trace-ID": HTTP_TRACE_ID,
+        "X-Task-ID": HTTP_TASK_ID,
+        "Content-Type": "application/json",
+    }
+
+
+def probe_http(base_url: str, *, enqueue: bool = False) -> dict[str, Any]:
+    path = PROBE_PATH if enqueue else "/api/health"
+    url = base_url.rstrip("/") + path
     request = Request(
         url,
-        headers={
-            "X-Request-ID": HTTP_REQUEST_ID,
-            "X-Trace-ID": HTTP_TRACE_ID,
-            "X-Task-ID": HTTP_TASK_ID,
-        },
+        data=b"{}" if enqueue else None,
+        method="POST" if enqueue else "GET",
+        headers=_probe_headers(),
     )
     with urlopen(request, timeout=10) as response:
+        body: dict[str, Any] = {}
+        raw = response.read()
+        try:
+            parsed = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+            parsed = None
+        if isinstance(parsed, dict):
+            body = parsed
         return {
             "status": response.status,
             "request_id": response.headers.get("X-Request-ID"),
             "trace_id": response.headers.get("X-Trace-ID"),
             "task_id": response.headers.get("X-Task-ID"),
+            "path": path,
+            "body": body,
         }
 
 
@@ -215,13 +234,13 @@ def _sender_factory(attempts: dict[str, list[dict[str, str]]]):
     return sender
 
 
-def _collect_http(base_url: str | None) -> tuple[dict[str, Any] | None, list[str]]:
+def _collect_http(base_url: str | None, *, enqueue: bool = False) -> tuple[dict[str, Any] | None, list[str]]:
     failures: list[str] = []
     http_info = None
     if not base_url:
         return http_info, failures
     try:
-        http_info = probe_http(base_url)
+        http_info = probe_http(base_url, enqueue=enqueue)
     except (URLError, OSError, TimeoutError) as exc:
         failures.append(f"http probe failed: {exc}")
         return http_info, failures
@@ -229,6 +248,13 @@ def _collect_http(base_url: str | None) -> tuple[dict[str, Any] | None, list[str
         failures.append("HTTP trace_id mismatch")
     if http_info.get("request_id") != HTTP_REQUEST_ID:
         failures.append("HTTP request_id mismatch")
+    if enqueue and http_info.get("status") != 200:
+        failures.append(f"HTTP write-path probe status {http_info.get('status')}")
+    if enqueue:
+        body = http_info.get("body") if isinstance(http_info.get("body"), dict) else {}
+        code = body.get("code")
+        if code not in (None, 0):
+            failures.append(f"HTTP write-path probe code {code}")
     return http_info, failures
 
 
@@ -252,6 +278,8 @@ def _assert_payload_trace(session_factory: sessionmaker, failures: list[str]) ->
                 failures.append(f"{key} payload trace_id mismatch")
             if nested.get("request_id") != HTTP_REQUEST_ID:
                 failures.append(f"{key} payload request_id mismatch")
+            if not isinstance(event.payload, dict) or event.payload.get("case") != key.rsplit("-", 1)[-1]:
+                failures.append(f"{key} business payload overwritten")
     finally:
         db.close()
 
@@ -302,14 +330,20 @@ def run_probe(
 
     try:
         failures: list[str] = []
-        http_info, http_failures = _collect_http(base_url)
+        http_info, http_failures = _collect_http(base_url, enqueue=wait_worker)
         failures.extend(http_failures)
 
-        db = session_factory()
-        try:
-            _enqueue_cases(db)
-        finally:
-            db.close()
+        if wait_worker:
+            if not base_url:
+                failures.append("wait-worker requires --base-url for HTTP outbox enqueue")
+            elif http_info is None:
+                failures.append("HTTP write-path probe did not enqueue outbox events")
+        else:
+            db = session_factory()
+            try:
+                _enqueue_cases(db)
+            finally:
+                db.close()
         _assert_payload_trace(session_factory, failures)
 
         if wait_worker:
@@ -402,6 +436,7 @@ def run_probe(
         return {
             "http": http_info,
             "worker_mode": "independent" if wait_worker else "in-process",
+            "enqueue_source": "http" if wait_worker else "in-process",
             "first_batch": first,
             "second_batch": second,
             "final_status": final,
