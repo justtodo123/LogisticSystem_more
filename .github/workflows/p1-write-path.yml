@@ -140,6 +140,7 @@ jobs:
           echo $! > p1-artifacts/write-outbox-worker.pid
 
           set +e
+          # HTTP POST /api/debug/write-path-probe, then wait for the independent worker.
           python scripts/probe_outbox_trace.py \
             --base-url http://127.0.0.1:18001 \
             --wait-worker \

@@ -4,7 +4,10 @@ import json
 from scripts.outbox_worker import handle_write_path_probe
 from scripts.probe_outbox_trace import (
     HTTP_REQUEST_ID,
+    HTTP_TASK_ID,
     HTTP_TRACE_ID,
+    PROBE_EVENT_TYPES,
+    PROBE_KEYS,
     parse_worker_attempts,
     run_probe,
 )
@@ -17,6 +20,7 @@ def test_probe_covers_success_retry_and_dead_letter(db_session):
     report = run_probe(lambda: db_session)
     assert report['passed'] is True, report['failures']
     assert report['worker_mode'] == 'in-process'
+    assert report['enqueue_source'] == 'in-process'
     assert report['final_status'] == {
         'write-path-success': 'delivered',
         'write-path-retry': 'delivered',
@@ -76,3 +80,87 @@ def test_probe_handler_ignores_business_events():
     event = OutboxEvent(dedup_key='biz', event_type='replan.completed', payload={})
     assert handle_write_path_probe(event) is None
 
+
+def test_wait_worker_requires_http_enqueue(db_session, tmp_path: Path):
+    log = tmp_path / 'write-outbox-worker.log'
+    log.write_text('', encoding='utf-8')
+    report = run_probe(lambda: db_session, wait_worker=True, worker_log=log, timeout=0.2)
+    assert report['passed'] is False
+    assert report['enqueue_source'] == 'http'
+    assert any('base-url' in item for item in report['failures'])
+    assert db_session.query(OutboxEvent).filter(OutboxEvent.dedup_key.in_(PROBE_KEYS)).count() == 0
+
+
+class _FakeHttpResponse:
+    status = 200
+    headers = {
+        'X-Request-ID': HTTP_REQUEST_ID,
+        'X-Trace-ID': HTTP_TRACE_ID,
+        'X-Task-ID': HTTP_TASK_ID,
+    }
+
+    def read(self):
+        return json.dumps({'code': 0, 'message': 'success', 'data': {'enqueued': list(PROBE_KEYS)}}).encode('utf-8')
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def test_wait_worker_enqueues_via_http(db_session, tmp_path: Path, monkeypatch):
+    log = tmp_path / 'write-outbox-worker.log'
+    rows = []
+    for key, req in (
+        ('write-path-success', 'exec-1'),
+        ('write-path-retry', 'exec-2'),
+        ('write-path-retry', 'exec-3'),
+        ('write-path-dead', 'exec-4'),
+    ):
+        rows.append(json.dumps({'msg': 'outbox_execute', 'trace_id': HTTP_TRACE_ID, 'request_id': req, 'parent_request_id': HTTP_REQUEST_ID, 'task_id': HTTP_TASK_ID, 'dedup_key': key}))
+        rows.append(json.dumps({'msg': 'worker_handle', 'trace_id': HTTP_TRACE_ID, 'request_id': req, 'parent_request_id': HTTP_REQUEST_ID}))
+        rows.append(json.dumps({'msg': 'outbox_outcome', 'trace_id': HTTP_TRACE_ID, 'request_id': req}))
+        if key == 'write-path-dead':
+            rows.append(json.dumps({'msg': 'notification_dead_letter', 'trace_id': HTTP_TRACE_ID, 'request_id': req}))
+    log.write_text(chr(10).join(rows) + chr(10), encoding='utf-8')
+
+    def fake_urlopen(request, timeout=10):
+        assert '/api/debug/write-path-probe' in request.full_url
+        token = bind_request_context(RequestContext(request_id=HTTP_REQUEST_ID, trace_id=HTTP_TRACE_ID, task_id=HTTP_TASK_ID))
+        try:
+            for dedup_key, event_type in PROBE_EVENT_TYPES.items():
+                enqueue_outbox(
+                    db_session,
+                    dedup_key=dedup_key,
+                    event_type=event_type,
+                    payload={'case': dedup_key.rsplit('-', 1)[-1]},
+                )
+            db_session.commit()
+        finally:
+            reset_request_context(token)
+
+        def sender(event: OutboxEvent) -> bool:
+            result = handle_write_path_probe(event)
+            assert result is not None
+            return result
+
+        deliver_outbox_batch(lambda: db_session, sender, worker_id='unit-http-worker', max_retries=3, retry_delay_seconds=0)
+        deliver_outbox_batch(lambda: db_session, sender, worker_id='unit-http-worker', max_retries=3, retry_delay_seconds=0)
+        return _FakeHttpResponse()
+
+    monkeypatch.setattr('scripts.probe_outbox_trace.urlopen', fake_urlopen)
+    report = run_probe(
+        lambda: db_session,
+        base_url='http://127.0.0.1:18001',
+        wait_worker=True,
+        worker_log=log,
+        timeout=2,
+    )
+    assert report['passed'] is True, report['failures']
+    assert report['worker_mode'] == 'independent'
+    assert report['enqueue_source'] == 'http'
+    assert report['http']['path'] == '/api/debug/write-path-probe'
+    assert report['http']['request_id'] == HTTP_REQUEST_ID
+    retry_ids = [item['request_id'] for item in report['attempts']['write-path-retry']]
+    assert retry_ids == ['exec-2', 'exec-3']
