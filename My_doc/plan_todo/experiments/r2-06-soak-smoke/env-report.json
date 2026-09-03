@@ -1,0 +1,49 @@
+{
+  "run_url": "https://github.com/justtodo123/LogisticSystem_more/actions/runs/33717505441",
+  "branch": "main",
+  "commit": "66f2d845e6672fb241926f41d2405da6fb38cfb9",
+  "mode": "smoke",
+  "duration": "8m",
+  "rps": "4",
+  "python": "3.13.15",
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "postgres_image": "postgres:16-alpine",
+  "redis_image": "redis:7-alpine",
+  "uvicorn_workers": 2,
+  "outbox_worker": 1,
+  "k6": "k6 v2.2.0 (commit/00a9a1b7f5, go1.26.5, linux/amd64)",
+  "retention_days": 14,
+  "note": "First successful smoke only proves the soak harness. It does not prove no leak, and must not be compared with 5m read-mix or write-path P95.",
+  "artifacts": [
+    {
+      "name": "sampler.stop",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "soak-api.redacted.log",
+      "bytes": 1311863,
+      "sha256": "7f2eef188b285ef3fae3a261ec465ece09fe5117c2d376715376386b150f614d"
+    },
+    {
+      "name": "soak-outbox-worker.redacted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "soak-report.json",
+      "bytes": 609,
+      "sha256": "0c9e70818a16c70d68cd56ae8d9603812e6c3175e6f553e170d599dc39f0cbe8"
+    },
+    {
+      "name": "soak-samples.jsonl",
+      "bytes": 8216,
+      "sha256": "0299d94a634bb0bfd4715495724899b48a6151e4ef166b88ed1b283e59bbe965"
+    },
+    {
+      "name": "soak-summary.json",
+      "bytes": 6079,
+      "sha256": "68a32c868785588ff2a98b8343778ad4cbffcbfad66df5eeeb8ea8cde2ec3cca"
+    }
+  ]
+}
