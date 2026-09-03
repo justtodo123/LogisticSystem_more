@@ -1,0 +1,67 @@
+{
+  "http": {
+    "status": 200,
+    "request_id": "req-write-path-probe",
+    "trace_id": "trc-write-path-probe",
+    "task_id": "task-write-path-probe"
+  },
+  "first_batch": {
+    "delivered": 1,
+    "retry": 1,
+    "dead-letter": 1
+  },
+  "second_batch": {
+    "delivered": 1,
+    "retry": 0,
+    "dead-letter": 0
+  },
+  "final_status": {
+    "write-path-success": "delivered",
+    "write-path-dead": "dead-letter",
+    "write-path-retry": "delivered"
+  },
+  "attempts": {
+    "write-path-success": [
+      {
+        "request_id": "8fa9fd40078141bda476d05ba59c845f",
+        "trace_id": "trc-write-path-probe",
+        "parent_request_id": "req-write-path-probe",
+        "task_id": "task-write-path-probe"
+      }
+    ],
+    "write-path-retry": [
+      {
+        "request_id": "8a9b9e857d4f4718a2a2c5acff850ae5",
+        "trace_id": "trc-write-path-probe",
+        "parent_request_id": "req-write-path-probe",
+        "task_id": "task-write-path-probe"
+      },
+      {
+        "request_id": "e8f790da0f734f03ab9f94bdf2d61450",
+        "trace_id": "trc-write-path-probe",
+        "parent_request_id": "req-write-path-probe",
+        "task_id": "task-write-path-probe"
+      }
+    ],
+    "write-path-dead": [
+      {
+        "request_id": "629acd2573ef4294a16d7307728f4625",
+        "trace_id": "trc-write-path-probe",
+        "parent_request_id": "req-write-path-probe",
+        "task_id": "task-write-path-probe"
+      }
+    ]
+  },
+  "trace_id": "trc-write-path-probe",
+  "http_request_id": "req-write-path-probe",
+  "log_messages": [
+    "notification_dead_letter",
+    "notification_delivered",
+    "outbox_execute",
+    "outbox_outcome",
+    "worker_handle"
+  ],
+  "log_warnings": [],
+  "passed": true,
+  "failures": []
+}

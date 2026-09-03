@@ -1,0 +1,27 @@
+{
+  "scenarios": [
+    {
+      "scenario": "idempotency",
+      "mode": "establish_baseline",
+      "error_rate_ok": true,
+      "unexpected_5xx_ok": true,
+      "p95_regression_pct": null,
+      "p95_regression_ok": null,
+      "duplicate_side_effects": 0,
+      "passed": true,
+      "note": "建立写路径 baseline。"
+    },
+    {
+      "scenario": "confirm-conflict",
+      "mode": "establish_baseline",
+      "error_rate_ok": true,
+      "unexpected_5xx_ok": true,
+      "p95_regression_pct": null,
+      "p95_regression_ok": null,
+      "duplicate_side_effects": 0,
+      "passed": true,
+      "note": "建立写路径 baseline。"
+    }
+  ],
+  "passed": true
+}

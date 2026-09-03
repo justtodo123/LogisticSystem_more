@@ -1,0 +1,75 @@
+{
+  "run_url": "https://github.com/justtodo123/LogisticSystem_more/actions/runs/33709314507",
+  "branch": "feat/R2-06-end-to-end-trace-propagation",
+  "commit": "c417ca365f21428090a5ed1a374aaf8485778578",
+  "mode": "smoke",
+  "duration": "30s",
+  "write_rps": "1",
+  "confirm_vus": "4",
+  "python": "3.13.15",
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "postgres_image": "postgres:16-alpine",
+  "redis_image": "redis:7-alpine",
+  "uvicorn_workers": 2,
+  "outbox_worker": 1,
+  "k6": "k6 v2.2.0 (commit/00a9a1b7f5, go1.26.5, linux/amd64)",
+  "retention_days": 14,
+  "note": "First successful run establishes a write-path baseline and must not claim relative regression passed.",
+  "artifacts": [
+    {
+      "name": "comparison-report.json",
+      "bytes": 671,
+      "sha256": "f954de6de55f078c5ca4298a72b18706076270a33c18d26176eee96a8c1f72d8"
+    },
+    {
+      "name": "confirm-conflict-comparison.json",
+      "bytes": 272,
+      "sha256": "399d91ecc02cab768d56ffbb2f47407e4102eec856a786bdd855a787341988fc"
+    },
+    {
+      "name": "confirm-conflict-comparison.txt",
+      "bytes": 726,
+      "sha256": "af22493ddd0578b23026d4bbe638076d6d899f227213b6a6ee403517f935c6cb"
+    },
+    {
+      "name": "confirm-conflict-summary.json",
+      "bytes": 5393,
+      "sha256": "6692c6bd59ba160f0d1647413df0b8adc7ec505b849ebcc91c06e711d8411c75"
+    },
+    {
+      "name": "idempotency-comparison.json",
+      "bytes": 267,
+      "sha256": "598d04e8f1c1a66df7bb09a7985550d955080587355b3dc1034ee05bda27af03"
+    },
+    {
+      "name": "idempotency-comparison.txt",
+      "bytes": 705,
+      "sha256": "9f588ef07e9809a3149fd59477932f17abdfaf12b76a1ffae02fbd3ebbfe5d08"
+    },
+    {
+      "name": "idempotency-summary.json",
+      "bytes": 5356,
+      "sha256": "45651ec41340c9a66553cd94861df69aca03cf5019fb33c84ebad34d99744e89"
+    },
+    {
+      "name": "invariants.json",
+      "bytes": 551,
+      "sha256": "8bbc2b0c1de861487cdd17efe54281874410acd54ea2d3b727bbd86803868601"
+    },
+    {
+      "name": "trace-probe.json",
+      "bytes": 1730,
+      "sha256": "820a7de77a00cc0182418e74c7bc7f02ee11daa82c04065d9f08a0bc0ba5b658"
+    },
+    {
+      "name": "write-api.redacted.log",
+      "bytes": 124716,
+      "sha256": "92d1ef4cae90249a04b7d31a7096d401e5abe38b0a983cc534cb62eb3fe5ae86"
+    },
+    {
+      "name": "write-outbox-worker.redacted.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

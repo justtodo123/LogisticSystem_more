@@ -1,0 +1,28 @@
+{
+  "idempotency": {
+    "node_count": 31,
+    "unique_node_codes": 31,
+    "storage_center_count": 31,
+    "idempotency_record_count": 0,
+    "processing_count": 0,
+    "duplicate_node_codes": [],
+    "passed": true,
+    "failures": []
+  },
+  "confirm": {
+    "schedule_code": "GS20260903001",
+    "status": "active",
+    "version": 2,
+    "package_count": 50,
+    "passed": true,
+    "failures": []
+  },
+  "outbox": {
+    "outbox_total": 3,
+    "processing_count": 0,
+    "passed": true,
+    "failures": []
+  },
+  "passed": true,
+  "failures": []
+}
