@@ -1,0 +1,202 @@
+{
+    "metrics": {
+        "business_error_rate": {
+            "passes": 0,
+            "fails": 2402,
+            "thresholds": {
+                "rate<0.01": false
+            },
+            "value": 0
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 8166,
+            "thresholds": {
+                "rate<0.01": false
+            },
+            "value": 0
+        },
+        "http_req_duration{expected_response:true}": {
+            "avg": 22.505640332108634,
+            "min": 1.724747,
+            "med": 3.0999945,
+            "max": 448.072657,
+            "p(90)": 8.345584500000001,
+            "p(95)": 312.87009775,
+            "p(99)": 316.0121474
+        },
+        "http_req_blocked": {
+            "max": 1.316975,
+            "p(90)": 0.0063844999999999996,
+            "p(95)": 0.00721775,
+            "p(99)": 0.018438,
+            "avg": 0.005207868111682583,
+            "min": 0.001873,
+            "med": 0.003535
+        },
+        "http_req_sending": {
+            "p(90)": 0.028236499999999998,
+            "p(95)": 0.03096275,
+            "p(99)": 0.05113050000000002,
+            "avg": 0.016793528532941426,
+            "min": 0.006469,
+            "med": 0.012769,
+            "max": 0.940189
+        },
+        "vus": {
+            "value": 1,
+            "min": 1,
+            "max": 1
+        },
+        "iterations": {
+            "count": 2402,
+            "rate": 4.995679006078698
+        },
+        "http_req_connecting": {
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0,
+            "avg": 0.0006916768307616949,
+            "min": 0,
+            "med": 0,
+            "max": 1.268454
+        },
+        "http_req_tls_handshaking": {
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "p(99)": 0
+        },
+        "http_req_waiting": {
+            "max": 447.781887,
+            "p(90)": 7.8040605,
+            "p(95)": 312.666232,
+            "p(99)": 315.79059925,
+            "avg": 22.25080610409013,
+            "min": 1.552547,
+            "med": 2.926779
+        },
+        "http_reqs": {
+            "count": 8166,
+            "rate": 16.983644780865383
+        },
+        "data_received": {
+            "count": 14520342,
+            "rate": 30199.40370128342
+        },
+        "checks": {
+            "passes": 10567,
+            "fails": 0,
+            "value": 1
+        },
+        "data_sent": {
+            "count": 2548796,
+            "rate": 5300.985290581749
+        },
+        "vus_max": {
+            "min": 22,
+            "max": 22,
+            "value": 22
+        },
+        "dropped_iterations": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count<100": false
+            }
+        },
+        "http_req_duration": {
+            "min": 1.724747,
+            "med": 3.0999945,
+            "max": 448.072657,
+            "p(90)": 8.345584500000001,
+            "p(95)": 312.87009775,
+            "p(99)": 316.0121474,
+            "avg": 22.505640332108634,
+            "thresholds": {
+                "p(95)<5000": false
+            }
+        },
+        "http_req_receiving": {
+            "p(99)": 0.6220917500000003,
+            "avg": 0.23804069948567233,
+            "min": 0.032488,
+            "med": 0.1542,
+            "max": 1.159502,
+            "p(90)": 0.541567,
+            "p(95)": 0.56316225
+        },
+        "iteration_duration": {
+            "p(95)": 365.5647049,
+            "p(99)": 368.3823147,
+            "avg": 167.4387966794339,
+            "min": 115.586421,
+            "med": 117.47288449999999,
+            "max": 399.747809,
+            "p(90)": 364.5309592
+        }
+    },
+    "setup_data": {
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsInR2IjowLCJleHAiOjE3ODg0OTg0NDF9.RgltyroF0qOJda31unF-8tyBI6tzOlvluE_Zqk_JVto"
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "health 200": {
+                    "path": "::health 200",
+                    "id": "8e4f90a842a57472549a6b2cf699032d",
+                    "passes": 1921,
+                    "fails": 0,
+                    "name": "health 200"
+                },
+                "health echoes request id": {
+                    "fails": 0,
+                    "name": "health echoes request id",
+                    "path": "::health echoes request id",
+                    "id": "594d29bd866b006a683a4aea8497558e",
+                    "passes": 1921
+                },
+                "me 200": {
+                    "fails": 0,
+                    "name": "me 200",
+                    "path": "::me 200",
+                    "id": "30e7556edf82eff0e3762598c402eb40",
+                    "passes": 1921
+                },
+                "orders 200": {
+                    "name": "orders 200",
+                    "path": "::orders 200",
+                    "id": "cba71426cf25a3e10b652088d545256e",
+                    "passes": 1921,
+                    "fails": 0
+                },
+                "metrics 200": {
+                    "fails": 0,
+                    "name": "metrics 200",
+                    "path": "::metrics 200",
+                    "id": "6025b93ff340487de79d60f9527333fc",
+                    "passes": 1921
+                },
+                "login status 200": {
+                    "name": "login status 200",
+                    "path": "::login status 200",
+                    "id": "a9f04e9f501317c68a9f824e04811bea",
+                    "passes": 481,
+                    "fails": 0
+                },
+                "login business 0": {
+                    "id": "0214585d02e24b1e2943dacee2456925",
+                    "passes": 481,
+                    "fails": 0,
+                    "name": "login business 0",
+                    "path": "::login business 0"
+                }
+            }
+    }
+}

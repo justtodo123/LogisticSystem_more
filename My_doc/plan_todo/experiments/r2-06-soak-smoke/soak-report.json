@@ -1,0 +1,24 @@
+{
+  "mode": "smoke",
+  "sample_count": 33,
+  "health_ok": true,
+  "error_rate_ok": true,
+  "unexpected_5xx_ok": true,
+  "dropped_iterations": 0,
+  "rss_kb_first": 321172,
+  "rss_kb_last": 387180,
+  "rss_growth_ratio": 1.206,
+  "pg_connections_first": 8,
+  "pg_connections_last": 13,
+  "redis_clients_first": 4,
+  "redis_clients_last": 5,
+  "p95": 312.87009775,
+  "p95_regression_ok": null,
+  "notes": [
+    "Soak smoke checks harness correctness only.",
+    "It does not prove the absence of leaks.",
+    "Do not compare soak P95 with 5m read-mix or write-path P95."
+  ],
+  "failures": [],
+  "passed": true
+}
