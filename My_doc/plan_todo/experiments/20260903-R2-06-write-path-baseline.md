@@ -66,8 +66,21 @@ gh workflow run p1-write-path.yml --ref feat/R2-06-end-to-end-trace-propagation 
 3. 并发确认：同一 draft 8 个 contender，恰好 1 次成功、7 次 409/40901，schedule 最终 active。
 4. Trace 连续性：同一 `trace_id` 覆盖 delivered / retry-then-delivered / dead-letter；HTTP `request_id` 与 worker execution `request_id` 不同。
 
-## 结论
 
-- 状态：写路径第一次 5m load 已建立 baseline。这不是相对回归通过，也不是读混合 load/spike 的替代证据。
-- 已知限制：GHA ubuntu 单机回环，不是生产容量；`/metrics` 为进程内计数；独立 outbox worker 日志为空（probe 在 worker 启动前进程内投递，k6 写路径未追加 outbox）；本次 invariants 按 `idem-` 前缀查幂等行得到 0，业务无重复副作用以 600 个唯一节点为准。
-- 未做：第二次可比 load、写路径 PR 门禁、跨 worker 指标聚合、soak、Grafana 全家桶、镜像安全扫描。
+## 第二次可比运行（candidate vs baseline）
+
+- Run：https://github.com/justtodo123/LogisticSystem_more/actions/runs/33714192935
+- Commit：`cca064e85f93cb4cd545dcc07dae84451a86d13f`
+- 参数与第一次相同：5m / WRITE_RPS=2 / CONFIRM_VUS=8
+- Comparator mode：`compare`（相对 `load/baselines`）
+- 幂等写：error_rate 0，unexpected_5xx 0，replay 1.0，写 P95 27.66 ms → 26.35 ms（-4.7%）
+- 并发确认：1 success / 7 conflict，confirm P95 836.7 ms → 897.8 ms（+7.3% < 15%）
+- DB：600 唯一节点，609 条 hashed 幂等记录，PROCESSING 0
+- 独立 worker trace：`worker_mode=independent`；HTTP `trace_id=trc-write-path-probe` 贯穿 outbox_execute / retry / dead-letter；execution `request_id` 每次不同；`parent_request_id=req-write-path-probe`；worker JSON 日志非空
+- 产物：同一 artifact 名 `r2-06-write-path`；仓库小文件见 `r2-06-write-path/comparison-report.json`
+
+## 结论（更新）
+
+- 已有两次可比 5m 写路径运行，第二次相对回归通过。仍不要与读混合 P95 比较。
+- 独立 outbox worker 进程日志已证明同一 `trace_id`。
+- 未做：写路径 PR 性能门禁、跨 worker 指标聚合、soak、Grafana。

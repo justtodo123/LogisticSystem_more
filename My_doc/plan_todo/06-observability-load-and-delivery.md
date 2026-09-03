@@ -79,7 +79,7 @@ npm run build
 - Spike 约 5m / 峰值 25 RPS：http_req_failed 0%，dropped 0，k6 混合 P95 9.63 ms。
 - 产物：`r2-06-load-spike` artifact；详见 [20260902-R2-06-observability-baseline.md](./experiments/20260902-R2-06-observability-baseline.md)。
 - P2 未做：soak、Grafana 全家桶、镜像安全扫描。
-- 写路径是独立场景，不并入 2026-09-02 读混合 P95。正式 5m load：GHA run 33710390070，head `b87db19`，PostgreSQL 16 + Redis 7 + Uvicorn 2 workers + 1 outbox worker，`WRITE_RPS=2`，`CONFIRM_VUS=8`。comparator 为 `establish_baseline`，不宣称相对回归通过，也不宣称业务全路径容量验证。
+- 写路径是独立场景，不并入 2026-09-02 读混合 P95。第一次 5m load 建立 baseline（run 33710390070）。第二次相同参数 candidate（run 33714192935）相对回归通过：幂等写 P95 -4.7%，确认 P95 +7.3%。独立 worker 日志证明同一 `trace_id` 覆盖 success/retry/dead-letter。不宣称业务全路径容量验证。
 - 幂等写：http_req_failed 0，unexpected_5xx 0，重放 600/600，写 P95 27.66 ms / P99 73.16 ms；DB 600 个唯一 `k6-node-*`，无重复副作用，无残留 PROCESSING outbox。
 - 并发确认：8 个 contender，1 次成功 / 7 次冲突，unexpected_5xx 0；confirm P95 836.7 ms（不要用含 login 的混合 HTTP P95）；schedule `GS20260903001` 最终 active。
 - Trace probe：HTTP `trace_id=trc-write-path-probe` 贯穿 success/retry/dead-letter；每次 execution 新 `request_id`；`parent_request_id` 指向原始 HTTP。独立 worker 进程日志为空（probe 在 worker 启动前进程内投递）。

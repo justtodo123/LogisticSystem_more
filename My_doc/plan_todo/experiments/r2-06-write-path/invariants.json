@@ -3,7 +3,7 @@
     "node_count": 600,
     "unique_node_codes": 600,
     "storage_center_count": 600,
-    "idempotency_record_count": 0,
+    "idempotency_record_count": 609,
     "processing_count": 0,
     "duplicate_node_codes": [],
     "passed": true,
@@ -13,7 +13,7 @@
     "schedule_code": "GS20260903001",
     "status": "active",
     "version": 2,
-    "package_count": 57,
+    "package_count": 53,
     "passed": true,
     "failures": []
   },

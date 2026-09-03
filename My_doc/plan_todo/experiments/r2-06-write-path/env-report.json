@@ -1,7 +1,7 @@
 {
-  "run_url": "https://github.com/justtodo123/LogisticSystem_more/actions/runs/33710390070",
+  "run_url": "https://github.com/justtodo123/LogisticSystem_more/actions/runs/33714192935",
   "branch": "feat/R2-06-end-to-end-trace-propagation",
-  "commit": "b87db196fe0461429c35a55209b5a565ed57a71b",
+  "commit": "cca064e85f93cb4cd545dcc07dae84451a86d13f",
   "mode": "load",
   "duration": "5m",
   "write_rps": "2",
@@ -18,58 +18,58 @@
   "artifacts": [
     {
       "name": "comparison-report.json",
-      "bytes": 671,
-      "sha256": "f954de6de55f078c5ca4298a72b18706076270a33c18d26176eee96a8c1f72d8"
+      "bytes": 558,
+      "sha256": "c6282cca2a92c26201932db14200451408db7ff891950ee770db315d2f6597ab"
     },
     {
       "name": "confirm-conflict-comparison.json",
-      "bytes": 272,
-      "sha256": "399d91ecc02cab768d56ffbb2f47407e4102eec856a786bdd855a787341988fc"
+      "bytes": 219,
+      "sha256": "961c4bee46dc0f045e6bd4c918c704f2d04958a1f83217d7c3276fa32a32a3ca"
     },
     {
       "name": "confirm-conflict-comparison.txt",
-      "bytes": 724,
-      "sha256": "87e539ecd46c0a9f3de477810ba212ba796f736e2bcd2df499a76e805a875e25"
+      "bytes": 646,
+      "sha256": "e76afdfa169996cb1e7fe9b27e07d4f89df59aac73223d08a2ba6c1cb47959b3"
     },
     {
       "name": "confirm-conflict-summary.json",
-      "bytes": 5351,
-      "sha256": "54903f5eef4830e5ed4d6df39f383c5c10f8ca58f29b3ba3f2ed670bdbbe425f"
+      "bytes": 5400,
+      "sha256": "997c801036515e13ae27b1acc75e3ae2e41666033a7209ed387fb2fc2cf0e6d3"
     },
     {
       "name": "idempotency-comparison.json",
-      "bytes": 267,
-      "sha256": "598d04e8f1c1a66df7bb09a7985550d955080587355b3dc1034ee05bda27af03"
+      "bytes": 215,
+      "sha256": "b45e90df035e8333ed2d374865dbd7d3b7735bdd5c3fdb365d9a15c257376966"
     },
     {
       "name": "idempotency-comparison.txt",
-      "bytes": 703,
-      "sha256": "4610e032a775db9bf21cc643e5f34103977506f23dba2f9ac5a64e8f759a57c9"
+      "bytes": 627,
+      "sha256": "3fedcbc7c1c2522b3642dd489a0e17aaafd99315425908a9eab67e05de2f06a7"
     },
     {
       "name": "idempotency-summary.json",
-      "bytes": 5272,
-      "sha256": "aaa8360ecf484cd3f7cd492ac3156899d7b3659d209616908f6d3b4470bfea55"
+      "bytes": 5273,
+      "sha256": "21098ff7d3e22e7414fc539a434aa52cf91d7a28f9a3f54600ba527fa0f19a2d"
     },
     {
       "name": "invariants.json",
-      "bytes": 554,
-      "sha256": "e9654ea446cf8261917b89893265ef6be7aadab9aad86277c2bbff0cdc968491"
+      "bytes": 556,
+      "sha256": "522d100942aa8414812d9401018dcfa430c1526733b9b7eedee8bec71d67032f"
     },
     {
       "name": "trace-probe.json",
-      "bytes": 1730,
-      "sha256": "d89822228bbd0b8f0c394d1e0f198882109496e76d2f72564cce93686a2030eb"
+      "bytes": 1762,
+      "sha256": "83b18c216609c0cf1759c2838f5d6763b1e203382a358190452fe82efeec0beb"
     },
     {
       "name": "write-api.redacted.log",
-      "bytes": 2313656,
-      "sha256": "22b35e5b42267a47660b766bfe1e05e62fc7d89de283985871c8c6ce07647b56"
+      "bytes": 2282376,
+      "sha256": "b47a48516e1cd72830f50cb3347cfdf459644d1cad7effb8737c2a3b267ef8d8"
     },
     {
       "name": "write-outbox-worker.redacted.log",
-      "bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "bytes": 5594,
+      "sha256": "5822e413f938f7e983c0d5bb2a6ed40963fdce94af8e62fa99ab2a5100478a5e"
     }
   ]
 }

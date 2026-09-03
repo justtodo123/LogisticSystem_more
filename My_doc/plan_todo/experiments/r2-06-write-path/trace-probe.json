@@ -5,6 +5,7 @@
     "trace_id": "trc-write-path-probe",
     "task_id": "task-write-path-probe"
   },
+  "worker_mode": "independent",
   "first_batch": {
     "delivered": 1,
     "retry": 1,
@@ -23,7 +24,7 @@
   "attempts": {
     "write-path-success": [
       {
-        "request_id": "79107868676745dca01304cf668fbe78",
+        "request_id": "be33dd2ba8cf4b8fa25f865793dadbd4",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"
@@ -31,13 +32,13 @@
     ],
     "write-path-retry": [
       {
-        "request_id": "7df92e1115a74caeb5bdac2770278659",
+        "request_id": "39d0256e3ffa41bb81aa476a8c8eb8c1",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"
       },
       {
-        "request_id": "8d4a523e7ebf428e869c2cd1e1fc4f37",
+        "request_id": "6357de1f381f4235a6ac68422d64db5c",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"
@@ -45,7 +46,7 @@
     ],
     "write-path-dead": [
       {
-        "request_id": "5dd83774adf84c3ea5482cdef55a0a3f",
+        "request_id": "9fa5b2e7a0ac40dd98b77dc895c9932a",
         "trace_id": "trc-write-path-probe",
         "parent_request_id": "req-write-path-probe",
         "task_id": "task-write-path-probe"
