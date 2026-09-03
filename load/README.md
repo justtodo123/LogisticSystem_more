@@ -12,7 +12,7 @@ Do not login on every iteration: bcrypt password checks block a single asyncio w
 
 Run read-mix load/spike on GitHub Actions via workflow `P1 load and spike` (`workflow_dispatch`).
 
-Run write-path smoke/load via a separate workflow `P1 write-path smoke and load` (`.github/workflows/p1-write-path.yml`, `workflow_dispatch` only). The 2026-09-03 5m load (GHA run 33710390070) established `load/baselines` for idempotency and confirm-conflict. Do not bind it to PRs until a second comparable load exists. Do not claim relative regression passed on this first baseline, and never compare write-path P95 with read-mix P95.
+Run write-path smoke/load via a separate workflow `P1 write-path smoke and load` (`.github/workflows/p1-write-path.yml`, `workflow_dispatch` only). The 2026-09-03 5m load (GHA run 33710390070) established `load/baselines` for idempotency and confirm-conflict. PRs run a 30s correctness gate (.github/workflows/p1-write-path-pr.yml) that does not compare smoke P95 with the 5m write-path baseline or read-mix P95. Formal 5-10m load stays on workflow_dispatch. Do not claim relative regression passed on this first baseline, and never compare write-path P95 with read-mix P95.
 
 Example (Linux/GHA):
 
