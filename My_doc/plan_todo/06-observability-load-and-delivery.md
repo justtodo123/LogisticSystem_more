@@ -83,4 +83,4 @@ npm run build
 - 幂等写：http_req_failed 0，unexpected_5xx 0，重放 600/600，写 P95 27.66 ms / P99 73.16 ms；DB 600 个唯一 `k6-node-*`，无重复副作用，无残留 PROCESSING outbox。
 - 并发确认：8 个 contender，1 次成功 / 7 次冲突，unexpected_5xx 0；confirm P95 836.7 ms（不要用含 login 的混合 HTTP P95）；schedule `GS20260903001` 最终 active。
 - Trace probe：HTTP `trace_id=trc-write-path-probe` 贯穿 success/retry/dead-letter；每次 execution 新 `request_id`；`parent_request_id` 指向原始 HTTP。独立 worker 进程日志为空（probe 在 worker 启动前进程内投递）。
-- 写路径产物：artifact `r2-06-write-path`（14 天）；小文件见 [r2-06-write-path](./experiments/r2-06-write-path/README.md) 与 [20260903-R2-06-write-path-baseline.md](./experiments/20260903-R2-06-write-path-baseline.md)。跨 worker 指标聚合、Grafana、soak 仍未完成；写路径 PR 门禁需两次可比 load 后再接。
+- 写路径产物：artifact `r2-06-write-path`（14 天）；小文件见 [r2-06-write-path](./experiments/r2-06-write-path/README.md) 与 [20260903-R2-06-write-path-baseline.md](./experiments/20260903-R2-06-write-path-baseline.md)。跨 worker 指标聚合、Grafana、soak 仍未完成；轻量 PR 门禁为 30s smoke + 独立 worker trace + DB 不变量 + 正确性检查，不把 smoke P95 与 5m write-path baseline 或读混合 P95 比较。5～10 分钟 load 仍为 workflow_dispatch。

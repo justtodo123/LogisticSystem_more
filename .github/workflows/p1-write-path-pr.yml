@@ -1,0 +1,155 @@
+name: P1 write-path PR gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - src/backend/**
+      - load/k6/**
+      - load/baselines/**
+      - .github/workflows/p1-write-path.yml
+      - .github/workflows/p1-write-path-pr.yml
+
+concurrency:
+  group: p1-write-path-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  write-path-pr:
+    name: P1 write-path PR smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: logistics
+          POSTGRES_PASSWORD: logistics
+          POSTGRES_DB: logistics
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logistics -d logistics"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ENV: dev
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: ${{ github.workspace }}/src/backend
+      DATABASE_URL: postgresql+psycopg://logistics:logistics@localhost:5432/logistics
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-only-r2-06-write-secret-value-32
+      BASE_URL: http://127.0.0.1:18001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: src/backend/requirements.txt
+      - uses: grafana/setup-k6-action@v1
+      - name: Install dependencies
+        working-directory: src/backend
+        run: pip install -r requirements.txt
+      - name: Smoke probe, k6 correctness and invariants
+        working-directory: src/backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          DURATION="30s"
+          WRITE_RPS="1"
+          CONFIRM_VUS="4"
+          ART="${GITHUB_WORKSPACE}/artifacts/r2-06-write-pr"
+          mkdir -p p1-artifacts "$ART"
+
+          python scripts/release_migrate.py
+          python scripts/init_users.py
+          python scripts/init_demo_data.py
+
+          python -m uvicorn main:app --host 127.0.0.1 --port 18001 --workers 2 --no-access-log \
+            >p1-artifacts/write-api.log 2>&1 &
+          echo $! > p1-artifacts/write-api.pid
+
+          cleanup() {
+            for pid_file in p1-artifacts/*.pid; do
+              if [ -f "$pid_file" ]; then
+                kill "$(tr -d '[:space:]' < "$pid_file")" 2>/dev/null || true
+              fi
+            done
+          }
+          trap cleanup EXIT
+
+          python scripts/wait_http.py --timeout 60 http://127.0.0.1:18001/api/health
+
+          python -u scripts/outbox_worker.py --worker-id gha-r2-06-write-pr-outbox \
+            --retry-delay-seconds 0 --poll-seconds 0.5 \
+            >p1-artifacts/write-outbox-worker.log 2>&1 &
+          echo $! > p1-artifacts/write-outbox-worker.pid
+
+          set +e
+          python scripts/probe_outbox_trace.py \
+            --base-url http://127.0.0.1:18001 \
+            --wait-worker \
+            --worker-log p1-artifacts/write-outbox-worker.log \
+            --timeout 45 \
+            --output "$ART/trace-probe.json"
+          probe_status=$?
+
+          k6 run --summary-export="$ART/idempotency-summary.json" \
+            -e BASE_URL=http://127.0.0.1:18001 \
+            -e DURATION="$DURATION" \
+            -e WRITE_RPS="$WRITE_RPS" \
+            "${GITHUB_WORKSPACE}/load/k6/idempotency.js" \
+            | tee p1-artifacts/idempotency-k6.log
+          idem_status=${PIPESTATUS[0]}
+
+          k6 run --summary-export="$ART/confirm-conflict-summary.json" \
+            -e BASE_URL=http://127.0.0.1:18001 \
+            -e DURATION="$DURATION" \
+            -e CONFIRM_VUS="$CONFIRM_VUS" \
+            "${GITHUB_WORKSPACE}/load/k6/confirm-conflict.js" \
+            | tee p1-artifacts/confirm-conflict-k6.log
+          confirm_status=${PIPESTATUS[0]}
+
+          schedule_code="$(grep -oE 'write_path_schedule_code=[^[:space:]]+' p1-artifacts/confirm-conflict-k6.log | tail -n1 | cut -d= -f2 || true)"
+          invariant_args=(--output "$ART/invariants.json")
+          if [ -n "${schedule_code}" ]; then
+            invariant_args+=(--schedule-code "$schedule_code")
+          fi
+          python scripts/check_write_path_invariants.py "${invariant_args[@]}"
+          invariant_status=$?
+
+          python scripts/check_write_path_pr_gate.py \
+            --idempotency "$ART/idempotency-summary.json" \
+            --confirm "$ART/confirm-conflict-summary.json" \
+            --json-output "$ART/pr-gate-report.json"
+          gate_status=$?
+          set -e
+
+          python scripts/redact_json_logs.py p1-artifacts/write-api.log "$ART/write-api.redacted.log" || true
+          python scripts/redact_json_logs.py p1-artifacts/write-outbox-worker.log "$ART/write-outbox-worker.redacted.log" || true
+
+          echo "probe_status=${probe_status} idem_status=${idem_status} confirm_status=${confirm_status} invariant_status=${invariant_status} gate_status=${gate_status}"
+          if [ "$probe_status" -ne 0 ] || [ "$idem_status" -ne 0 ] || [ "$confirm_status" -ne 0 ] || [ "$invariant_status" -ne 0 ] || [ "$gate_status" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Upload write-path PR artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r2-06-write-path-pr
+          path: |
+            artifacts/r2-06-write-pr/**
+            src/backend/p1-artifacts/*.log
+          if-no-files-found: warn
+          retention-days: 7
