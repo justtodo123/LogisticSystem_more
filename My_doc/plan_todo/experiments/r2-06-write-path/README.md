@@ -14,7 +14,7 @@ Two comparable 5-minute loads exist. The second run compared against `load/basel
 - Topology: PostgreSQL 16, Redis 7, Uvicorn 2 workers, 1 outbox worker
 - Parameters: `DURATION=5m`, `WRITE_RPS=2`, `CONFIRM_VUS=8`
 
-Do not bind a write-path PR performance gate until this pair is reviewed as stable. P2 soak/Grafana remains out of scope.
+A 30s write-path PR correctness gate is live (PR #32, run 33715890853). It does not compare smoke P95 with this 5m pair. P2 soak smoke is a separate dispatch workflow; Grafana remains later.
 
 ## Candidate vs baseline
 
