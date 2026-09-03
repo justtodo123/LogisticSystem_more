@@ -8,6 +8,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# 安全更新：安装最新 OS 层安全补丁，减少基础镜像已知 CVE
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # 先安装依赖，充分利用 Docker 层缓存
 COPY src/backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
