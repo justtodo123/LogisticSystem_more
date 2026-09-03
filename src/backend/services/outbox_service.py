@@ -1,5 +1,6 @@
 from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
+import logging
 from typing import Any
 from uuid import uuid4
 
@@ -7,8 +8,103 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.db_retry import retry_transient_pg
+from core.request_context import (
+    RequestContext,
+    bind_request_context,
+    generate_id,
+    get_request_context,
+    reset_request_context,
+)
 from models.outbox_event import OutboxEvent
 from models.replan_task import ReplanTask
+
+logger = logging.getLogger(__name__)
+TRACE_METADATA_KEY = "_trace"
+
+
+
+def _stringify_id(value: object) -> str | None:
+    if value is None:
+        return None
+    candidate = str(value).strip()
+    return candidate or None
+
+
+def extract_trace_metadata(payload: Mapping[str, Any] | None) -> dict[str, str]:
+    """Read request/trace/task IDs from payload metadata or top-level fields."""
+    if not isinstance(payload, Mapping):
+        return {}
+    nested = payload.get(TRACE_METADATA_KEY)
+    source = nested if isinstance(nested, Mapping) else payload
+    metadata: dict[str, str] = {}
+    for key in ("request_id", "trace_id", "task_id", "idempotency_key"):
+        value = _stringify_id(source.get(key))
+        if value:
+            metadata[key] = value
+    if "task_id" not in metadata:
+        value = _stringify_id(payload.get("task_id"))
+        if value:
+            metadata["task_id"] = value
+    if "idempotency_key" not in metadata:
+        value = _stringify_id(payload.get("idempotency_key"))
+        if value:
+            metadata["idempotency_key"] = value
+    return metadata
+
+
+def attach_trace_metadata(payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Copy current request context into payload metadata without dropping business fields."""
+    data = dict(payload or {})
+    existing = data.get(TRACE_METADATA_KEY)
+    if existing is None:
+        nested: dict[str, Any] = {}
+    elif isinstance(existing, Mapping):
+        nested = dict(existing)
+    else:
+        # A non-mapping `_trace` field is business payload; do not overwrite it.
+        return data
+    context = get_request_context()
+    incoming: dict[str, str] = {}
+    if context is not None:
+        incoming = {
+            "request_id": context.request_id,
+            "trace_id": context.trace_id,
+        }
+        if context.task_id:
+            incoming["task_id"] = context.task_id
+        if context.idempotency_key:
+            incoming["idempotency_key"] = context.idempotency_key
+    for key, value in incoming.items():
+        nested.setdefault(key, value)
+    if nested:
+        data[TRACE_METADATA_KEY] = nested
+    return data
+
+
+def execution_context_from_outbox(event: OutboxEvent) -> RequestContext:
+    """Restore the original trace and mint a new execution request ID.
+
+    Semantics are fixed:
+    - `trace_id` is copied from payload `_trace` (legacy rows mint a new one)
+    - `request_id` is unique for this worker execution
+    - `parent_request_id` is the originating HTTP `request_id` stored in `_trace`
+    """
+    payload = event.payload if isinstance(event.payload, Mapping) else {}
+    metadata = extract_trace_metadata(payload)
+    current = get_request_context()
+    trace_id = metadata.get("trace_id") or (current.trace_id if current is not None else generate_id())
+    parent_request_id = metadata.get("request_id")
+    if parent_request_id is None and current is not None:
+        parent_request_id = current.request_id or current.parent_request_id
+    task_id = metadata.get("task_id")
+    idempotency_key = metadata.get("idempotency_key") or event.dedup_key
+    return RequestContext(
+        request_id=generate_id(),
+        trace_id=trace_id,
+        task_id=task_id,
+        idempotency_key=idempotency_key,
+        parent_request_id=parent_request_id,
+    )
 
 
 class RetryableOutboxError(RuntimeError):
@@ -37,7 +133,7 @@ def enqueue_outbox(
     event = OutboxEvent(
         dedup_key=dedup_key,
         event_type=event_type,
-        payload=dict(payload),
+        payload=attach_trace_metadata(payload),
     )
     db.add(event)
     db.flush()
@@ -228,32 +324,54 @@ def deliver_outbox_batch(
             db.expunge(event)
 
         for event_id, claim_token, event in claimed:
+            execution = execution_context_from_outbox(event)
+            token = bind_request_context(execution)
             permanent_failure = False
             try:
-                ok = sender(event)
-            except NonRetryableOutboxError as exc:
-                ok = False
-                permanent_failure = True
-                error = str(exc)
-            except Exception as exc:
-                ok = False
-                error = str(exc)
-            else:
-                error = "sender returned failure"
+                logger.info(
+                    "outbox_execute",
+                    extra={
+                        "event_id": event_id,
+                        "event_type": event.event_type,
+                        "dedup_key": event.dedup_key,
+                    },
+                )
+                try:
+                    ok = sender(event)
+                except NonRetryableOutboxError as exc:
+                    ok = False
+                    permanent_failure = True
+                    error = str(exc)
+                except Exception as exc:
+                    ok = False
+                    error = str(exc)
+                else:
+                    error = "sender returned failure"
 
-            outcome = finalize_claimed_event(
-                db,
-                event_id=event_id,
-                claim_token=claim_token,
-                worker_id=worker_id,
-                ok=ok,
-                error=error,
-                permanent_failure=permanent_failure,
-                max_retries=max_retries,
-                retry_delay_seconds=retry_delay_seconds,
-            )
-            if outcome != "stale":
-                counts[outcome] += 1
+                outcome = finalize_claimed_event(
+                    db,
+                    event_id=event_id,
+                    claim_token=claim_token,
+                    worker_id=worker_id,
+                    ok=ok,
+                    error=error,
+                    permanent_failure=permanent_failure,
+                    max_retries=max_retries,
+                    retry_delay_seconds=retry_delay_seconds,
+                )
+                logger.info(
+                    "outbox_outcome",
+                    extra={
+                        "event_id": event_id,
+                        "event_type": event.event_type,
+                        "dedup_key": event.dedup_key,
+                        "outcome": outcome,
+                    },
+                )
+                if outcome != "stale":
+                    counts[outcome] += 1
+            finally:
+                reset_request_context(token)
         return counts
     finally:
         db.close()

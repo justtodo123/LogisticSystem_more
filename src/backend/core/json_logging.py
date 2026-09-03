@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime, timezone
+import hashlib
 import json
 import logging
 import re
@@ -19,6 +20,8 @@ _SENSITIVE_KEY_RE = re.compile(
 _REDACTED = "[REDACTED]"
 _MAX_MESSAGE = 2048
 _MAX_VALUE = 512
+_IDEMPOTENCY_FINGERPRINT_RE = re.compile(r"^idem-[0-9a-f]{16}$")
+_IDEMPOTENCY_KEY_NAMES = frozenset({"idempotency_key", "idempotency-key"})
 _STANDARD_RECORD_KEYS = frozenset(
     {
         "name",
@@ -48,12 +51,30 @@ _STANDARD_RECORD_KEYS = frozenset(
         "task_id",
         "user_id",
         "role",
+        "idempotency_key",
+        "parent_request_id",
     }
 )
 
 
+def fingerprint_idempotency_key(value: str | None) -> str | None:
+    """Hash caller-provided idempotency keys before they reach logs."""
+    if not value or value == "-":
+        return None
+    candidate = str(value)
+    if _IDEMPOTENCY_FINGERPRINT_RE.fullmatch(candidate):
+        return candidate
+    digest = hashlib.sha256(candidate.encode("utf-8")).hexdigest()[:16]
+    return f"idem-{digest}"
+
+
 def redact_value(key: str, value: Any) -> Any:
-    if _SENSITIVE_KEY_RE.search(str(key)):
+    key_name = str(key)
+    if key_name.lower() in _IDEMPOTENCY_KEY_NAMES:
+        if value is None:
+            return value
+        return fingerprint_idempotency_key(str(value)) or _REDACTED
+    if _SENSITIVE_KEY_RE.search(key_name):
         return _REDACTED
     if isinstance(value, Mapping):
         return redact_mapping(value)
@@ -89,6 +110,8 @@ class RequestContextFilter(logging.Filter):
         record.task_id = context.get("task_id", "-")
         record.user_id = context.get("user_id", "-")
         record.role = context.get("role", "-")
+        record.idempotency_key = fingerprint_idempotency_key(context.get("idempotency_key")) or "-"
+        record.parent_request_id = context.get("parent_request_id", "-")
         return True
 
 
@@ -110,11 +133,23 @@ class JsonFormatter(logging.Formatter):
             "task_id": getattr(record, "task_id", None),
             "user_id": getattr(record, "user_id", None),
             "role": getattr(record, "role", None),
+            "idempotency_key": getattr(record, "idempotency_key", None),
+            "parent_request_id": getattr(record, "parent_request_id", None),
         }
         for key, value in record_ctx.items():
             if isinstance(value, str) and value and value != "-":
+                if key == "idempotency_key":
+                    fingerprinted = fingerprint_idempotency_key(value)
+                    if fingerprinted:
+                        payload[key] = fingerprinted
+                    continue
                 payload[key] = value
         for key, value in context_as_dict(get_request_context()).items():
+            if key == "idempotency_key":
+                fingerprinted = fingerprint_idempotency_key(value)
+                if fingerprinted:
+                    payload.setdefault(key, fingerprinted)
+                continue
             payload.setdefault(key, value)
         extra = {
             key: value

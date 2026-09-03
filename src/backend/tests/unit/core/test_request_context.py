@@ -27,10 +27,11 @@ def test_bind_and_update_context_then_reset():
     )
     try:
         assert get_request_context().request_id == "r1"
-        updated = update_request_context(user_id="9", role="dispatcher")
+        updated = update_request_context(user_id="9", role="dispatcher", parent_request_id="req-parent")
         assert updated.user_id == "9"
         assert context_as_dict()["task_id"] == "7"
         assert context_as_dict()["role"] == "dispatcher"
+        assert context_as_dict()["parent_request_id"] == "req-parent"
     finally:
         reset_request_context(token)
     assert get_request_context() is None

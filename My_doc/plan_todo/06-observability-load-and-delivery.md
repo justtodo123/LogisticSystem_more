@@ -5,7 +5,7 @@ status: done
 priority: P1
 owner: justtodo123
 created: 2026-08-25
-updated: 2026-09-02
+updated: 2026-09-03
 depends_on: ["R2-04B", "R2-05"]
 ---
 
@@ -13,11 +13,11 @@ depends_on: ["R2-04B", "R2-05"]
 
 ## 来源证据与当前行为
 
-仓库缺少统一 request/trace/task ID、业务指标和系统级 HTTP 负载证据。CI 仅 SQLite pytest + 前端构建。观测裁剪已冻结：[D-R2-OBS](./decisions.md)、[D-R2-CI](./decisions.md)。
+仓库已有 HTTP request/trace/task ID、结构化 JSON 日志、`/metrics` 核心计数，以及 PostgreSQL + Redis + 双 worker 上的读混合 load/spike 证据。本分支开始落地 outbox/worker 同 `trace_id`、依赖级观测、幂等写/并发确认脚本与 baseline comparator；跨 worker 指标聚合、Grafana 全家桶仍不在 P1 完成口径内。观测裁剪已冻结：[D-R2-OBS](./decisions.md)、[D-R2-CI](./decisions.md)。
 
 ## 问题与目标
 
-打通一次请求到 SQL/Redis/外部调用/Saga 步骤的追踪；用可复现的 load/spike 量化瓶颈与发布风险。不在本卡承诺绝对 QPS。
+先闭合 HTTP 观测基线与可复现的读混合 load/spike；outbox/worker 追踪、依赖级观测和写入/并发确认容量验证按后续增强推进。不在本卡承诺绝对 QPS，也不宣称已完成完整端到端观测与业务全路径容量验证。
 
 ## 范围（P1 最小集）
 
@@ -48,10 +48,10 @@ depends_on: ["R2-04B", "R2-05"]
 
 ## 验收标准（P1）
 
-- 单次失败请求可按 request/trace/task ID 追到 SQL 或状态变化/补偿/死信。
-- load 与 spike 各有一份可复现实验，含环境、数据量、worker、RPS、P95/P99、错误率。
-- 结论写明已知限制，不夸大容量。
-- CI 在 P1 拓扑上跑测试/迁移（与 R2-05 可同一流水线）。
+- HTTP 失败请求可按 request/trace/task ID 关联响应与日志；outbox/worker 的同一 `trace_id` 由集成测试覆盖到 retry/dead-letter。不把 Grafana 全链路或跨 worker 聚合当作已完成。
+- load 与 spike 各有一份可复现读混合实验，含环境、数据量、worker、RPS、P95/P99、错误率。幂等写/并发确认是独立场景，不并入混合 P95。
+- 结论写明已知限制，不夸大容量，不宣称已完成完整端到端观测与业务全路径容量验证。
+- CI 在 P1 拓扑上跑测试/迁移（与 R2-05 可同一流水线）；baseline comparator 可执行，PR 性能门禁另议。
 - 至少三份 STAR 引用真实数字和产物链接。
 
 ## 验证命令
@@ -74,8 +74,13 @@ npm run build
 
 ## 完成记录
 
-- 状态：`done`（2026-09-02）。观测基线 PR #27/#28/#29；成功 load/spike GHA run 33607612662，head `3b4a273`。
+- 状态：`R2-06 P1 done：完成 HTTP 观测基线及读混合 load/spike 证据；端到端 outbox trace、依赖级观测、写入/并发确认压测和跨 worker 指标聚合列为后续增强，不宣称已完成完整端到端观测与业务全路径容量验证。`（2026-09-02）。观测基线 PR #27/#28/#29；成功 load/spike GHA run 33607612662，head `3b4a273`。
 - Load 5m / 8 RPS 读混合 + 1 RPS login：http_req_failed 0%，dropped 0，k6 混合 P95 9.81 ms；login 路径 P95 290 ms。
 - Spike 约 5m / 峰值 25 RPS：http_req_failed 0%，dropped 0，k6 混合 P95 9.63 ms。
 - 产物：`r2-06-load-spike` artifact；详见 [20260902-R2-06-observability-baseline.md](./experiments/20260902-R2-06-observability-baseline.md)。
 - P2 未做：soak、Grafana 全家桶、镜像安全扫描。
+- 写路径是独立场景，不并入 2026-09-02 读混合 P95。第一次 5m load 建立 baseline（run 33710390070）。第二次相同参数 candidate（run 33714192935）相对回归通过：幂等写 P95 -4.7%，确认 P95 +7.3%。独立 worker 日志证明同一 `trace_id` 覆盖 success/retry/dead-letter。不宣称业务全路径容量验证。
+- 幂等写：http_req_failed 0，unexpected_5xx 0，重放 600/600，写 P95 27.66 ms / P99 73.16 ms；DB 600 个唯一 `k6-node-*`，无重复副作用，无残留 PROCESSING outbox。
+- 并发确认：8 个 contender，1 次成功 / 7 次冲突，unexpected_5xx 0；confirm P95 836.7 ms（不要用含 login 的混合 HTTP P95）；schedule `GS20260903001` 最终 active。
+- Trace probe：HTTP `trace_id=trc-write-path-probe` 贯穿 success/retry/dead-letter；每次 execution 新 `request_id`；`parent_request_id` 指向原始 HTTP。独立 worker 进程日志为空（probe 在 worker 启动前进程内投递）。
+- 写路径产物：artifact `r2-06-write-path`（14 天）；小文件见 [r2-06-write-path](./experiments/r2-06-write-path/README.md) 与 [20260903-R2-06-write-path-baseline.md](./experiments/20260903-R2-06-write-path-baseline.md)。跨 worker 指标聚合、Grafana、soak 仍未完成；写路径 PR 门禁需两次可比 load 后再接。

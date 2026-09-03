@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from config.database import settings
 from algorithms.explainer import build_prompt_section
+from core.dependency import outbound_trace_headers, track_dependency
 from core.ai_guard import (
     AIValidationError,
     normalize_algorithm_weights,
@@ -187,16 +188,20 @@ class DeepSeekService:
         request_body = DeepSeekService._build_request_body(user_prompt, system_prompt)
         api_url = DeepSeekService._build_api_url()
 
-        async with httpx.AsyncClient(timeout=settings.DEEPSEEK_TIMEOUT_SECONDS) as client:
-            response = await client.post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json=request_body
-            )
-            response.raise_for_status()
+        headers = outbound_trace_headers(
+            {
+                "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
+                "Content-Type": "application/json",
+            }
+        )
+        with track_dependency("deepseek", "chat"):
+            async with httpx.AsyncClient(timeout=settings.DEEPSEEK_TIMEOUT_SECONDS) as client:
+                response = await client.post(
+                    api_url,
+                    headers=headers,
+                    json=request_body,
+                )
+                response.raise_for_status()
 
         result = response.json()
         return DeepSeekService._extract_response_content(result)

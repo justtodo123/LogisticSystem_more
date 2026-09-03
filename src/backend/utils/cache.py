@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from config.redis import get_redis_client, is_redis_enabled, reset_redis_client
 from config.settings import settings
+from core.dependency import observe_dependency
 from core.metrics import observe_cache
 
 logger = logging.getLogger(__name__)
@@ -145,39 +146,71 @@ async def probe_redis() -> str | None:
 
 
 async def cache_get(key: str) -> Any:
-    """读取缓存；不存在/过期返回 None"""
+    """读取缓存；未命中/失败时返回 None"""
+    started = time.perf_counter()
+    status = "ok"
+    error_type = None
     client = resolve_redis()
-    if client is not None:
-        try:
-            raw = await client.get(key)
-            _mark_available()
-            if raw is None:
-                observe_cache(hit=False)
-                return None
-            observe_cache(hit=True)
-            return json.loads(raw)
-        except Exception as exc:  # pragma: no cover - 依赖外部 Redis
-            logger.warning("Redis GET 失败，降级到内存缓存：%s", exc)
-            _mark_degraded(exc)
-    value = memory_cache.get(key)
-    observe_cache(hit=value is not None)
-    return value
+    try:
+        if client is not None:
+            try:
+                raw = await client.get(key)
+                _mark_available()
+                if raw is None:
+                    observe_cache(hit=False)
+                    status = "miss"
+                    return None
+                observe_cache(hit=True)
+                status = "hit"
+                return json.loads(raw)
+            except Exception as exc:  # pragma: no cover - 依赖外部 Redis
+                logger.warning("Redis GET 失败，降级到内存缓存：%s", exc)
+                _mark_degraded(exc)
+                status = "degraded"
+                error_type = type(exc).__name__
+        value = memory_cache.get(key)
+        observe_cache(hit=value is not None)
+        if status == "ok":
+            status = "hit" if value is not None else "miss"
+        return value
+    finally:
+        observe_dependency(
+            dependency="redis",
+            operation="get",
+            status=status,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            error_type=error_type,
+        )
 
 
 async def cache_set(key: str, value: Any, ttl: Optional[int] = None) -> None:
     """写入缓存（默认 TTL 取 settings.REDIS_CACHE_TTL）"""
+    started = time.perf_counter()
+    status = "ok"
+    error_type = None
     client = resolve_redis()
     ttl = ttl if ttl is not None else settings.REDIS_CACHE_TTL
     payload = json.dumps(value, ensure_ascii=False, default=str)
-    if client is not None:
-        try:
-            await client.setex(key, ttl, payload)
-            _mark_available()
-            return
-        except Exception as exc:  # pragma: no cover - 依赖外部 Redis
-            logger.warning("Redis SET 失败，降级到内存缓存：%s", exc)
-            _mark_degraded(exc)
-    memory_cache.set(key, value, ttl)
+    try:
+        if client is not None:
+            try:
+                await client.setex(key, ttl, payload)
+                _mark_available()
+                return
+            except Exception as exc:  # pragma: no cover - 依赖外部 Redis
+                logger.warning("Redis SET 失败，降级到内存缓存：%s", exc)
+                _mark_degraded(exc)
+                status = "degraded"
+                error_type = type(exc).__name__
+        memory_cache.set(key, value, ttl)
+    finally:
+        observe_dependency(
+            dependency="redis",
+            operation="set",
+            status=status,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            error_type=error_type,
+        )
 
 
 async def cache_delete(key: str) -> None:
@@ -223,6 +256,9 @@ def _make_key(func: Callable, key_prefix: str, keys: Optional[Tuple[str, ...]], 
 
 
 async def _singleflight(key: str, loader):
+    started = time.perf_counter()
+    status = "ok"
+    error_type = None
     async with _inflight_guard:
         existing = _inflight.get(key)
         if existing is not None:
@@ -232,20 +268,31 @@ async def _singleflight(key: str, loader):
             waiter = loop.create_future()
             _inflight[key] = waiter
             existing = None
-    if existing is not None:
-        return await waiter
     try:
-        result = await loader()
-        if not waiter.done():
-            waiter.set_result(result)
-        return result
-    except Exception as exc:
-        if not waiter.done():
-            waiter.set_exception(exc)
-        raise
+        if existing is not None:
+            return await waiter
+        try:
+            result = await loader()
+            if not waiter.done():
+                waiter.set_result(result)
+            return result
+        except Exception as exc:
+            status = "error"
+            error_type = type(exc).__name__
+            if not waiter.done():
+                waiter.set_exception(exc)
+            raise
+        finally:
+            async with _inflight_guard:
+                _inflight.pop(key, None)
     finally:
-        async with _inflight_guard:
-            _inflight.pop(key, None)
+        observe_dependency(
+            dependency="redis",
+            operation="singleflight",
+            status=status,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            error_type=error_type,
+        )
 
 
 def cached(

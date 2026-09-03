@@ -27,6 +27,7 @@ class RequestContext:
     user_id: str | None = None
     role: str | None = None
     idempotency_key: str | None = None
+    parent_request_id: str | None = None
 
 
 def generate_id() -> str:
@@ -86,4 +87,6 @@ def context_as_dict(context: RequestContext | None = None) -> dict[str, str]:
         payload["role"] = current.role
     if current.idempotency_key:
         payload["idempotency_key"] = current.idempotency_key
+    if current.parent_request_id:
+        payload["parent_request_id"] = current.parent_request_id
     return payload

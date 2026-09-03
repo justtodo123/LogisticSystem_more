@@ -1,0 +1,25 @@
+{
+  "scenarios": [
+    {
+      "scenario": "idempotency",
+      "mode": "compare",
+      "error_rate_ok": true,
+      "unexpected_5xx_ok": true,
+      "p95_regression_pct": -4.7,
+      "p95_regression_ok": true,
+      "duplicate_side_effects": 0,
+      "passed": true
+    },
+    {
+      "scenario": "confirm-conflict",
+      "mode": "compare",
+      "error_rate_ok": true,
+      "unexpected_5xx_ok": true,
+      "p95_regression_pct": 7.3,
+      "p95_regression_ok": true,
+      "duplicate_side_effects": 0,
+      "passed": true
+    }
+  ],
+  "passed": true
+}
