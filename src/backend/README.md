@@ -1,6 +1,6 @@
 # 智能物流平台 — 后端
 
-> FastAPI 后端服务 · 83 个 API 端点 · Alembic 管理正式 schema
+> FastAPI 后端服务 · 运行时 OpenAPI 清单见项目功能文档 · Alembic 管理正式 schema
 
 ## 快速启动
 
@@ -9,10 +9,12 @@ cd src/backend
 pip install -r requirements.txt
 cp .env.example .env.dev          # 编辑 .env.dev，至少修改 JWT_SECRET
 python -m alembic -c alembic.ini upgrade head  # 显式迁移 schema
-python scripts/init_users.py      # 创建演示用户
-python scripts/init_demo_data.py  # 初始化示例数据
+python scripts/init_demo_data.py  # 初始化完整 Demo；会清理并重建演示数据
+# 或：python scripts/init_users.py # 仅创建/补齐演示用户，不要与上一步重复执行
 uvicorn main:app --reload --port 8000
 ```
+
+> `init_demo_data.py` 仅用于 disposable 的本地/演示数据库；它会清理并重建 Demo 数据，禁止对生产库或需要保留数据的开发库执行。
 
 访问 [http://localhost:8000/docs](http://localhost:8000/docs) 查看 Swagger API 文档。
 
@@ -38,13 +40,13 @@ python scripts/migrate_sqlite.py adopt-copy <source> <target>    # 仅与当前 
 
 | 目录 | 职责 |
 |------|------|
-| `api/` | REST 路由层（24 个 Router 模块） |
-| `services/` | 业务逻辑层（调度/模拟/异常/AI/通知） |
-| `algorithms/` | 调度算法（策略模式：base → greedy/dummy/deepseek） |
+| `api/` | REST 路由层；运行时清单见 `docs/03-项目功能.md` |
+| `services/` | 业务逻辑层；同步与异步函数按调用链契约并存 |
+| `algorithms/` | 调度算法；当前注册 greedy/dummy，DeepSeek 不作为调度 engine，2-opt 仍为 stub |
 | `models/` | SQLAlchemy ORM 模型；`base.py` 提供共享 metadata，`registry.py` 显式注册正式模型 |
 | `schemas/` | Pydantic v2 请求/响应 Schema |
-| `core/` | 统一响应/错误码/权限/RBAC/幂等 |
-| `middleware/` | 审计日志中间件 |
+| `core/` | 统一响应/错误码/权限/RBAC 等公共基座 |
+| `middleware/` | 审计、持久化幂等、请求超时等中间件 |
 | `config/` | 环境配置、共用数据库 URL 解析及 engine/session |
 | `utils/` | 通用工具；`schema_management.py` 负责 SQLite 分类、复制迁移与 parity |
 | `scripts/` | 初始化脚本、`migrate_sqlite.py` 旧库安全操作 CLI 与 `release_migrate.py` 发布门禁 |
@@ -82,5 +84,5 @@ python -m pytest tests/api/ -q     # 仅 API 测试
 | `JWT_SECRET` | JWT 签名密钥（**必须修改**） |
 | `DEEPSEEK_API_KEY` | AI 功能密钥（空时自动降级） |
 | `MAP_API_KEY` | 高德地图密钥（空时降级 Canvas 折线） |
-| `REDIS_ENABLED` | Redis 缓存开关（关闭时自动内存降级） |
+| `REDIS_ENABLED` | Redis 普通缓存/共享登录限流开关；关闭或故障时可降级，数据库幂等不依赖 Redis |
 | `DATABASE_URL` | 数据库连接（默认 SQLite） |

@@ -1,7 +1,7 @@
 # My_doc 文档索引
 
-> **用途**：本目录是仓库正式追踪的治理、计划、历史和实验索引；现行计划入口为 [plan_todo/README.md](plan_todo/README.md)。运行时产物、凭据、依赖目录和大型原始实验结果仍按根目录与 [My_doc/.gitignore](.gitignore) 排除，不把“文件可见”当成“实验已通过”。
-> **事实日期**：2026-08-28
+> **用途**：本目录是仓库正式追踪的治理、计划、交付、历史和实验索引；现行计划入口为 [plan_todo/README.md](plan_todo/README.md)，项目交付与面试展示入口为 [delivery/README.md](delivery/README.md)。运行时产物、凭据、依赖目录和大型原始实验结果仍按根目录与 [My_doc/.gitignore](.gitignore) 排除，不把“文件可见”当成“实验已通过”。
+> **事实日期**：2026-09-04
 
 ## 阅读顺序
 
@@ -15,7 +15,8 @@
 
 | 路径 | 角色 | 时效/追踪边界 |
 |------|------|------|
-| [plan_todo/](plan_todo/README.md) | 当前活动路线图、冻结决策、实验模板与计划卡 | **现行；报告和模板可追踪，raw/artifacts/tmp 忽略** |
+| [plan_todo/](plan_todo/README.md) | 当前活动路线图、冻结决策、实验模板与计划卡 | **现行；R2-00～R2-06 已完成，生产验证与 P2 见 post-r2-followups.md** |
+| [delivery/](delivery/README.md) | 当前项目交付与面试展示材料 | **现行；事实、证据、架构、STAR、演示和 PPT 提纲** |
 | [post_plan/](post_plan/TASK_TRACKER.md) | 已执行完成的优化周期计划 | 历史快照；不承担当前待办 |
 | [pre-optimization/](pre-optimization/) | MVP / P1 / 阶段 1～9 旧开发与联调材料 | 历史材料；依赖目录、可再生成 PPT/SVG 输出及待脱敏 Office 二进制不追踪 |
 | [test/](test/) | 黑盒回归记录 | 历史证据；不得冒充当前 P0/P1 证明 |
@@ -23,13 +24,10 @@
 
 ## 当前治理状态
 
-- `R2-00` 已于 2026-08-25 完成：治理提交经 [PR #3](https://github.com/justtodo123/LogisticSystem_more/pull/3) 合并到 `main`，合并提交为 `8e19aa1fa65e2fb4e6e079ed1e1925c1989a2f6a`，前端构建、后端测试和镜像构建 Checks 均成功。
-- `R2-00A` 已于 2026-08-26 完成：经 [PR #5](https://github.com/justtodo123/LogisticSystem_more/pull/5) 合并到 `main`，merge commit 为 `8431fd8d66905d548e62e27ffea21bb1949d5f48`，数据库迁移基线、后端测试和前端构建 Checks 均成功。
-- `R2-04A` 已于 2026-08-26 完成：经 [PR #6](https://github.com/justtodo123/LogisticSystem_more/pull/6) 合并到 `main`，merge commit 为 `ea6d8c5cb184040c2dde35d51d90df1d7fdc2d7c`，数据库迁移基线、后端测试和前端构建 Checks 均成功；兼容层按清单保留。
-- `R2-01` 已于 2026-08-27 完成：经 [PR #8](https://github.com/justtodo123/LogisticSystem_more/pull/8) 合并到 `main`，并发确认最多一次成功且无重复副作用，三组 CI checks 均成功。
-- `R2-02` 已于 2026-08-28 完成：R2-02A 经 [PR #10](https://github.com/justtodo123/LogisticSystem_more/pull/10) 合并，R2-02B 经 [PR #11](https://github.com/justtodo123/LogisticSystem_more/pull/11) 合并；两次 CI 的数据库迁移基线、后端测试和前端检查均成功。当前主链进入 `R2-03`，可并行 `R2-04B`。
+- `R2-00`～`R2-06` 已于 2026-09-04 完成工程交付；最终文档冻结点为 `main @ df025fb`（PR #42）。
+- P0/P1 协议实现、PostgreSQL + Redis + 多 worker 验证、容量/soak 证据和镜像发布门禁均已收口；不可变镜像验收基线为 `f9e08a4` / CD [33826520856](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826520856)，零 exception。
+- 本机未执行 Docker Compose、第一轮 02B E2E、预发或生产拉起；这些生产验证以及可选 P2 增强统一登记在 [post-r2-followups.md](plan_todo/post-r2-followups.md)，不作为 R2 阻断项。
 - 原 R2-04 已拆为 [R2-04B](plan_todo/04B-rbac-jwt-and-frontend.md)，只负责 RBAC、JWT 撤权和前端权限。
-- `R2-05` 因本机没有 P1 外部拓扑保持 `blocked`；SQLite 结果不能替代 PostgreSQL + Redis + 多 worker 证据。
 
 ## 追踪和安全规则
 

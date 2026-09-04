@@ -4,7 +4,7 @@
 > **参考依据**：[大厂后端 SP 标准差距与优化路线图](../reference/大厂后端SP标准差距与优化路线图.md)。
 > **决策基线**：[decisions.md](./decisions.md)（协议冻结 `v2026-08-25-r2-freeze`；治理增补 `v2026-08-25-r2-governance`）。冲突时：代码与验证证据 > 版本化决策 > 本 README > 单卡正文。
 > **第一轮归档**：[第一轮优化计划](../post_plan/第一轮优化计划/)。第一轮文档只追溯，不承担第二轮实时状态。
-> **修订日期**：2026-09-04。R2 **工程交付完成 / Closeout ready**。冻结记录：[20260904-R2-closeout.md](./20260904-R2-closeout.md)。主干 `main` @ `7bbf5d6`；镜像验收基线 PR #40 / `f9e08a4` / CD [33826520856](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826520856)，零 exception。生产验证与 P2 增强见 [post-r2-followups.md](./post-r2-followups.md)，不计入 R2 阻断项。
+> **修订日期**：2026-09-04。R2 **工程交付完成 / Closeout ready**。冻结记录：[20260904-R2-closeout.md](./20260904-R2-closeout.md)。最终文档冻结点为 `main` @ `df025fb`（PR #42）；不可变镜像验收基线仍为 PR #40 / `f9e08a4` / CD [33826520856](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826520856)，零 exception。生产验证与 P2 增强见 [post-r2-followups.md](./post-r2-followups.md)，不计入 R2 阻断项；交付与面试材料见 [../delivery/README.md](../delivery/README.md)。
 
 ## 阅读与状态规则
 
@@ -71,7 +71,7 @@ R2-04B + R2-05 -> R2-06 (done)
 - 已有 SQLite、本地 HTTP smoke、单元/API/集成测试和路线查询次数回归；这些不等价于 PostgreSQL 多 worker 容量证明。
 - 本机（2026-08-25）：Win11 家庭版，Ryzen 7 7840H，16GB（空闲曾约 1.6GB），Python 3.13.3，Node v24.12.0，Git 2.49；**无** Docker / WSL / PostgreSQL / Redis / k6 / Locust。
 - R2-00A 已完成 Alembic 单 head、正式启动 migration gate、运行时 DDL 移除和 SQLite schema parity。R2-05 第一刀至第三刀已合入 PR #18 / #20 / #21 / #23：PostgreSQL 协议复跑、双进程 HTTP、Redis pause/恢复、worker 重启幂等重放、outbox lease reclaim、deadlock/serialization 有限重试、连接池超时、Postgres 短暂断连、专用库备份恢复。100,000 编号已由 `workflow_dispatch` run `33581256635` 实测通过，跨 worker 登录限流已由 PR #25 CI 验证：Redis 共享计数、pause 降级与恢复后重新共享。
-- 第一轮 02B Docker E2E 仍未完成；P1 保留独立 `blocked`，不默认为通过。
+- 第一轮 02B Docker E2E 仍为 `mitigated`，不是本轮 R2 阻断条件；生产环境验证仍按 [post-r2-followups.md](./post-r2-followups.md) 单独登记。
 - `My_doc/` 已正式纳入追踪；小型脱敏报告可入库，预览、依赖目录、数据库、日志、原始 CI 输出、待脱敏 Office 二进制、可再生成的历史演示输出与实验大产物继续忽略。
 
 ## 阶段出口与交付物
