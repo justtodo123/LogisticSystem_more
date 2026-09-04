@@ -12,8 +12,10 @@ COPY src/frontend/ ./
 RUN npm run build
 
 # ── 运行阶段：Nginx ──
-FROM nginx:1.27-alpine
+FROM nginx:1.30.4-alpine3.24
 
+# nginx:1.27-alpine currently lands on Alpine 3.21.3 and is EOL.
+# Switch to nginx 1.30.4 on Alpine 3.24 so the runtime OS layer contains fix packages.
 # 安全更新：安装最新 OS 层安全补丁，减少基础镜像已知 CVE
 RUN apk update && apk upgrade --no-cache
 

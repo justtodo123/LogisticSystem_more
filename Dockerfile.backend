@@ -1,16 +1,28 @@
 # 后端镜像：FastAPI + uvicorn
 # 构建：docker build -f Dockerfile.backend -t logistics-backend .
-FROM python:3.13-slim
+#
+# python:3.13-slim 是浮动标签，当前仍固定落在 Debian 13.6/trixie。
+# trixie 对 gzip/perl/ncurses/sqlite/acl/systemd 等阻断 CVE 仍为 no-dsa/postponed，
+# 仅执行 apt-get upgrade 拿不到修复包。Debian forky 已包含对应修复包，因此切换发行版基础层。
+FROM debian:forky-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    ENV=prod
+    ENV=prod \
+    VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin
 
 WORKDIR /app
 
-# 安全更新：安装最新 OS 层安全补丁，减少基础镜像已知 CVE
+# 在 forky 上安装 Python 3.13 并应用当前发行版安全更新（该仓库含修复包）
 RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends && \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv \
+        ca-certificates && \
+    python3 -m venv /opt/venv && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
