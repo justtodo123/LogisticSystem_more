@@ -22,8 +22,10 @@ CD run 33826520856 在 `main` / `f9e08a4` 上 **通过**。未登记 exception�
 - backend: debian forky/sid，`passed=true`，`blocked=[]`，`counts={MEDIUM: 1}`
 - frontend: Alpine 3.24.1，`passed=true`，无漏洞
 - `scan-status.json`: backend/frontend sbom+scan 均为 0
-- 唯一残留：CVE-2026-13346，pip 26.1.2 → 26.2.0，MEDIUM，report-only，不阻断
-- GHCR：`ghcr.io/justtodo123/logisticsystem_more-backend|frontend:<full-sha>` 与 `:latest`
+- `exception_count`: 0；`exceptions_applied`: []
+- 唯一残留：CVE-2026-13346，包 pip，当前 `26.1.2`，建议 `26.2.0`，MEDIUM，report-only，不阻断，不登记 exception
+- 审计 GHCR SHA：`ghcr.io/justtodo123/logisticsystem_more-backend|frontend:f9e08a499ba50987505e32d58b545a37c9543ef4`
+- `latest` 不是审计/回滚依据
 
 ## Files（仅脱敏摘要）
 

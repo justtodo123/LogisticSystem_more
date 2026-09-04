@@ -4,7 +4,7 @@
 > **参考依据**：[大厂后端 SP 标准差距与优化路线图](../reference/大厂后端SP标准差距与优化路线图.md)。
 > **决策基线**：[decisions.md](./decisions.md)（协议冻结 `v2026-08-25-r2-freeze`；治理增补 `v2026-08-25-r2-governance`）。冲突时：代码与验证证据 > 版本化决策 > 本 README > 单卡正文。
 > **第一轮归档**：[第一轮优化计划](../post_plan/第一轮优化计划/)。第一轮文档只追溯，不承担第二轮实时状态。
-> **修订日期**：2026-09-04。R2 工程交付完成。R2-00～R2-06 均可标 `done`。镜像发布扫描门禁已由 [PR #40](https://github.com/justtodo123/LogisticSystem_more/pull/40) 合入 `main`（merge `f9e08a4`），main CI [run 33826209581](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826209581) 与 CD [run 33826520856](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826520856) 成功，artifact `image-scan-f9e08a499ba50987505e32d58b545a37c9543ef4`，零 exception 发布。生产部署验证未做；Grafana / 跨 worker 指标等 P2 增强另列。
+> **修订日期**：2026-09-04。R2 **工程交付完成 / Closeout ready**。冻结记录：[20260904-R2-closeout.md](./20260904-R2-closeout.md)。主干 `main` @ `7bbf5d6`；镜像验收基线 PR #40 / `f9e08a4` / CD [33826520856](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826520856)，零 exception。生产验证与 P2 增强见 [post-r2-followups.md](./post-r2-followups.md)，不计入 R2 阻断项。
 
 ## 阅读与状态规则
 
@@ -60,24 +60,11 @@ R2-04B + R2-05 -> R2-06 (done)
 
 ## 第二轮收口
 
-**工程交付完成（2026-09-04）**：R2-00～R2-06 计划卡均为 `done`。P2 镜像发布扫描门禁已在 `main` 上真实 CD 通过，未登记 exception。
+**工程交付完成 / Closeout ready（2026-09-04）**：R2-00～R2-06 均为 `done`。最终基线见 [20260904-R2-closeout.md](./20260904-R2-closeout.md)。P2 镜像发布扫描门禁已在 `main` 上真实 CD 通过，未登记 exception。本机无 Docker 不等于 R2 未完成。
 
-**当前下一动作（不阻塞工程交付完成）**：生产部署验证，以及可选 P2 增强。不要把 soak P95 与读混合/写路径 P95 比较，不要把 8m smoke 当成 soak baseline。完成本次文档收口 **不需要** 先装本机 Docker。
+**R2 已关闭。** 后续只走 [post-r2-followups.md](./post-r2-followups.md)（生产验证、可选 P2），不回写为本轮未完成。不要把 soak P95 与读混合/写路径 P95 比较，不要把 8m smoke 当成 soak baseline。
 
-### 生产部署验证（未做）
-
-- 本机仍无 Docker / WSL；CD 只发布 GHCR，不等于 compose / E2E / 生产拉起。
-- 已发布：`ghcr.io/justtodo123/logisticsystem_more-backend|frontend:f9e08a499ba50987505e32d58b545a37c9543ef4` 与 `:latest`。
-- 未执行本机 `docker compose`、第一轮 02B E2E、或预发/生产环境验收。
-- 第一轮 02B 仍为 `mitigated`。
-
-### 剩余 P2 增强（不阻塞 R2 done）
-
-- Grafana + Prometheus + OpenTelemetry 全家桶
-- 跨 worker 指标聚合
-- 定时镜像扫描（发布门禁 ≠ cron）
-- 更长 soak / 泄漏结论（当前 2h 只登记绝对值，不断言永久无泄漏）
-- 完整写+读业务全路径容量验证
+生产验证与可选 P2 的完整待办已迁到 [post-r2-followups.md](./post-r2-followups.md)，不再作为本 README 的 R2 未完成项。
 
 ## 当前证据边界
 
