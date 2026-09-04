@@ -5,6 +5,7 @@
 - 模板：[_template.md](./_template.md)
 - P0：本机 SQLite 协议/并发/故障注入；报告必须说明 SQLite 写锁、单 worker、无 Redis 等限制。
 - P1：GitHub Actions 或 Linux VM/云主机上的 PostgreSQL + Redis + 多 worker；未执行时保持 `blocked` 或“未执行”。
+- P2 镜像发布扫描：已在 CD [run 33826520856](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826520856) 通过，零 exception。小摘要见 [r2-06-image-scan](./r2-06-image-scan/)，报告见 [20260904-R2-06-image-scan.md](./20260904-R2-06-image-scan.md)。原始 Trivy/SBOM 只留 14 天 CI artifact，不入库。
 
 ## Git 追踪边界
 

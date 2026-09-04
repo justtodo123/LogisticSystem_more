@@ -1,0 +1,25 @@
+{
+  "images": [
+    {
+      "blocked": [],
+      "counts": {
+        "MEDIUM": 1
+      },
+      "exceptions_applied": [],
+      "image": "backend",
+      "passed": true,
+      "report": "artifacts/image-scan/backend-trivy.json"
+    },
+    {
+      "blocked": [],
+      "counts": {},
+      "exceptions_applied": [],
+      "image": "frontend",
+      "passed": true,
+      "report": "artifacts/image-scan/frontend-trivy.json"
+    }
+  ],
+  "passed": true,
+  "policy_version": "2026-09-03.1",
+  "schema_version": 1
+}
