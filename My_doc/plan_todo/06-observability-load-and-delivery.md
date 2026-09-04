@@ -5,7 +5,7 @@ status: done
 priority: P1
 owner: justtodo123
 created: 2026-08-25
-updated: 2026-09-03
+updated: 2026-09-04
 depends_on: ["R2-04B", "R2-05"]
 ---
 
@@ -29,7 +29,7 @@ depends_on: ["R2-04B", "R2-05"]
 
 ## 非目标（P2，不阻塞本卡 done）
 
-- 2～8 小时 soak、完整 OpenTelemetry Collector + Prometheus + Grafana 全家桶、镜像安全扫描定时任务。
+- 完整 OpenTelemetry Collector + Prometheus + Grafana 全家桶、跨 worker 指标聚合、镜像安全扫描定时任务（发布门禁已完成，不等于 cron）。2h soak 已有绝对值证据，不断言永久无泄漏。
 - 不编造绝对 QPS 或“生产级”结论。
 
 ## 依赖与进入条件
@@ -78,9 +78,9 @@ npm run build
 - Load 5m / 8 RPS 读混合 + 1 RPS login：http_req_failed 0%，dropped 0，k6 混合 P95 9.81 ms；login 路径 P95 290 ms。
 - Spike 约 5m / 峰值 25 RPS：http_req_failed 0%，dropped 0，k6 混合 P95 9.63 ms。
 - 产物：`r2-06-load-spike` artifact；详见 [20260902-R2-06-observability-baseline.md](./experiments/20260902-R2-06-observability-baseline.md)。
-- P2：2h soak 已登记（run 33720629269）；Grafana 全家桶仍未做。镜像发布扫描门禁已在 feat/p2-image-security-gate 实现，未合并，不以文件存在验收。
+- P2：2h soak 已登记（run 33720629269）；Grafana 全家桶仍未做。镜像发布扫描门禁已由 [PR #40](https://github.com/justtodo123/LogisticSystem_more/pull/40) 合入 `main`（merge `f9e08a4`）；main CI [run 33826209581](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826209581) 与 CD [run 33826520856](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826520856) 成功；artifact `image-scan-f9e08a499ba50987505e32d58b545a37c9543ef4`；零 exception 发布。
 - 写路径是独立场景，不并入 2026-09-02 读混合 P95。第一次 5m load 建立 baseline（run 33710390070）。第二次相同参数 candidate（run 33714192935）相对回归通过：幂等写 P95 -4.7%，确认 P95 +7.3%。独立 worker 日志证明同一 `trace_id` 覆盖 success/retry/dead-letter。不宣称业务全路径容量验证。
 - 幂等写：http_req_failed 0，unexpected_5xx 0，重放 600/600，写 P95 27.66 ms / P99 73.16 ms；DB 600 个唯一 `k6-node-*`，无重复副作用，无残留 PROCESSING outbox。
 - 并发确认：8 个 contender，1 次成功 / 7 次冲突，unexpected_5xx 0；confirm P95 836.7 ms（不要用含 login 的混合 HTTP P95）；schedule `GS20260903001` 最终 active。
 - Trace probe：HTTP POST `/api/debug/write-path-probe` 产生 outbox（`enqueue_source=http`）；独立 worker 消费 success/retry/dead-letter。HTTP `trace_id=trc-write-path-probe` 贯穿 API、outbox `_trace` 与 worker 日志；每次 execution 新 `request_id`；`parent_request_id=req-write-path-probe`。证据：PR #36 merge `bf5c3a7`，main smoke run 33738039588。
-- 写路径产物：artifact `r2-06-write-path`（14 天）；小文件见 [r2-06-write-path](./experiments/r2-06-write-path/README.md) 与 [20260903-R2-06-write-path-baseline.md](./experiments/20260903-R2-06-write-path-baseline.md)。跨 worker 指标聚合、Grafana 全家桶仍未完成。轻量 PR 门禁已合入 PR #32（merge 4f29d1a），首次 PR smoke run 33715890853 通过：mode=pr_correctness，p95_regression_ok=null，独立 worker trace_id=trc-write-path-probe。P2 soak smoke 已在 main 上跑通：run 33717505441，8m / 4 RPS，33 个样本，error_rate 0，unexpected_5xx 0，RSS 1.206x。这只证明采样器可跑，不断言无泄漏，不把 soak P95 与 5m 读混合或写路径 P95 比较。2 小时 soak 已跑通：run 33720629269，2h / 4 RPS，480 个样本，error_rate 0，unexpected_5xx 0，dropped 0；预热后 RSS 387864 KB -> 388464 KB（1.002x）。不断言永久无泄漏，不把 soak P95 与 5m 读混合或写路径 P95 比较。Grafana 全家桶、跨 worker 指标聚合仍未做。镜像发布扫描门禁已在 feat/p2-image-security-gate 实现，未合并。小文件见 experiments/r2-06-soak/ 与 20260903-R2-06-p2-soak.md。
+- 写路径产物：artifact `r2-06-write-path`（14 天）；小文件见 [r2-06-write-path](./experiments/r2-06-write-path/README.md) 与 [20260903-R2-06-write-path-baseline.md](./experiments/20260903-R2-06-write-path-baseline.md)。跨 worker 指标聚合、Grafana 全家桶仍未完成。轻量 PR 门禁已合入 PR #32（merge 4f29d1a），首次 PR smoke run 33715890853 通过：mode=pr_correctness，p95_regression_ok=null，独立 worker trace_id=trc-write-path-probe。P2 soak smoke 已在 main 上跑通：run 33717505441，8m / 4 RPS，33 个样本，error_rate 0，unexpected_5xx 0，RSS 1.206x。这只证明采样器可跑，不断言无泄漏，不把 soak P95 与 5m 读混合或写路径 P95 比较。2 小时 soak 已跑通：run 33720629269，2h / 4 RPS，480 个样本，error_rate 0，unexpected_5xx 0，dropped 0；预热后 RSS 387864 KB -> 388464 KB（1.002x）。不断言永久无泄漏，不把 soak P95 与 5m 读混合或写路径 P95 比较。Grafana 全家桶、跨 worker 指标聚合仍未做。镜像发布扫描门禁已由 PR #40 合入并经 CD run 33826520856 验收通过，零 exception；backend 仅剩 MEDIUM CVE-2026-13346（pip 26.1.2 → 26.2.0，report-only）。小文件见 experiments/r2-06-soak/、20260903-R2-06-p2-soak.md、experiments/r2-06-image-scan/ 与 20260904-R2-06-image-scan.md。不把本次扫描通过写成生产部署完成。

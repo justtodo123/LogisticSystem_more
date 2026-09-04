@@ -4,7 +4,7 @@
 > **参考依据**：[大厂后端 SP 标准差距与优化路线图](../reference/大厂后端SP标准差距与优化路线图.md)。
 > **决策基线**：[decisions.md](./decisions.md)（协议冻结 `v2026-08-25-r2-freeze`；治理增补 `v2026-08-25-r2-governance`）。冲突时：代码与验证证据 > 版本化决策 > 本 README > 单卡正文。
 > **第一轮归档**：[第一轮优化计划](../post_plan/第一轮优化计划/)。第一轮文档只追溯，不承担第二轮实时状态。
-> **修订日期**：2026-09-02。R2-02 已通过 PR #10 / #11 / #12 验证并合并；R2-03 已通过 PR #15 / CI 验证并合并；R2-04B 已通过 PR #16 / CI 验证并合并。R2-05 第一刀至第三刀已合入：PR #18 / #20 / #21 / #23，main CI / CD 已验证 worker/outbox 恢复、Redis 恢复、PostgreSQL 冲突与连接、专用库备份恢复。100k 编号已完成 GHA 实测，跨 worker 登录限流已由 PR #25 CI run 33589202969 验证，R2-05 可标 done。
+> **修订日期**：2026-09-04。R2 工程交付完成。R2-00～R2-06 均可标 `done`。镜像发布扫描门禁已由 [PR #40](https://github.com/justtodo123/LogisticSystem_more/pull/40) 合入 `main`（merge `f9e08a4`），main CI [run 33826209581](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826209581) 与 CD [run 33826520856](https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826520856) 成功，artifact `image-scan-f9e08a499ba50987505e32d58b545a37c9543ef4`，零 exception 发布。生产部署验证未做；Grafana / 跨 worker 指标等 P2 增强另列。
 
 ## 阅读与状态规则
 
@@ -43,7 +43,7 @@ SQLite 100 并发 **不是** PostgreSQL 多 worker 证明。
 | 03 | P0 | P0 | done | [重规划 Saga 与可靠通知](./03-replan-saga-and-outbox.md) | PR #15 / CI 通过并合并；Saga/outbox 协议与本地故障注入已验证 |
 | 04B | P0 并行 | P0 | done | [RBAC、JWT 撤权与前端权限](./04B-rbac-jwt-and-frontend.md) | PR #16 / CI 通过并合并；权限矩阵、token version、前后端 can() 已验证 |
 | 05 | P1 | P1 | done | [PostgreSQL、Redis 与故障韧性](./05-postgresql-redis-resilience.md) | PR #18/#20/#21/#23 已合并；main CI/CD 与 100k GHA scale run `33581256635` 已验证；PR #25 CI run 33589202969 四个 job 全绿 |
-| 06 | P1/P2 | P1 | done | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | P1：HTTP 观测基线 + 读混合 load/spike（run 33607612662）。写路径两次 5m load 可比（PR #31）。轻量 PR 正确性门禁已合入 PR #32（run 33715890853）。P2 soak smoke（run 33717505441）与 2h soak（run 33720629269）已跑通。P2 镜像发布扫描门禁已在分支实现，待 PR CI 与 main CD 证据；Grafana / 跨 worker 指标仍未做 |
+| 06 | P1/P2 | P1 | done | [可观测性、容量测试与交付证据](./06-observability-load-and-delivery.md) | P1：HTTP 观测基线 + 读混合 load/spike（run 33607612662）。写路径两次 5m load 可比（PR #31）。轻量 PR 正确性门禁已合入 PR #32（run 33715890853）。P2 soak smoke（run 33717505441）与 2h soak（run 33720629269）已跑通。P2 镜像发布扫描门禁已由 PR #40 / CD run 33826520856 验收通过，零 exception；backend 仅剩 MEDIUM CVE-2026-13346（pip 26.1.2，report-only）。Grafana / 跨 worker 指标仍未做 |
 
 ## 依赖主链
 
@@ -55,10 +55,29 @@ R2-00 (done)
 R2-00A + R2-04A -> R2-01 (done) -> R2-02 (done) -> R2-03 (done)
 R2-00A + R2-04A -> R2-04B (done)
 R2-00A + R2-01 + R2-02 + R2-03 -> R2-05 (done)
-R2-04B + R2-05 -> R2-06
+R2-04B + R2-05 -> R2-06 (done)
 ```
 
-当前下一动作：P2 镜像发布扫描门禁已在 feat/p2-image-security-gate 实现，未合并。验收以 PR CI 与 main 上真实 CD 扫描产物为准，不把策略文件存在写成已完成。Grafana / 跨 worker 指标仍未做；不要把 soak P95 与读混合/写路径 P95 比较，不要把 8m smoke 当成 soak baseline。
+## 第二轮收口
+
+**工程交付完成（2026-09-04）**：R2-00～R2-06 计划卡均为 `done`。P2 镜像发布扫描门禁已在 `main` 上真实 CD 通过，未登记 exception。
+
+**当前下一动作（不阻塞工程交付完成）**：生产部署验证，以及可选 P2 增强。不要把 soak P95 与读混合/写路径 P95 比较，不要把 8m smoke 当成 soak baseline。完成本次文档收口 **不需要** 先装本机 Docker。
+
+### 生产部署验证（未做）
+
+- 本机仍无 Docker / WSL；CD 只发布 GHCR，不等于 compose / E2E / 生产拉起。
+- 已发布：`ghcr.io/justtodo123/logisticsystem_more-backend|frontend:f9e08a499ba50987505e32d58b545a37c9543ef4` 与 `:latest`。
+- 未执行本机 `docker compose`、第一轮 02B E2E、或预发/生产环境验收。
+- 第一轮 02B 仍为 `mitigated`。
+
+### 剩余 P2 增强（不阻塞 R2 done）
+
+- Grafana + Prometheus + OpenTelemetry 全家桶
+- 跨 worker 指标聚合
+- 定时镜像扫描（发布门禁 ≠ cron）
+- 更长 soak / 泄漏结论（当前 2h 只登记绝对值，不断言永久无泄漏）
+- 完整写+读业务全路径容量验证
 
 ## 当前证据边界
 
@@ -75,6 +94,6 @@ R2-04B + R2-05 -> R2-06
 - P0 协议（01～03）：独立 Session 并发/故障注入测试、实验记录。
 - P0 并行（04B）：PR #16 / CI 通过并合并；权限矩阵、`/me` 权限、token version 与前端 `can()` 已验证。
 - P1（05）：PostgreSQL + Redis + 多 worker 集成报告（GHA 或 VM/云）。
-- P1/P2（06）：request/trace/task ID、load/spike 报告；STAR 故事引用真实验证。
+- P1/P2（06）：request/trace/task ID、load/spike 报告；STAR 故事引用真实验证。P2 镜像发布扫描门禁已通过（PR #40 / CD 33826520856，零 exception）。生产部署验证与 Grafana 全家桶未做。
 
 每次完成一个小目标，按 [Git 协作规范](../../docs/Git协作规范.md) 创建分支并独立提交；完成后回写本 README 和对应计划卡的真实完成记录。未经明确授权不自动 stage、commit、push 或创建 PR。

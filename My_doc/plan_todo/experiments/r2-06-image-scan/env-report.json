@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "workflow": "CD",
+  "run_url": "https://github.com/justtodo123/LogisticSystem_more/actions/runs/33826520856",
+  "source_sha": "f9e08a499ba50987505e32d58b545a37c9543ef4",
+  "docker": "28.0.4",
+  "trivy": "0.56.2",
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "policy": "security/image-scan-policy.json",
+  "retention_days": 14,
+  "artifacts": [
+    {
+      "name": "backend-trivy.json",
+      "bytes": 11550,
+      "sha256": "bcf6738123002714c4aebfc5e2e41543403c85ac336fa29f9d3c80ea236df304"
+    },
+    {
+      "name": "backend.sbom.cdx.json",
+      "bytes": 261169,
+      "sha256": "9147127f0674f6478eed5bb4a87dbfc65aa448a574eab599aabf1e8ef78b9e03"
+    },
+    {
+      "name": "frontend-trivy.json",
+      "bytes": 16431,
+      "sha256": "cb49274202a8b6f72fa270ff61cf3ee53c67af700bbb7cf41f1051aac0262824"
+    },
+    {
+      "name": "frontend.sbom.cdx.json",
+      "bytes": 110663,
+      "sha256": "ba519fabb70d7dce82bbe5b6e4d01e8df572266e0d61ebcaef6fae01e78113c3"
+    },
+    {
+      "name": "policy-evaluation.json",
+      "bytes": 511,
+      "sha256": "b18b0ea5b11439e5611593022e31149367f4c9b8dc0b00367e44e30fa28305e0"
+    },
+    {
+      "name": "policy-evaluation.txt",
+      "bytes": 511,
+      "sha256": "b18b0ea5b11439e5611593022e31149367f4c9b8dc0b00367e44e30fa28305e0"
+    },
+    {
+      "name": "scan-status.json",
+      "bytes": 72,
+      "sha256": "2be61cd2ff909dc059fbde75adb5db49da19aca3abc39332e3f4d3d9e0adf427"
+    }
+  ]
+}
