@@ -1,6 +1,6 @@
 # Git 协作规范
 
-> 最后更新：2026-08-25（My_doc 正式追踪与证据治理）
+> 最后更新：2026-09-04（R2 冻结后文档与证据治理）
 
 ## 远程仓库
 
@@ -45,8 +45,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ## Code Review 要点
 
-- API 端点是否有适当的鉴权依赖（`get_current_user` / `require_dispatcher`）
-- 服务层函数是否全部 `async def`
+- API 端点是否有适当的鉴权依赖（`get_current_user` / `require_permission(...)` 等）
+- 同步/异步函数是否遵守调用方契约；不得假设服务层全部 `async def`
 - 数据库操作是否使用参数化查询（防 SQL 注入）
 - 新增模型是否有对应迁移脚本
 - 新增端点是否有测试覆盖

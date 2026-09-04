@@ -1,1 +1,13 @@
-Generic single-database configuration.
+# Alembic 迁移说明
+
+本目录是项目正式数据库 schema 迁移入口。
+
+- Alembic 是唯一正式迁移机制；当前迁移 head 应保持唯一。
+- 发布或首次启动前，在与 backend 使用相同 `DATABASE_URL` 的环境中显式执行：
+  `python -m alembic -c alembic.ini upgrade head`
+- FastAPI startup、Uvicorn worker 和业务请求不执行 DDL。
+- `Base.metadata.create_all()` 与 `config.database.init_db()` 仅供隔离测试使用，不得作为部署迁移方案。
+- 未知 revision、多行 `alembic_version`、未知 schema 或 metadata drift 必须 fail closed；禁止用 `alembic stamp head` 掩盖状态差异。
+- 旧 SQLite 升级前应先备份并分类，使用 `scripts/migrate_sqlite.py` 的复制升级/接管流程，不要直接改写原库。
+
+迁移流程、release gate 与 SQLite 安全处理详见 [后端 README](../README.md) 和 [开发规范](../../../docs/开发规范.md)。

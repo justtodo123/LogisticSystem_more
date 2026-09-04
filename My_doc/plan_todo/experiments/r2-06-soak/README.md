@@ -35,4 +35,5 @@ This does not prove the absence of all leaks. It shows no unbounded RSS or
 connection growth at 4 RPS over 2 hours after warmup.
 
 Keep the 19 MB API log in the 14-day CI artifact `r2-06-soak`.
-Grafana, image scanning, and cross-worker metric aggregation remain later.
+
+Image scanning and the scan-before-push release gate are complete. Grafana/Prometheus/OTel deployment, cross-worker metric aggregation, and scheduled image scanning remain follow-up work.

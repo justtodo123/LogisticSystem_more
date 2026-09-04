@@ -1,20 +1,19 @@
-# 活动路线图与唯一实时状态入口
+# 第一轮优化计划历史归档
 
-> **用途**：本文件是当前任务状态的唯一聚合入口；计划卡记录任务级细节，历史 tracker/旧计划仅用于追溯。
+> **历史资料声明**：本文件保留第一轮优化阶段的路线图、任务状态、测试数字和当时结论，事实截止日期为 2026-08-20。它不再是当前任务状态入口，也不代表当前生产就绪度。
 >
-> **事实截止日期**：2026-08-20
+> 当前工程状态请以 [My_doc 当前入口](../../README.md)、[R2 计划与收口](../../plan_todo/README.md) 和 [项目交付材料](../../delivery/README.md) 为准。R2-00～R2-06 已于 2026-09-04 完成并冻结；本文件中的 02B、旧测试快照和“下一步”仅保留作历史追溯。
 >
-> **当前验证基线**：2026-08-19 在 `src/backend` 执行 `python -m pytest -q -p no:cacheprovider` 得到 `678 passed, 209 warnings`（04 本轮全量）；前端 `npm run build`（含类型检查）通过。2026-08-20：02A 本机无容器 smoke 已通过；本机无 Docker Desktop。02B 改为本地 Linux 虚拟机 Docker 首选、云服务器可选，二者完成其一即可把 02 标 done。
->
-> **维护规则**：状态变化必须同步 owner、updated、依赖、真实命令/环境/结果及残留问题；`blocked`、`needs_decision`、`mitigated` 均不计为 `done`。
+> **维护规则（历史语境）**：以下状态变化、owner、updated、依赖、命令/环境/结果均是当时记录；不要将本文件的历史 `mitigated`、`pending` 或任务顺序当作当前待办。
+
 
 ## 阅读顺序与文档分类
 
-本目录索引见 [上级 README](../README.md)。
+本目录索引见 [上级 README](../../README.md)。
 
 1. **实时状态**：先读本 README，再进入对应的 00、00A、01～05 计划卡；本文件之外不维护第二份实时完成率。
 2. **当前规范**：已完成 [00A](./00A-documentation-baseline-and-source-governance.md) 校准的 `docs/` 文档才可作为当前契约说明；发生冲突时仍须以当前代码、实际验证和批准决策为准。
-3. **历史快照**：已归档至 [post_plan](../post_plan/)（`TASK_TRACKER.md`、`优化方案.md`、`优化实施计划.md`、`开发执行计划.md`）；本文件下方 T-01～T-13 同为历史收尾证据，不代表当前生产就绪度。
+3. **历史快照**：已归档至 [post_plan](../)（`TASK_TRACKER.md`、`优化方案.md`、`优化实施计划.md`、`开发执行计划.md`）；本文件下方 T-01～T-13 同为历史收尾证据，不代表当前生产就绪度。
 4. **决策记录**：用于保存业务选项和结论，不承担实时进度统计；未决事项使用 `needs_decision`。
 
 ## 下一步动作（2026-08-20）
@@ -101,29 +100,29 @@
 
 | # | 状态 | 事项 | 涉及文件 | 备注 |
 |---|------|------|----------|------|
-| [T-01](#t-01-补建-admin-种子账号) | ✅ | **补建 admin 种子账号** | `src/backend/scripts/init_users.py`、`init_demo_data.py` | 双脚本补建 admin；临时库验证 admin count=1 + `admin/123456` 登录 JWT role=admin；[proced_problem/001](../../proced_problem/001-seed-users-missing-admin.md) 已补真实验证数据并置 fixed；commit `8a00c9f` |
-| [T-02](#t-02-修复两个鉴权中风险) | ✅ | **修复鉴权中风险**（arrival_confirm 无鉴权 + ERP webhook JWT 回退无角色检查） | `api/arrival_confirm.py`、`api/erp_webhook.py`、`core/permissions.py` | 3 端点 `require_dispatcher`；webhook 回退校验 role∈{dispatcher,admin}；新增 9 个鉴权测试；定向 15 passed + 全量 635 passed；commit `846ba3f` |
+| [T-01](#t-01-补建-admin-种子账号) | ✅ | **补建 admin 种子账号** | `src/backend/scripts/init_users.py`、`init_demo_data.py` | 双脚本补建 admin；临时库验证 admin count=1 + `admin/123456` 登录 JWT role=admin；[proced_problem/001](../../../proced_problem/001-seed-users-missing-admin.md) 已补真实验证数据并置 fixed；commit `8a00c9f` |
+| [T-02](#t-02-修复鉴权中风险) | ✅ | **修复鉴权中风险**（arrival_confirm 无鉴权 + ERP webhook JWT 回退无角色检查） | `api/arrival_confirm.py`、`api/erp_webhook.py`、`core/permissions.py` | 3 端点 `require_dispatcher`；webhook 回退校验 role∈{dispatcher,admin}；新增 9 个鉴权测试；定向 15 passed + 全量 635 passed；commit `846ba3f` |
 | [T-03](#t-03-修复-envlocal-拼写错误) | ✅ | **修复 `.env.local` 拼写错误** | `src/frontend/.env.local:8` | `VITE_USE_MOCK_AUTH=fasle` → `false`（本地文件，gitignored 不提交） |
-| [T-08](#t-08-种子订单状态枚举漂移) | ✅ | **种子订单状态枚举漂移**（pending → unassigned） | `src/backend/scripts/init_demo_data.py:340` | 100 条种子**订单**写 `status="pending"`，订单状态机/业务代码统一 `unassigned` → 调度/打包/派单/路径全链路阻塞；货物 `pending_pack` 为合法状态不改（ISSUE-002）；[proced_problem/005](../../proced_problem/005-seed-order-status-enum-drift.md) |
-| [T-09](#t-09-manager-角色无权限映射) | ✅ | **manager 角色无权限映射** | `src/backend/core/permissions.py` | `ROLE_PERMISSIONS` 无 `manager` 键 → `get_user_permissions` 返回空列表，仓库写端点全 403（ISSUE-001）；[proced_problem/004](../../proced_problem/004-manager-role-missing-permission-map.md) |
+| [T-08](#t-08-种子订单状态枚举漂移pending--unassigned) | ✅ | **种子订单状态枚举漂移**（pending → unassigned） | `src/backend/scripts/init_demo_data.py:340` | 100 条种子**订单**写 `status="pending"`，订单状态机/业务代码统一 `unassigned` → 调度/打包/派单/路径全链路阻塞；货物 `pending_pack` 为合法状态不改（ISSUE-002）；[proced_problem/005](../../../proced_problem/005-seed-order-status-enum-drift.md) |
+| [T-09](#t-09-manager-角色无权限映射) | ✅ | **manager 角色无权限映射** | `src/backend/core/permissions.py` | `ROLE_PERMISSIONS` 无 `manager` 键 → `get_user_permissions` 返回空列表，仓库写端点全 403（ISSUE-001）；[proced_problem/004](../../../proced_problem/004-manager-role-missing-permission-map.md) |
 
 ### P1 — 应修（可复现性/安全加固）
 
 | # | 状态 | 事项 | 涉及文件 | 备注 |
 |---|------|------|----------|------|
 | [T-04](#t-04-docker-镜像构建验证) | 🚫 | **Docker 镜像构建验证** | `Dockerfile.backend`、`Dockerfile.frontend`、`docker-compose.yml` | 本机未安装 Docker，无法本地执行；需在装有 Docker 的机器上跑 `docker compose up -d` + 初始化脚本 + 冒烟 |
-| [T-05](#t-05-requirements-编码规范化) | ✅ | **requirements.txt 编码规范化** | `src/backend/requirements.txt` | 已 UTF-16LE → UTF-8（`file` 确认 `UTF-8 text`），`pip install --dry-run -r` 解析通过；commit `f289b68` |
+| [T-05](#t-05-requirementstxt-编码规范化) | ✅ | **requirements.txt 编码规范化** | `src/backend/requirements.txt` | 已 UTF-16LE → UTF-8（`file` 确认 `UTF-8 text`），`pip install --dry-run -r` 解析通过；commit `f289b68` |
 | [T-06](#t-06-生产密钥检查) | ✅ | **生产密钥检查**（JWT_SECRET 占位符 + DeepSeek key 前导空格） | `src/backend/.env` | `.env` 已替换随机 `JWT_SECRET`；`DEEPSEEK_API_KEY` 前导空格已删（gitignored 本地文件）。注意：dev 实际加载 `.env.dev`（key 空属预期降级），`.env` 为防御性修复 |
-| [T-10](#t-10-auth-expires_in-硬编码) | ✅ | **auth expires_in 硬编码** | `src/backend/api/auth.py:59` | 返回 `86400` ≠ `settings.JWT_EXPIRE_SECONDS`(172800)，前端过期倒计时错位 2 倍（ISSUE-003）；[proced_problem/006](../../proced_problem/006-auth-expires-in-hardcoded.md) |
-| [T-11](#t-11-deepseek-算法未实现) | ⚠️ | **algorithm="deepseek" 未实现** | `src/backend/algorithms/factory.py`、`global_schedule.py:342` | 策略工厂仅注册 greedy/dummy，入口只接受 traditional，与 docs 功能清单不符（ISSUE-005）；[proced_problem/008](../../proced_problem/008-deepseek-algorithm-not-implemented.md) |
+| [T-10](#t-10-auth-expiresin-硬编码) | ✅ | **auth expires_in 硬编码** | `src/backend/api/auth.py:59` | 返回 `86400` ≠ `settings.JWT_EXPIRE_SECONDS`(172800)，前端过期倒计时错位 2 倍（ISSUE-003）；[proced_problem/006](../../../proced_problem/006-auth-expires-in-hardcoded.md) |
+| [T-11](#t-11-algorithmdeepseek-未实现) | ⚠️ | **algorithm="deepseek" 未实现** | `src/backend/algorithms/factory.py`、`global_schedule.py:342` | 策略工厂仅注册 greedy/dummy，入口只接受 traditional，与 docs 功能清单不符（ISSUE-005）；[proced_problem/008](../../../proced_problem/008-deepseek-algorithm-not-implemented.md) |
 
 ### P2 — 已自记录的遗留边界（docs/08，低/中）
 
 | # | 状态 | 事项 | 来源 |
 |---|------|------|------|
-| [T-07](#t-07-已文档化遗留边界) | 🔄 | 8 项遗留边界（见下节），本次完成 4 项 quick wins | docs/08 | 已完成的 4 项：arrival_confirm / ERP 角色（T-02）、审计 current_user + AI 上下文 unassigned（commit `0e9e089` / `2e0c6e8`）；剩余 4 项算法级边界（L1 容量检查、2-opt stub、load_rate 恒定、`algorithm="deepseek"` 未实现）留待后续排期 |
-| [T-12](#t-12-time_window-未校验) | ✅ | **OrderCreate time_window 未校验** | `src/backend/schemas/order.py:18` | 2026-08-19 方案 A：自由文本时效要求，strip/非空/无控制字符/≤32；不启用 `HH:MM-HH:MM`；[proced_problem/007](../../proced_problem/007-ordercreate-time-window-unvalidated.md) |
-| [T-13](#t-13-残留-debug-print) | ✅ | **schedule_service 残留 DEBUG print** | `src/backend/services/schedule_service.py:318,319,425` | 裸 `print` 泄漏内部状态到 stdout，`[ERROR]` 分支未走 `logger.error`（ISSUE-006）；[proced_problem/009](../../proced_problem/009-residual-debug-print.md) |
+| [T-07](#t-07-已文档化遗留边界docs08非阻塞) | 🔄 | 8 项遗留边界（见下节），本次完成 4 项 quick wins | docs/08 | 已完成的 4 项：arrival_confirm / ERP 角色（T-02）、审计 current_user + AI 上下文 unassigned（commit `0e9e089` / `2e0c6e8`）；剩余 4 项算法级边界（L1 容量检查、2-opt stub、load_rate 恒定、`algorithm="deepseek"` 未实现）留待后续排期 |
+| [T-12](#t-12-ordercreate-timewindow-未校验) | ✅ | **OrderCreate time_window 未校验** | `src/backend/schemas/order.py:18` | 2026-08-19 方案 A：自由文本时效要求，strip/非空/无控制字符/≤32；不启用 `HH:MM-HH:MM`；[proced_problem/007](../../../proced_problem/007-ordercreate-time-window-unvalidated.md) |
+| [T-13](#t-13-残留-debug-print) | ✅ | **schedule_service 残留 DEBUG print** | `src/backend/services/schedule_service.py:318,319,425` | 裸 `print` 泄漏内部状态到 stdout，`[ERROR]` 分支未走 `logger.error`（ISSUE-006）；[proced_problem/009](../../../proced_problem/009-residual-debug-print.md) |
 
 ---
 
@@ -137,17 +136,17 @@
 
 **验证**：重跑 init 脚本 → `SELECT count(*) FROM users WHERE role='admin'` = 1 → `admin/123456` 登录返回 JWT（payload 含 `role=admin`）→ 调仅 admin 端点过权限校验。
 
-**收尾**：修复后更新 [proced_problem/001](../../proced_problem/001-seed-users-missing-admin.md) 状态 `open → fixed`，补验证数据。
+**收尾**：修复后更新 [proced_problem/001](../../../proced_problem/001-seed-users-missing-admin.md) 状态 `open → fixed`，补验证数据。
 
 ---
 
 ### T-02 修复鉴权中风险
 
-**2a. `arrival_confirm` 3 个端点无鉴权**（[api/arrival_confirm.py](..%2F..%2Fsrc%2Fbackend%2Fapi%2Farrival_confirm.py)）
+**2a. `arrival_confirm` 3 个端点无鉴权**（[api/arrival_confirm.py](../../../src/backend/api/arrival_confirm.py)）
 - 现状：`confirm-arrival`、`confirm-arrival-batch`、`arrival-packages` 仅 `Depends(get_db)`，任何人可确认送达/领取包裹。
 - 修复：加 `Depends(require_permission(...))` 或 `require_role("dispatcher")`，与开通权责匹配；补 403 测试。
 
-**2b. ERP webhook JWT 回退无角色检查**（[api/erp_webhook.py:39-59](..%2F..%2Fsrc%2Fbackend%2Fapi%2Ferp_webhook.py)）
+**2b. ERP webhook JWT 回退无角色检查**（[api/erp_webhook.py:39-59](../../../src/backend/api/erp_webhook.py)）
 - 现状：`ERP_API_KEY` 为空时，回退 JWT 只验 `sub` 存在，不验角色 → 任意有效 JWT 即可创建订单。
 - 修复：回退分支校验 `payload["role"]` 为 dispatcher（或引入 `require_permission` 语义）；补测试。
 
@@ -210,7 +209,7 @@
 
 **验证**：全量 `pytest` 635 passed，0 failed。✅
 
-**记录**：[proced_problem/005](../../proced_problem/005-seed-order-status-enum-drift.md)（status: fixed）
+**记录**：[proced_problem/005](../../../proced_problem/005-seed-order-status-enum-drift.md)（status: fixed）
 
 ---
 
@@ -222,7 +221,7 @@
 
 **验证**：`manager perms == warehouse_operator perms == 7`；全量 `pytest` 635 passed。✅
 
-**记录**：[proced_problem/004](../../proced_problem/004-manager-role-missing-permission-map.md)（status: fixed）
+**记录**：[proced_problem/004](../../../proced_problem/004-manager-role-missing-permission-map.md)（status: fixed）
 
 ---
 
@@ -234,7 +233,7 @@
 
 **验证**：`settings.JWT_EXPIRE_SECONDS` → `172800`；全量 `pytest` 635 passed。✅
 
-**记录**：[proced_problem/006](../../proced_problem/006-auth-expires-in-hardcoded.md)（status: fixed）
+**记录**：[proced_problem/006](../../../proced_problem/006-auth-expires-in-hardcoded.md)（status: fixed）
 
 ---
 
@@ -246,7 +245,7 @@
 
 **验证**：`{"algorithm":"deepseek"}` → `code=40000`；`{"algorithm":"traditional"}` → 正常 draft；全量 `pytest` 635 passed。✅
 
-**记录**：[proced_problem/008](../../proced_problem/008-deepseek-algorithm-not-implemented.md)（status: mitigated）
+**记录**：[proced_problem/008](../../../proced_problem/008-deepseek-algorithm-not-implemented.md)（status: mitigated）
 
 ---
 
@@ -256,7 +255,7 @@
 
 **结论**：2026-08-19 选定方案 A 并落地——保留自由文本「时效要求」，只做 strip / 非空 / 控制字符 / 长度≤32；不启用 `HH:MM-HH:MM`，不拆 start/end。
 
-**记录**：[proced_problem/007](../../proced_problem/007-ordercreate-time-window-unvalidated.md)（status: fixed）
+**记录**：[proced_problem/007](../../../proced_problem/007-ordercreate-time-window-unvalidated.md)（status: fixed）
 
 ---
 
@@ -268,7 +267,7 @@
 
 **验证**：触发调度请求，stdout 无 DEBUG 行。
 
-**记录**：[proced_problem/009](../../proced_problem/009-residual-debug-print.md)（status: fixed）
+**记录**：[proced_problem/009](../../../proced_problem/009-residual-debug-print.md)（status: fixed）
 
 ---
 
